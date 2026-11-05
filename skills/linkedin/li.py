@@ -32,7 +32,7 @@ AI_TELLS = [
 REPLACE = {
     "utilize": "use", "leverage": "use", "commence": "start", "endeavor": "try", "facilitate": "help", "optimal": "best",
     "implement": "build", "showcase": "show", "foster": "build", "robust": "solid", "seamless": "smooth",
-    "gerçekleştirmek": "yapmak", "bünyesinde": "-de", "vesilesiyle": "ile", "adına": "için", "ivme kazandırmak": "hızlandırmak",
+    "gerçekleştirmek": "yapmak", "bünyesinde": "-de", "vesilesiyle": "ile", "ivme kazandırmak": "hızlandırmak",
 }
 
 
@@ -43,6 +43,14 @@ def home(path=None):
         p = pathlib.Path(os.environ.get("PENTARCH_HOME") or pathlib.Path.home() / ".pentarch").expanduser() / "linkedin"
     p.mkdir(parents=True, exist_ok=True)
     return p
+
+
+def read(file):
+    """Text of a user file, or a one-line exit when it is missing (utf-8-sig drops the BOM Notepad writes)."""
+    p = pathlib.Path(file)
+    if not p.is_file():
+        raise SystemExit(f"no such file: {file}")
+    return p.read_text(encoding="utf-8-sig")
 
 
 def load(p, default):
@@ -57,6 +65,8 @@ def save(p, obj):
 def check_text(text):
     """Returns a list of (level, message); level is PASS, WARN or FAIL."""
     out, t = [], text.strip()
+    if not t:
+        return [("FAIL", "empty post")]
     hook = t[:HOOK_CHARS].split("\n\n")[0].strip()
     out.append(("INFO", f"fold preview ({len(hook)} chars): {hook!r}"))
     first = t.split("\n")[0]
@@ -125,6 +135,13 @@ RUBRIC = [  # (key, max points, description)
 def score_profile(p):
     """p: dict exported by hand (see linkedin-profile SKILL.md). Returns (total, [(key, got, max, note)])."""
     rows = []
+    if not isinstance(p, dict):
+        raise SystemExit("profile export must be a JSON object with the keys from linkedin-profile/SKILL.md")
+    def num(key):
+        try:
+            return int(p.get(key) or 0)
+        except (TypeError, ValueError):
+            raise SystemExit(f"{key} must be a number, got {p.get(key)!r}")
     hl = p.get("headline") or ""
     has_num = lambda s: bool(re.search(r"\d", s or ""))
     def row(key, got, note=""):
@@ -136,27 +153,45 @@ def score_profile(p):
     row("about_open", (5 if first else 0) + (5 if re.search(r"\d|\?", first) else 0), f"first 265 chars: {first[:60]!r}")
     words = len(about.split())
     row("about_body", (5 if 150 <= words <= 300 else 2 if words else 0) + (5 if has_num(about) else 0), f"{words} words")
-    row("featured", min(3, int(p.get("featured") or 0)) * 8 // 3, f"{p.get('featured', 0)} items")
+    row("featured", min(3, num("featured")) * 8 // 3, f"{p.get('featured', 0)} items")
     row("banner", 6 if p.get("banner") else 0)
-    row("photo", 6 if int(p.get("photo_px") or 0) >= 400 else 3 if p.get("photo_px") else 0)
-    exp = p.get("experience") or []
-    cur = exp[0].get("bullets", []) if exp else []
+    row("photo", 6 if num("photo_px") >= 400 else 3 if p.get("photo_px") else 0)
+    exp = [e if isinstance(e, dict) else {"title": str(e)} for e in (p.get("experience") or [])]
+    cur = exp[0].get("bullets") or [] if exp else []
     row("current_role", min(2, len([b for b in cur if has_num(b)])) * 5, f"{len(cur)} bullets, {len([b for b in cur if has_num(b)])} with a number")
     row("experience_depth", 8 if exp and all(e.get("bullets") for e in exp) else 4 if exp else 0, f"{len(exp)} entries")
     sk = p.get("skills") or []
     row("skills", (3 if len(sk) >= 20 else 1 if sk else 0) + (3 if p.get("pinned_skills") else 0), f"{len(sk)} skills")
-    row("recommendations", min(3, int(p.get("recommendations") or 0)) * 8 // 3)
-    act = int(p.get("posts_30d") or 0) * 5 + int(p.get("comments_30d") or 0)
+    row("recommendations", min(3, num("recommendations")) * 8 // 3)
+    act = num("posts_30d") * 5 + num("comments_30d")
     row("activity", 10 if act >= 20 else 5 if act else 0, f"{p.get('posts_30d', 0)} posts, {p.get('comments_30d', 0)} comments in 30 days")
     row("contact", (3 if p.get("custom_url") else 0) + (3 if p.get("contact") else 0))
     return sum(r[1] for r in rows), rows
 
 
 # ---------- log ----------
+PILLARS = ("authority", "narrative", "community")
+
+
+def iso(date):
+    """YYYY-MM-DD, optionally followed by a space and the hour (YYYY-MM-DD HH); anything else exits."""
+    try:
+        d, _, hour = (date or "").partition(" ")
+        datetime.date.fromisoformat(d)
+        if hour and not (hour.isdigit() and 0 <= int(hour) <= 23):
+            raise ValueError
+        return date
+    except ValueError:
+        raise SystemExit(f"date must be YYYY-MM-DD or 'YYYY-MM-DD HH', got {date!r}")
+
+
 def log_add(h, hook, pillar, file, date=None):
     p = h / "log.json"; log = load(p, [])
-    text = pathlib.Path(file).read_text(encoding="utf-8") if file else ""
-    rec = dict(id=(max([r["id"] for r in log]) + 1) if log else 1, date=date or datetime.date.today().isoformat(),
+    text = read(file) if file else ""
+    hook, pillar = " ".join(hook.split()), pillar.strip().lower()
+    if pillar not in PILLARS:
+        raise SystemExit(f"pillar must be one of {', '.join(PILLARS)}, got {pillar!r}")
+    rec = dict(id=(max([r["id"] for r in log]) + 1) if log else 1, date=iso(date) if date else datetime.date.today().isoformat(),
                hook=hook, pillar=pillar, chars=len(text.strip()), preview=text.strip()[:80], views=None, comments=None, reactions=None)
     log.append(rec); save(p, log)
     return rec
@@ -164,9 +199,14 @@ def log_add(h, hook, pillar, file, date=None):
 
 def log_result(h, id, **kw):
     p = h / "log.json"; log = load(p, [])
+    kw = {k: v for k, v in kw.items() if v is not None}
+    if not kw:
+        raise SystemExit("give at least one of --views, --comments, --reactions")
+    if any(v < 0 for v in kw.values()):
+        raise SystemExit("counts cannot be negative")
     for r in log:
         if r["id"] == id:
-            r.update({k: v for k, v in kw.items() if v is not None}); save(p, log); return r
+            r.update(kw); save(p, log); return r
     raise SystemExit(f"no post with id {id}")
 
 
@@ -185,6 +225,8 @@ def log_stats(h):
 # ---------- network ----------
 def net_add(h, name, company, why, days=7, today=None):
     p = h / "network.json"; net = load(p, [])
+    if days < 0:
+        raise SystemExit("--days cannot be negative")
     today = today or datetime.date.today()
     rec = dict(id=(max([r["id"] for r in net]) + 1) if net else 1, name=name, company=company, why=why,
                added=today.isoformat(), last=None, touches=0, next=(today + datetime.timedelta(days=days)).isoformat(), note="")
@@ -225,12 +267,16 @@ def main(argv=None):
     a = ap.parse_args(argv)
     h = home(a.home)
     if a.cmd == "check":
-        rows = check_text(pathlib.Path(a.file).read_text(encoding="utf-8"))
+        rows = check_text(read(a.file))
         for lvl, msg in rows:
             print(f"{lvl:4} {msg}")
         return 1 if any(l == "FAIL" for l, _ in rows) else 0
     if a.cmd == "profile":
-        total, rows = score_profile(json.loads(pathlib.Path(a.file).read_text(encoding="utf-8")))
+        try:
+            prof = json.loads(read(a.file))
+        except json.JSONDecodeError as e:
+            raise SystemExit(f"{a.file} is not valid JSON: {e}")
+        total, rows = score_profile(prof)
         for key, got, mx, note in rows:
             print(f"{got:2}/{mx:2} {key:17} {note}")
         print(f"{total}/100")

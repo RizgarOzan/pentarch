@@ -13,13 +13,13 @@ Tool: `python skills/linkedin/li.py network ...`. Contacts live in `linkedin/net
 
 ## Steps
 
-1. **Start with what is due.** Run `li.py network due`. Anything listed comes first: draft its follow-up before any new outreach. Done when every due row has a draft or a reason to drop it.
+1. **Start with what is due.** Run `python skills/linkedin/li.py network due`. Anything listed comes first: draft its follow-up before any new outreach. Done when every due row has a draft or a reason to drop it.
 2. **Pick targets from the job search, not from the feed.** Read the tracker's `applications.json` and `scan.json` from its `data_dir` (default `data/`). Targets, in this order: companies with an application in stage `sent` or `process`; companies in `scan.json` `new` with score 4 or 5; companies in stage `watching`. Done when you have shown the user a list of at most 10 companies with the reason each is there.
 3. **Two people per company.** Ask the user to look up, in their own browser, one recruiter or hiring manager and one engineer or peer in the team, and paste the names and roles. Done when each company in the list has at least one named person from the user.
 4. **Warm before you ask.** For a person the user has never talked to, the first draft is a comment on one of their posts or the company's post, 25 to 40 words, adding one specific thing (a number, a question about a detail, a related experience). Never "Great post!". Done when the comment names a detail from the post.
 5. **Connection note**, 300 characters. [fact: LinkedIn Help, "Personalize your invitation"] Who you are in half a line, the specific reason (their post, the role, a shared thing), no ask. Done when it is under 300 characters and has no ask.
 6. **Recruiter or hiring manager message**, only after a connection is accepted or if the user already knows them. Shape: one line of context (the application id or role), one line of proof (a number or a link to the one project that matches the role), one question that is easy to answer. Under 100 words. Done when the message has exactly one question.
-7. **Log it.** `li.py network add --name "<name>" --company <company> --why "<role, reason>" --days 7`. After every real contact: `li.py network touch <id> --days 14 --note "<what happened>"`. Done when every person in the reply has an id.
+7. **Log it.** `python skills/linkedin/li.py network add --name "<name>" --company <company> --why "<role, reason>" --days 7`. After every real contact: `python skills/linkedin/li.py network touch <id> --days 14 --note "<what happened>"`. Done when every person in the reply has an id.
 
 ## Follow-up cadence
 

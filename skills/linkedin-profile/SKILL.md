@@ -22,10 +22,10 @@ Tool: `python skills/linkedin/li.py profile export.json`.
    ```
 
    Done when the file parses and the user confirms the current role is first in `experience`.
-2. **Score.** Run `li.py profile export.json`. It prints each rubric row, the total, and the three rows that lose the most points. Done when the total is in your reply.
+2. **Score.** Run `python skills/linkedin/li.py profile export.json`. It prints each rubric row, the total, and the three rows that lose the most points. Done when the total is in your reply.
 3. **Know the target.** Read `target_roles`, `skills` and `locations` from the tracker's `profile.json` if it exists; otherwise ask for the one role title the user wants to be found for. Done when you can name the three search terms a recruiter for that role would type.
 4. **Rewrite, biggest loss first.** For each of the three rows, write the new text, then show old and new side by side. Rules per field are below. Done when each rewrite is checked against the field rule and the user's voice (see `linkedin-post` step 1 for how to get the voice).
-5. **Re-score.** Ask the user to update the JSON after they paste the changes, run `li.py profile` again, and compare. Done when the new total is in the reply with the delta.
+5. **Re-score.** Ask the user to update the JSON after they paste the changes, run `python skills/linkedin/li.py profile` again, and compare. Done when the new total is in the reply with the delta.
 6. **Schedule the rest.** Rows that need the user's action and not text (photo, banner, recommendations, activity) go into a short list with a date each. Recommendations: draft the request message for them, one per person, naming the specific thing to mention.
 
 ## Field rules

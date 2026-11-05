@@ -65,7 +65,9 @@
   },
   "cv": {
     "language": "en",
-    "style": "plain, first person, short sentences, a number or link under every claim",
+    "style": "plain, short bullets, a number or link under every claim",
+    "format": "xyz",
+    "sections": ["Education", "Experience", "Projects", "Technical Skills"],
     "max_pages": 1,
     "highlight": [
       "shipped projects with links",

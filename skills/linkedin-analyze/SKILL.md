@@ -13,16 +13,16 @@ Tool: `python skills/linkedin/li.py`. State under the Pentarch home, `linkedin/`
 
 | file | written by | what it holds |
 |---|---|---|
-| `log.json` | `li.py log add`, `log result` | each post: date, hook formula, pillar, chars, views, comments, reactions |
-| `network.json` | `li.py network add`, `touch` | each contact: company, why, touches, next follow-up |
-| a profile export JSON | the user, by hand | the fields `li.py profile` scores |
+| `log.json` | `python skills/linkedin/li.py log add`, `log result` | each post: date, hook formula, pillar, chars, views, comments, reactions |
+| `network.json` | `python skills/linkedin/li.py network add`, `touch` | each contact: company, why, touches, next follow-up |
+| a profile export JSON | the user, by hand | the fields `python skills/linkedin/li.py profile` scores |
 
 ## Steps
 
-1. **Fill the gaps first.** Run `li.py log stats`. Posts without results are not in the stats. List their ids and ask the user for views and comments before reading anything else. Done when every post older than 48 hours has a result or the user says it is lost.
+1. **Fill the gaps first.** Run `python skills/linkedin/li.py log stats`. Posts without results are not in the stats. List their ids and ask the user for views and comments before reading anything else. Done when every post older than 48 hours has a result or the user says it is lost.
 2. **Posts.** From `log stats`: best and worst hook formula by average views, best pillar, and the number of posts behind each average. With fewer than 3 posts per formula, say "too early" for that row instead of a conclusion. Then compare comments per view: a post with high views and no comments had a hook that worked and a close that did not. Done when the reply names one formula to keep, one to drop, and one untried formula from `linkedin-post/hooks.md` to test.
-3. **Profile.** If the user has a profile export, run `li.py profile` and compare the total with the last review's total (keep the previous number in the thread or ask). Done when the delta and the three lowest rows are in the reply.
-4. **Network.** Run `li.py network due`. Count contacts with 0 touches older than 14 days: those are drafts that were never sent, ask whether to drop them. Count replies (the user tells you, there is no field for it; add it to `--note`). Done when the reply has: due now, never touched, replied this month.
+3. **Profile.** If the user has a profile export, run `python skills/linkedin/li.py profile` and compare the total with the last review's total (keep the previous number in the thread or ask). Done when the delta and the three lowest rows are in the reply.
+4. **Network.** Run `python skills/linkedin/li.py network due`. Count contacts with 0 touches older than 14 days: those are drafts that were never sent, ask whether to drop them. Count replies (the user tells you, there is no field for it; add it to `--note`). Done when the reply has: due now, never touched, replied this month.
 5. **Job search link.** Read `applications.json` from the tracker's `data_dir`. For each application in `sent` or `process`, check whether the company has a contact in `network.json`. Companies with an open application and no contact go to the top of next week's plan. Done when that list is in the reply.
 6. **Next week in five lines.** Three post ideas (pillar + hook formula + one sentence), two outreach actions (person or company + what), one profile fix. Based on steps 2 to 5, not on general advice. Done when each line traces to a number from this review.
 

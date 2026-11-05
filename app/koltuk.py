@@ -114,6 +114,8 @@ def add(name, preset=None, model="", base_url="", key_env=None, role="", agent=F
             elif seat["model"].split(",")[0] not in ids:
                 print(T(f"  ! {seat['model']} bu uçta listelenmiyor; yine de kaydedildi.",
                         f"  ! {seat['model']} is not listed by this endpoint; saved anyway."))
+            if env:  # /models is public on some services (OpenRouter), so a wrong key passes this check
+                print(T(f"  anahtarı asıl sınayan: python app/koltuk.py test {name}", f"  the key itself is only verified by: python app/koltuk.py test {name}"))
     if role:
         seat["role"] = role
     cfg = load_cfg()
@@ -177,7 +179,10 @@ def main(argv=None):
         n = remove(args.name)
         print(T(f"Silinen: {n}", f"Removed: {n}"))
     elif args.cmd == "test":
-        print(test(args.name))
+        try:
+            print(test(args.name))
+        except Exception as e:  # 401, connection refused, missing CLI: one line, not a traceback
+            raise SystemExit(T(f"{args.name} cevap vermedi: {e}", f"{args.name} did not answer: {e}"))
     elif args.cmd == "key":
         v = ask_key(args.env)
         if v:

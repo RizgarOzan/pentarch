@@ -14,3 +14,7 @@ tracker/data/
 tracker/out/
 tracker/config.json
 tracker/profile.json
+data/
+out/
+/profile.json
+/export.json

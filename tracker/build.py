@@ -140,8 +140,16 @@ TODAY, CFG, S, DATA, OUT = datetime.date.today(), dict(DEFAULTS), STR["en"], HER
 
 def J(name, default=None):
     p = DATA / name
-    return json.loads(p.read_text(encoding="utf-8")) if p.exists() else default
-def rows(name): return [{**FIELDS[name], **r} for r in (J(name) or [])]
+    if not p.exists():
+        return default
+    try:
+        return json.loads(p.read_text(encoding="utf-8-sig"))
+    except ValueError as e:
+        sys.exit(f"{p}: not valid JSON ({e})")
+def rows(name):
+    base = FIELDS[name]
+    fix = lambda k, v: str(v) if isinstance(base.get(k), str) and not isinstance(v, str) else v
+    return [{**base, **{k: fix(k, v) for k, v in r.items() if v is not None}} for r in (J(name) or []) if isinstance(r, dict)]
 def d(s):
     try: return datetime.date.fromisoformat(s) if s else None
     except Exception: return None
@@ -280,7 +288,7 @@ def build(cfg=None, today=None):
 
 def badge(x):
     """Score pill for a scan item that has one (scan.py writes 1-5); nothing for hand-written items."""
-    return f' <span class="pill s{int(x["score"])}">{int(x["score"])}/5</span>' if x.get("score") else ""
+    return f' <span class="pill s{int(x["score"])}">{int(x["score"])}/5</span>' if isinstance(x.get("score"), (int, float)) else ""
 def type_label(t): return S[{"app": "t_app", "event": "t_event", "task": "t_task", "learn": "t_learn"}[t]]
 def kalan(k):
     if k is None: return ""

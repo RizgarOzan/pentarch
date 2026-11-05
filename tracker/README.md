@@ -21,12 +21,13 @@ Your Pentarch agent keeps the JSON files up to date; `build.py` only turns them 
 Python 3.10+, standard library only.
 
 ```sh
-python tracker/build.py --init                       # config.json, profile.json and data/ from the examples
+python tracker/build.py --init [DIR]                 # config.json, profile.json and data/ from the examples, into DIR (default: this folder)
 python tracker/build.py --config tracker/config.json
 python tracker/build.py --config tracker/config.example.json --today 2026-11-05   # demo with the example data
 ```
 
 Flags: `--config FILE`, `--data DIR`, `--out DIR`, `--lang en|tr`, `--today YYYY-MM-DD`. Flags win over the config file.
+`scan.py` takes `--config`, `--data`, `--profile FILE` (default: `profile.json` next to the config), `--today` and `--dry-run`; it exits 1 when a board could not be fetched and lists those under `errors` in `scan.json`.
 Paths in the config file are relative to that file; paths given as flags are relative to the current folder.
 
 Tests: `python -m pytest tracker -q` (or `python -m unittest discover -s tracker` without pytest). They build the example data on several days, in both languages, into a temp folder.
@@ -35,7 +36,7 @@ Tests: `python -m pytest tracker -q` (or `python -m unittest discover -s tracker
 
 ## Profile
 
-`profile.json` (from `profile.example.json`) is for the assistant, not for `build.py`: what roles and seniority to look for, where, what a good posting looks like (`quality`), what rules a posting out (`deal_breakers`), and how to write the CV and cover letter (`cv.language`, `cv.style`, `cover_letter`). Edit it once; every scan, judgement and application follows it. Keep the words in Pentarch's `job_boards` filter (titles, exclude, locations) in step with it, since that filter runs before the assistant sees a posting.
+`profile.json` (from `profile.example.json`) is for the assistant, not for `build.py`: what roles and seniority to look for, where, what a good posting looks like (`quality`), what rules a posting out (`deal_breakers`), and how to write the CV and cover letter (`cv.language`, `cv.style`, `cover_letter`). Edit it once; every scan, judgement and application follows it. The `cv` block is also what `skills/cv/` reads when it drafts a CV for a posting. Keep the words in Pentarch's `job_boards` filter (titles, exclude, locations) in step with it, since that filter runs before the assistant sees a posting.
 
 ## Config
 
@@ -163,9 +164,9 @@ Supported boards (their public JSON endpoints): Greenhouse, Lever, Ashby. Find t
 How a posting is judged, in order:
 
 1. Title: dropped when it contains an `exclude` word (senior, lead, manager, ...) or none of the `seniority` words (synonyms such as "new grad" and "working student" are built in). An empty `seniority` list skips that check: setup leaves it empty for mid-level and "any level" and only keeps `exclude` (mid-level drops lead/head/principal/staff/director/manager/chief; "any level" drops nothing).
-2. Role: a `target_roles` phrase whose every word is in the title ("product designer" in "Junior Product Designer") is a full match; its last word alone ("designer" in "UX Designer") is a weak match; a title with neither is dropped. Seniority words and generic ones (developer, engineer) are ignored here, so "junior unity developer" only needs "unity".
-3. Location: must contain one of `locations`; "remote" also accepts the board's remote flag.
-4. Description: dropped on a `signals.deal_breakers` phrase or when every "N+ years" it asks for is above `max_years`.
+2. Role: a `target_roles` phrase whose every word is in the title ("product designer" in "Junior Product Designer") is a full match; its last word alone ("designer" in "UX Designer") is a weak match; a title with neither is dropped. Seniority words and generic ones (developer, engineer) are ignored here, so "junior unity developer" only needs "unity" and "backend engineer" never matches on "engineer" alone.
+3. Location: the board's location text must contain one of `locations` as written (plain substring, no country or city hierarchy: "Canada" does not cover "Toronto, ON"); "remote" also accepts the board's remote flag. An explicit `"exclude": []` drops nothing.
+4. Description: dropped on a `signals.deal_breakers` phrase or when every "N+ years of experience" it asks for is above `max_years` (default 2; "2 to 4 years" counts as 2, "founded 10 years ago" is not a requirement).
 5. Score 1-5: a full role match (+2) or a weak one (+1), `skills` found in the description (up to +2), a `signals.strong` phrase (+1), a `signals.weak` phrase (-1), posted within 14 days (+1), older than 90 days (-1), a company that rejected you before (-1, read from `applications.json`).
 
 Postings at or above `quality.min_score` go to `new`, sorted by score. A company you already track goes to `changed`, a posting that left the board goes to `closed`, everything else to `dropped` with the reason, so you can tune the profile. `scan-state.json` remembers what was already reported.

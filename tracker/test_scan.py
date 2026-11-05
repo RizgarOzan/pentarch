@@ -32,25 +32,25 @@ class Judge(unittest.TestCase):
         self.assertEqual(self.s.judge(job("3", "Engineering Manager, Junior Team"))[0], 0)
 
     def test_location_rules(self):
-        self.assertEqual(self.s.judge(job("1", "Junior Developer", loc="Austin, TX"))[0], 0)
-        self.assertGreater(self.s.judge(job("2", "Junior Developer", loc="Berlin, Germany"))[0], 0)
-        self.assertGreater(self.s.judge(job("3", "Junior Developer", loc="Austin, TX", remote=True))[0], 0)
-        self.assertGreater(self.s.judge(job("4", "Junior Developer", loc="Anywhere (EMEA)"))[0], 0)
+        self.assertEqual(self.s.judge(job("1", "Junior Software Developer", loc="Austin, TX"))[0], 0)
+        self.assertGreater(self.s.judge(job("2", "Junior Software Developer", loc="Berlin, Germany"))[0], 0)
+        self.assertGreater(self.s.judge(job("3", "Junior Software Developer", loc="Austin, TX", remote=True))[0], 0)
+        self.assertGreater(self.s.judge(job("4", "Junior Software Developer", loc="Anywhere (EMEA)"))[0], 0)
 
     def test_deal_breakers_and_years(self):
-        self.assertIn("deal breaker", self.s.judge(job("1", "Junior Developer", text="Requires active security clearance."))[1])
-        self.assertIn("5+ years", self.s.judge(job("2", "Junior Developer", text="You have 5+ years of experience."))[1])
+        self.assertIn("deal breaker", self.s.judge(job("1", "Junior Software Developer", text="Requires active security clearance."))[1])
+        self.assertIn("5+ years", self.s.judge(job("2", "Junior Software Developer", text="You have 5+ years of experience."))[1])
         # a range that starts under the limit is fine
-        self.assertGreater(self.s.judge(job("3", "Junior Developer", text="1-3 years of experience with 5 years of Python not required"))[0], 0)
+        self.assertGreater(self.s.judge(job("3", "Junior Software Developer", text="1-3 years of experience with 5 years of Python not required"))[0], 0)
 
     def test_score_adds_up(self):
         s, why, extra = self.s.judge(job("1", "Junior Software Engineer", text="Python and C# with Unity; strong mentorship culture.", posted="2026-11-01"))
         self.assertEqual(s, 5)  # 1 + role 2 + skills 2 + strong 1 + fresh 1 = 7, capped at 5
         for part in ("role:", "skills: Python, C#, Unity", "+mentorship", "fresh"):
             self.assertIn(part, why)
-        s2, why2, _ = self.s.judge(job("2", "Intern Developer (QA)", text="Unpaid position.", posted="2026-06-01"))
-        self.assertEqual(s2, 1)  # 1 + role word 1 - weak 1 - old 1 → clamped to 1
-        self.assertIn("role word: developer", why2); self.assertIn("-Unpaid", why2); self.assertIn("days ago", why2)
+        s2, why2, _ = self.s.judge(job("2", "Intern Game Tester (QA)", text="Unpaid position.", posted="2026-06-01"))
+        self.assertEqual(s2, 1)  # 1 + role 2 - weak 1 - old 1 → clamped to 1
+        self.assertIn("role: Game Developer", why2); self.assertIn("-Unpaid", why2); self.assertIn("days ago", why2)
 
     def test_role_words_must_match_the_title(self):
         s = scan.Scorer(dict(PROFILE, target_roles=["Product Designer"], seniority=[]), [], TODAY)

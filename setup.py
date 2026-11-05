@@ -262,7 +262,7 @@ def skills_setup(cli):
         for d in dirs:
             shutil.copytree(d, target / d.name, dirs_exist_ok=True)
             sk = target / d.name / "SKILL.md"  # the copy runs from any folder, so name the tool by its full path
-            sk.write_text(sk.read_text(encoding="utf-8").replace("skills/linkedin/li.py", f'"{REPO / "skills" / "linkedin" / "li.py"}"'), encoding="utf-8")
+            sk.write_text(sk.read_text(encoding="utf-8").replace("skills/linkedin/li.py", f'"{REPO / "skills" / "linkedin" / "li.py"}"').replace("skills/cv/cv.py", f'"{REPO / "skills" / "cv" / "cv.py"}"'), encoding="utf-8")
         print(t(f"  Kopyalandı: {target}", f"  Copied to: {target}"))
     elif cli != "claude":
         print(t(f"  Beceriler {REPO / 'skills'} altında; {cli} için kendi beceri klasörüne kopyalayabilirsin.",

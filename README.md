@@ -99,7 +99,7 @@ Local only: the panel on `127.0.0.1` and Ollama on `127.0.0.1:11434` for memory 
 
 ## Without a model
 
-The tracker needs no agent and no API key. If setup finds no agent CLI it tells you so and lets you continue or stop; the two commands below work either way, on any machine with Python:
+The tracker needs no agent and no API key. If setup finds no agent CLI it tells you so and lets you continue or stop; the two commands below work either way, on any machine with Python. `tracker/config.json` is written by the career step of setup, or by `python tracker/build.py --init`:
 
 ```bash
 python -I tracker/scan.py --config tracker/config.json      # pulls your Greenhouse / Lever / Ashby boards, scores each posting 0-5 from profile.json

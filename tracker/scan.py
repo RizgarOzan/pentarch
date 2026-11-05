@@ -30,7 +30,8 @@ SYN = {"intern": ["intern", "internship", "stajyer", "working student"],
 EXCLUDE = ["senior", "sr", "sr.", "lead", "head", "principal", "staff", "director", "manager", "vp", "chief"]
 STOP = {"developer", "engineer", "programmer", "and", "or", "the", "a", "an", "of",  # too common to tell roles apart
         "junior", "senior", "intern", "mid", "entry", "level", "new", "grad", "graduate"}  # seniority, handled separately
-YEARS = re.compile(r"(\d+)\s*\+?\s*(?:-\s*\d+\s*)?(?:years|yrs|yıl)", re.I)
+YEARS = re.compile(r"(\d+)\s*(?:\+|-|–|to)?\s*(?:\d+)?\s*\+?\s*(?:years|yrs|yıl)['’]?\s*(?:of\s+)?(?:[\w-]+[\s,]+){0,3}?"
+                   r"(?:experience|exp\b|deneyim|background|working|track record|in\b|with\b)", re.I)  # "founded 10 years ago" is not a requirement
 REMOTE = re.compile(r"\bremote\b|anywhere|worldwide|distributed", re.I)
 
 
@@ -45,7 +46,7 @@ def get(url):
 
 
 def plain(s):
-    return re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", " ", s or ""))).strip()
+    return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", html.unescape(s or ""))).strip()
 
 
 def day(s):
@@ -58,7 +59,7 @@ def day(s):
 # ---------- sources: each yields dicts with id, company, title, location, remote, posted, link, text ----------
 def greenhouse(slug):
     for j in get(f"https://boards-api.greenhouse.io/v1/boards/{slug}/jobs?content=true")["jobs"]:
-        yield dict(id=f"gh-{slug}-{j['id']}", company=j.get("company_name") or slug, title=j["title"],
+        yield dict(id=f"gh-{slug}-{j['id']}", company=j.get("company_name") or slug, title=j["title"].strip(),
                    location=(j.get("location") or {}).get("name", ""), remote=False,
                    posted=j.get("first_published") or j.get("updated_at"), link=j["absolute_url"], text=plain(j.get("content")))
 
@@ -68,7 +69,7 @@ def lever(slug):
         cat = j.get("categories") or {}
         loc = ", ".join(cat.get("allLocations") or [cat.get("location") or ""])
         posted = datetime.date.fromtimestamp(j["createdAt"] / 1000).isoformat() if j.get("createdAt") else ""
-        yield dict(id=f"lv-{slug}-{j['id']}", company=slug, title=j["text"], location=loc,
+        yield dict(id=f"lv-{slug}-{j['id']}", company=slug, title=j["text"].strip(), location=loc,
                    remote=(j.get("workplaceType") or "").lower() == "remote", posted=posted, link=j["hostedUrl"],
                    text=plain(j.get("descriptionPlain") or j.get("description")))
 
@@ -78,7 +79,7 @@ def ashby(slug):
         if j.get("isListed") is False:
             continue
         loc = ", ".join([j.get("location") or ""] + [x.get("location", "") for x in j.get("secondaryLocations") or []])
-        yield dict(id=f"ab-{slug}-{j['id']}", company=slug, title=j["title"], location=loc, remote=bool(j.get("isRemote")),
+        yield dict(id=f"ab-{slug}-{j['id']}", company=slug, title=j["title"].strip(), location=loc, remote=bool(j.get("isRemote")),
                    posted=j.get("publishedAt"), link=j.get("jobUrl"), text=plain(j.get("descriptionPlain") or j.get("descriptionHtml")))
 
 
@@ -91,29 +92,32 @@ class Scorer:
         p = profile
         self.today = today or datetime.date.today()
         sen = [s for k in (p.get("seniority") or []) for s in SYN.get(k.lower(), [k])]
-        self.seniority, self.exclude = words(sen), words(p.get("exclude") or EXCLUDE)
+        self.seniority, self.exclude = words(sen), words(EXCLUDE if p.get("exclude") is None else p["exclude"])
         # a role counts in full when every one of its words is in the title; its last word alone ("designer") is a weak hit
         parts = {r: [w for w in re.findall(r"[\w#+.]+", r) if w.lower() not in STOP and len(w) > 1] for r in p.get("target_roles") or []}
         self.roles = [(r, [words([w]) for w in ws]) for r, ws in parts.items() if ws]
-        self.role_nouns = words(list({re.findall(r"[\w#+.]+", r)[-1].lower() for r in parts}))
+        self.role_nouns = words(list({ws[-1].lower() for ws in parts.values() if ws}))
         locs = [l for l in p.get("locations") or [] if not l.lower().startswith("relocation")]
         self.locations, self.want_remote = words(locs), any(REMOTE.search(l) for l in locs)
         self.skills = {s: words([s]) for s in p.get("skills") or []}
         sig = p.get("signals") or {}
         self.strong, self.weak, self.breakers = (words(sig.get(k) or []) for k in ("strong", "weak", "deal_breakers"))
-        self.max_years = int(p.get("max_years", 2))
+        try:
+            self.max_years = int(p.get("max_years") or 2)
+        except (TypeError, ValueError):
+            raise SystemExit(f"profile max_years must be a number, got {p.get('max_years')!r}")
         self.min_score = int((p.get("quality") or {}).get("min_score", 3))
         self.open = {a.get("company", "").lower(): a for a in applications if a.get("stage") != "closed" and a.get("company")}
         self.rejected = {a["company"].lower() for a in applications if a.get("company") and a.get("stage") == "closed"
-                         and re.search(r"reject|declin|red|olumsuz|turned down", (a.get("status") or "") + (a.get("note") or ""), re.I)}
+                         and re.search(r"\brejected?\b|\bdeclined?\b|\bred\b|olumsuz|turned down", (a.get("status") or "") + (a.get("note") or ""), re.I)}
 
     def judge(self, j):
         """Returns (score 1-5 or 0 when dropped, reason, extra fields)."""
         t, loc, text = j["title"], j.get("location") or "", j.get("text") or ""
         if self.exclude and self.exclude.search(t):
-            return 0, "senior title", {}
+            return 0, "excluded word: " + self.exclude.search(t).group(0).lower(), {}
         if self.seniority and not self.seniority.search(t):
-            return 0, "not an entry-level title", {}
+            return 0, "title lacks a seniority word", {}
         if self.locations and not (self.locations.search(loc) or (self.want_remote and (j.get("remote") or REMOTE.search(loc)))):
             return 0, f"location: {loc or '?'}", {}
         if self.breakers and self.breakers.search(text):
@@ -187,7 +191,7 @@ def run(profile, config, today=None, fetch=None):
     top = ", ".join(f"{r['company']} ({r['score']}/5)" for r in new[:3])
     summary = (f"{len(seen)} postings on {len(sources)} boards; {len(new)} new at {sc.min_score}/5 or better" + (f", best: {top}" if top else "")
                + f"; {len(closed)} gone; {len(dropped)} dropped." + (f" Errors: {len(errors)}." if errors else ""))
-    scan = dict(date=today.isoformat(), summary=summary, new=new, changed=changed, closed=closed, dropped=dropped[:40], sources=sources)
+    scan = dict(date=today.isoformat(), summary=summary, new=new, changed=changed, closed=closed, dropped=dropped, sources=sources, errors=errors)
     keep = {k: v for k, v in old.items() if day(v.get("last")) and (today - day(v["last"])).days < 60}
     return scan, {**keep, **seen}, errors
 
@@ -204,6 +208,8 @@ def main(argv=None):
     if not prof.exists():
         sys.exit(f"no profile at {prof}; copy profile.example.json there and add your boards")
     profile = json.loads(prof.read_text(encoding="utf-8"))
+    if a.today and not day(a.today):
+        sys.exit(f"--today must be YYYY-MM-DD, got {a.today!r}")
     scan, state, errors = run(profile, cfg, day(a.today))
     for e in errors:
         print("ERROR", e)
@@ -211,13 +217,13 @@ def main(argv=None):
     for r in scan["new"]:
         print(f"  {r['score']}/5 {r['company']}: {r['role']} ({r['location']}) {r['link']}\n      {r['reason']}")
     if a.dry_run:
-        return scan
+        return scan, errors
     data = pathlib.Path(cfg["data_dir"]); data.mkdir(parents=True, exist_ok=True)
     (data / "scan.json").write_text(json.dumps(scan, ensure_ascii=False, indent=1), encoding="utf-8")
     (data / "scan-state.json").write_text(json.dumps(state, ensure_ascii=False, indent=0), encoding="utf-8")
-    return scan
+    return scan, errors
 
 
 if __name__ == "__main__":
     sys.stdout.reconfigure(encoding="utf-8")
-    main()
+    sys.exit(1 if main()[1] else 0)

@@ -1748,6 +1748,14 @@ def watch_schedule():
         if kapaniyor.is_set():
             time.sleep(5)
             continue
+        if state.get("chat_id") is None:  # nobody has written yet: nothing to send to, nothing to spend on
+            if not last.get("_sahip_bekleniyor"):
+                last["_sahip_bekleniyor"] = True
+                note("sahip yok, zamanlı işler ilk mesaja kadar bekliyor")
+                print(T("Telegram'dan bota ilk mesajı at; zamanlı işler ondan sonra başlar.",
+                        "Send the bot its first Telegram message; scheduled jobs start after that."))
+            time.sleep(30)
+            continue
         try:
             flush_night()
             if REMINDERS.exists():
@@ -2091,9 +2099,19 @@ def main():
     else:
         if "--panel" in flags:
             open_panel()  # already running; the desktop shortcut only opens the panel
-        return
+            return
+        sys.exit(T(f"zaten çalışıyor (port {LOCK_PORT} dolu)", f"already running (port {LOCK_PORT} is busy)"))
     HOME.mkdir(parents=True, exist_ok=True)
+    # fail fast on a missing or rejected token; the poll loop would otherwise retry forever without a word
+    try:
+        me = tg.api("getMe")
+    except RuntimeError as e:
+        sys.exit(str(e) if "token" in str(e).lower() else T(f"Telegram token reddedildi: {e}", f"Telegram rejected the token: {e}"))
+    except Exception as e:
+        print(T(f"Telegram'a ulaşılamadı ({e}), yine de başlıyor", f"Telegram unreachable ({e}), starting anyway"), file=sys.stderr)
+        me = {}
     note("başladı")
+    print(T(f"başladı: @{me.get('username', '?')}, log {RUN_LOG}", f"started: @{me.get('username', '?')}, log at {RUN_LOG}"))
     atexit.register(note, "kapandı")
     sys.excepthook = lambda *e: note("çöktü: " + "".join(traceback.format_exception(*e))[-800:])
     state.update(tg.load_state())

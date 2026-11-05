@@ -52,7 +52,7 @@ def api(method, http_timeout=20, **params):
         if wait and http_timeout != 0:  # Telegram "retry_after" dediyse bir kez bekleyip yeniden dener
             time.sleep(min(int(wait), 60))
             return api(method, http_timeout=0, **params)
-        raise RuntimeError(f"Telegram hatası: {body.get('description')}")
+        raise RuntimeError(T(f"Telegram hatası: {body.get('description')}", f"Telegram error: {body.get('description')}"))
     return body["result"]
 
 
