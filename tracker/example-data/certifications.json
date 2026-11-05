@@ -1,0 +1,6 @@
+[
+  {"id": "cloud-basic", "order": 1, "name": "Example Cloud Practitioner", "provider": "Example Cloud", "cost": "$100", "duration": "2 weeks",
+   "target": "2026-12-15", "status": "studying", "link": "https://example.com/certs/cloud-practitioner"},
+  {"id": "data-analyst", "order": 2, "name": "Open Data Analyst Certificate", "provider": "Open Course Site", "cost": "free", "duration": "4 weeks",
+   "target": "", "status": "planned", "link": "https://example.org/certs/data-analyst"}
+]

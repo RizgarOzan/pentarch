@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "masaustu": {
+      "type": "stdio",
+      "command": "windows-mcp",
+      "args": ["serve", "--transport", "stdio", "--tools",
+               "Snapshot,Screenshot,Click,Type,Scroll,Move,Shortcut,App,Wait,WaitFor,Clipboard,MultiSelect,MultiEdit"],
+      "env": {"ANONYMIZED_TELEMETRY": "false"}
+    }
+  }
+}

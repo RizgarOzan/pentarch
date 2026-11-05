@@ -1,0 +1,9 @@
+[
+  {"id": "talk-testing", "name": "Tech Talk: Testing at Scale", "date": "2026-11-06", "status": "Going", "link": "https://example.com/events/testing-talk"},
+  {"id": "oss-summit", "name": "Open Source Summit (online)", "date": "2026-11-14", "register_by": "2026-11-10", "status": "Not registered yet",
+   "link": "https://example.com/events/oss-summit", "note": "Free ticket with a student email."},
+  {"id": "hackathon", "name": "City Hackathon", "date": "2026-11-28", "date_end": "2026-11-29", "status": "Interested: looking for a team",
+   "link": "https://example.org/hackathon"},
+  {"id": "career-fair", "name": "Career Fair 2026", "date": "2026-10-10", "status": "Attended", "closed": true, "link": "https://example.org/career-fair",
+   "note": "Talked to two companies; follow-up done."}
+]

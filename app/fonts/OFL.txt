@@ -1,0 +1,17 @@
+The fonts in this folder are subset web fonts licensed under the SIL Open Font License, Version 1.1.
+Full license text: https://openfontlicense.org/open-font-license-official-text/
+
+Big Shoulders Display   Copyright 2019 The Big Shoulders Project Authors (https://github.com/xotypeco/big_shoulders)
+IBM Plex Mono           Copyright 2017 IBM Corp. (https://github.com/IBM/plex)
+Major Mono Display      Copyright 2018 The Major Mono Project Authors (https://github.com/googlefonts/majormono)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+It may be used, studied, modified and redistributed freely, bundled with any software, as long as it is not
+sold by itself. Modified versions may not use the Reserved Font Names and must stay under this license.
+
+THE FONT SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT
+LIMITED TO ANY WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT OF
+COPYRIGHT, PATENT, TRADEMARK, OR OTHER RIGHT. IN NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM,
+DAMAGES OR OTHER LIABILITY, INCLUDING ANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL DAMAGES,
+WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF THE USE OR INABILITY TO USE THE FONT
+SOFTWARE OR FROM OTHER DEALINGS IN THE FONT SOFTWARE.

@@ -1,0 +1,731 @@
+<!doctype html>
+<html lang="{{LANG}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>{{NAME}}</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230a0708'/%3E%3Cpath d='M16 4l11.4 8.3-4.4 13.4H9L4.6 12.3z' fill='none' stroke='%23e5555f' stroke-width='2'/%3E%3Ccircle cx='16' cy='16.5' r='3.2' fill='%23e5555f'/%3E%3C/svg%3E">
+<style>
+[hidden] { display: none !important; }
+  /* yazı tipleri yerelden: panel sunucusu /fonts/ altında verir. Big Shoulders değişken (100-900) tek dosya. */
+  @font-face { font-family: "Big Shoulders Display"; font-weight: 100 900; font-display: swap; src: url(/fonts/BigShouldersDisplay-latin-ext.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1E00-1E9F; }
+  @font-face { font-family: "Big Shoulders Display"; font-weight: 100 900; font-display: swap; src: url(/fonts/BigShouldersDisplay-latin.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+2000-206F, U+20AC, U+2122, U+2212; }
+  @font-face { font-family: "IBM Plex Mono"; font-weight: 400; font-display: swap; src: url(/fonts/IBMPlexMono-400-latin-ext.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1E00-1E9F; }
+  @font-face { font-family: "IBM Plex Mono"; font-weight: 400; font-display: swap; src: url(/fonts/IBMPlexMono-400-latin.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+2000-206F, U+20AC, U+2122, U+2212; }
+  @font-face { font-family: "Major Mono Display"; font-weight: 400; font-display: swap; src: url(/fonts/MajorMonoDisplay-400-latin-ext.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1E00-1E9F; }
+  @font-face { font-family: "Major Mono Display"; font-weight: 400; font-display: swap; src: url(/fonts/MajorMonoDisplay-400-latin.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+2000-206F, U+20AC, U+2122, U+2212; }
+
+  :root {
+    --bg: #0a0708; --s1: #110c0d; --s2: #1a1214; --line: #2a1c1e; --line-hi: #46292d;
+    --red: #e5555f; --red-dim: rgba(229, 85, 95, .14); --amber: #e6ad60; --amber-dim: rgba(230, 173, 96, .08); --ice: #a3cedd; --ok: #80c78c;
+    --text: #eee4e5; --text-2: #c4b2b5; --muted: #9c888b;
+    --display: "Big Shoulders Display", Bahnschrift, sans-serif;
+    --mono: "IBM Plex Mono", "Cascadia Mono", Consolas, monospace;
+    --mark: "Major Mono Display", "Cascadia Mono", monospace;
+    --read: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 400 14px/1.55 var(--read);
+         display: grid; grid-template-rows: auto minmax(0, 1fr) auto; grid-template-columns: minmax(0, 1fr); height: 100dvh; overflow: hidden; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  button:disabled { cursor: default; opacity: .45; }
+  :focus-visible { outline: 2px solid var(--red); outline-offset: 2px; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  svg.i { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+  /* üst şerit: yalnız kimlik, durum, saat */
+  header { display: flex; align-items: center; gap: 16px; height: 60px; padding: 0 20px 0 24px; border-bottom: 1px solid var(--line); }
+  .mark { font: 22px/1 var(--mark); color: var(--red); letter-spacing: .04em; text-transform: lowercase; }
+  #durum { display: flex; align-items: center; gap: 8px; min-width: 0; font: 12px var(--mono); color: var(--text-2); }
+  #durumyazi { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+  .dot.ok { background: var(--ok); } .dot.off { background: var(--amber); }
+  .dot.busy { background: var(--red); box-shadow: 0 0 0 0 var(--red); animation: nabiz 1.6s ease-out infinite; }
+  @keyframes nabiz { 0% { box-shadow: 0 0 0 0 rgba(229, 85, 95, .6); } 100% { box-shadow: 0 0 0 8px rgba(229, 85, 95, 0); } }
+  .spacer { flex: 1; }
+  .zaman { text-align: right; line-height: 1; }
+  #saat { font: 700 24px/1 var(--display); letter-spacing: .04em; font-variant-numeric: tabular-nums; }
+  #saat small { font-size: 15px; color: var(--muted); font-weight: 500; margin-left: 1px; }
+  #tarih { font: 11px/1 var(--mono); color: var(--muted); margin-top: 4px; }
+  .ikon { width: 38px; height: 38px; display: grid; place-items: center; border: 1px solid var(--line-hi); border-radius: 8px;
+          background: none; color: var(--text-2); flex: none; transition: border-color .15s, color .15s, background .15s; }
+  .ikon:hover { border-color: var(--red); color: var(--text); }
+
+  main { display: grid; grid-template-columns: minmax(0, 1fr) 344px; min-height: 0; }
+
+  /* sohbet: panelin asıl işi */
+  .chat { display: grid; grid-template-rows: minmax(0, 1fr) auto; min-height: 0; }
+  #kscroll { overflow-y: auto; padding: 28px 28px 12px; scrollbar-width: thin; scrollbar-color: var(--line-hi) transparent; }
+  #konusma { max-width: 740px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }
+  .msg { max-width: min(92%, 68ch); }
+  .meta { display: flex; align-items: baseline; gap: 10px; margin-bottom: 6px; font: 11px var(--mono); color: var(--muted); }
+  .meta b { font: 700 13px/1 var(--display); letter-spacing: .14em; text-transform: uppercase; color: var(--red); }
+  .body { white-space: pre-wrap; overflow-wrap: anywhere; font: 15px/1.65 var(--read); padding-left: 14px; border-left: 2px solid var(--red); }
+  .body.kisa { max-height: 9.9em; overflow: hidden; mask-image: linear-gradient(#000 55%, transparent); }
+  .ac { background: none; border: 0; padding: 6px 0 0 14px; color: var(--text-2); font: 12px var(--mono); }
+  .ac:hover { color: var(--red); }
+  .msg.r { align-self: flex-end; }
+  .msg.r .meta { justify-content: flex-end; } .msg.r .meta b { color: var(--ice); }
+  .msg.r .body { border: 1px solid var(--line-hi); background: var(--s2); border-radius: 12px 12px 3px 12px; padding: 10px 15px; }
+  .msg.r .ac { float: right; padding-left: 0; }
+  .msg.sys { align-self: center; max-width: 90%; text-align: center; }
+  .msg.sys .meta { justify-content: center; } .msg.sys .meta b { color: var(--muted); }
+  .msg.sys .body { border: 0; padding: 0; font: 12px/1.6 var(--mono); color: var(--muted); }
+  .msg.new { animation: geldi .35s ease-out; }
+  @keyframes geldi { from { opacity: 0; transform: translateY(6px); } }
+  .typing .body { color: var(--text-2); display: flex; align-items: center; gap: 10px; }
+  .typing i { display: inline-flex; gap: 4px; }
+  .typing i::before, .typing i::after, .typing i span { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--red); animation: uc 1.2s infinite; }
+  .typing i span { animation-delay: .2s; } .typing i::after { animation-delay: .4s; }
+  @keyframes uc { 0%, 80%, 100% { opacity: .25; } 40% { opacity: 1; } }
+  .bos { color: var(--muted); font-size: 13px; }
+  #konusma > .bos { text-align: center; padding-top: 18vh; }
+
+  .alt { padding: 0 28px 14px; }
+  #secenekler { display: flex; gap: 8px; flex-wrap: wrap; max-width: 740px; margin: 0 auto; }
+  #secenekler:not(:empty) { padding-bottom: 10px; }
+  .opt { border: 1px solid var(--line-hi); border-radius: 8px; background: var(--s1); color: var(--text); padding: 7px 14px; font-size: 13.5px; }
+  .opt:hover:not(:disabled) { border-color: var(--red); background: var(--red-dim); }
+
+  form { display: flex; gap: 6px; align-items: flex-end; max-width: 740px; margin: 0 auto; padding: 7px 7px 7px 16px;
+         border: 1px solid var(--line-hi); border-radius: 12px; background: var(--s2); transition: border-color .15s, box-shadow .15s; }
+  form:focus-within { border-color: var(--red); box-shadow: 0 0 0 3px var(--red-dim); }
+  #mesaj { flex: 1; align-self: center; background: none; border: 0; outline: 0; color: var(--text); font: 15px/22px var(--read); caret-color: var(--red);
+           resize: none; height: 22px; max-height: 198px; overflow-y: auto; padding: 0; }
+  #mesaj::placeholder { color: var(--muted); }
+  form .ikon { border-color: transparent; }
+  form .ikon:hover { border-color: var(--line-hi); }
+  #mik.kayit { color: var(--red); border-color: var(--red); animation: kayit 1.2s ease-in-out infinite; }
+  #mik.cevir { opacity: .5; cursor: progress; }
+  @keyframes kayit { 50% { background: rgba(229, 85, 95, .25); } }
+  #gonder { background: var(--red); color: var(--bg); }
+  #gonder:hover { background: #f06a73; color: var(--bg); }
+  #gonder svg { fill: currentColor; stroke: none; }
+  .ipucu { max-width: 740px; margin: 7px auto 0; display: flex; justify-content: space-between; gap: 12px; font: 11px var(--mono); color: var(--muted); }
+  kbd { font: inherit; color: var(--text-2); }
+
+  /* sağ sütun: konsey odası ve sistemin durumu */
+  .side { overflow-y: auto; min-height: 0; background: var(--s1); border-left: 1px solid var(--line); scrollbar-width: thin; scrollbar-color: var(--line-hi) transparent; }
+  .oda { padding: 10px 20px 18px; }
+  .stage { position: relative; height: 204px; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .kontrol { display: flex; flex-wrap: wrap; gap: 8px; }
+  .btn { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 12px; border: 1px solid var(--line-hi); border-radius: 8px;
+         background: none; color: var(--text-2); font-size: 13px; transition: border-color .15s, color .15s, background .15s; }
+  .btn:hover:not(:disabled) { border-color: var(--red); color: var(--text); }
+  .btn.warn { border-color: rgba(230, 173, 96, .55); color: var(--amber); background: var(--amber-dim); }
+  .btn.warn:hover { border-color: var(--amber); color: var(--amber); }
+  .kontrol .btn { flex: 1 1 130px; justify-content: center; }
+  #beyin { width: 100%; margin-top: 8px; justify-content: space-between; font: 12px var(--mono); }
+  #beyin span { color: var(--muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .blok { padding: 18px 20px; border-top: 1px solid var(--line); }
+  .blok h2 { margin: 0 0 12px; display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
+             font: 700 14px/1 var(--display); letter-spacing: .16em; text-transform: uppercase; color: var(--text-2); }
+  .blok h2 small { font: 11px var(--mono); letter-spacing: 0; text-transform: none; color: var(--muted); }
+
+  #onaykutu { background: var(--amber-dim); box-shadow: inset 3px 0 0 var(--amber); }
+  #onaykutu h2 { color: var(--amber); }
+  .onay { padding: 10px 0; border-top: 1px solid var(--line); }
+  .onay:first-child { border-top: 0; padding-top: 0; }
+  .onay p { margin: 0; font-size: 14px; }
+  .onay p span { font: 11px var(--mono); color: var(--muted); margin-right: 6px; }
+  .onay .butonlar { display: flex; gap: 8px; margin-top: 10px; }
+  .btn.evet { background: var(--amber); border-color: var(--amber); color: var(--bg); font-weight: 600; }
+  .btn.evet:hover:not(:disabled) { background: #f0bd76; border-color: #f0bd76; color: var(--bg); }
+
+  .rem { display: grid; grid-template-columns: 96px 1fr; gap: 2px 12px; padding: 9px 0; border-top: 1px solid var(--line); }
+  .rem:first-child { border-top: 0; padding-top: 0; }
+  .rem .cd { font: 600 19px/1.1 var(--display); color: var(--red); letter-spacing: .03em; font-variant-numeric: tabular-nums; }
+  .rem .cd.soon { color: var(--amber); }
+  .rem .when { font: 11px var(--mono); color: var(--muted); }
+  .rem .what { grid-column: 2; grid-row: 1 / span 2; font-size: 14px; line-height: 1.45; }
+  .rem .what small { display: block; color: var(--muted); font-size: 12px; }
+
+  .tabs { display: grid; grid-template-columns: repeat(4, 1fr); margin-bottom: 6px; border-bottom: 1px solid var(--line); }
+  .tabs button { background: none; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; color: var(--muted); padding: 2px 0 7px;
+                 font: 11px var(--mono); }
+  .tabs button b { display: block; font: 600 20px/1.15 var(--display); color: var(--text-2); }
+  .tabs button:hover { color: var(--text-2); }
+  .tabs button[aria-pressed=true] { border-bottom-color: var(--red); color: var(--text); }
+  .tabs button[aria-pressed=true] b { color: var(--text); }
+  .tabs button.hata b { color: var(--amber); }
+  .row { padding: 8px 0; border-top: 1px solid var(--line); font-size: 13.5px; line-height: 1.45; }
+  .row:first-child { border-top: 0; }
+  .row .k { display: block; font: 11px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  .vitals { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; }
+  .vital { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-2); min-width: 0; }
+  .vital span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .vital.bad { color: var(--amber); }
+  .olcu { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+  .olcu .ust { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font: 11px var(--mono); color: var(--muted); }
+  .olcu .ust b { font: 600 26px/1 var(--display); color: var(--text); letter-spacing: .02em; }
+  .olcu .ust b.warn { color: var(--amber); }
+  .bar { height: 4px; background: var(--line); border-radius: 2px; margin-top: 10px; overflow: hidden; }
+  .bar i { display: block; height: 100%; background: var(--red); border-radius: 2px; }
+  .bar.warn i { background: var(--amber); }
+  .kirilim { margin-top: 8px; display: grid; gap: 2px; font: 11px var(--mono); color: var(--muted); }
+  .kirilim div { display: flex; justify-content: space-between; }
+
+  details.blok summary { cursor: pointer; list-style: none; display: flex; justify-content: space-between; align-items: baseline;
+                         font: 700 14px/1 var(--display); letter-spacing: .16em; text-transform: uppercase; color: var(--text-2); }
+  details.blok summary::-webkit-details-marker { display: none; }
+  details.blok summary::after { content: "+"; font: 16px/1 var(--mono); color: var(--muted); }
+  details[open].blok summary::after { content: "–"; }
+  details.blok summary:hover { color: var(--text); }
+  #olaylar { margin: 12px 0 0; padding: 0; list-style: none; display: grid; gap: 6px; font: 11.5px/1.5 var(--mono); color: var(--text-2); }
+  #olaylar span { color: var(--muted); margin-right: 8px; }
+
+  /* ayarlar çekmecesi */
+  #perde { position: fixed; inset: 0; background: rgba(0, 0, 0, .55); z-index: 40; opacity: 0; pointer-events: none; transition: opacity .2s; }
+  #perde.acik { opacity: 1; pointer-events: auto; }
+  #ayarlar { position: fixed; top: 0; right: 0; bottom: 0; width: min(440px, 100vw); z-index: 50; background: var(--s1);
+             border-left: 1px solid var(--line-hi); overflow-y: auto; transform: translateX(100%); visibility: hidden;
+             transition: transform .28s cubic-bezier(.16, 1, .3, 1), visibility 0s .28s; }
+  #ayarlar.acik { transform: none; visibility: visible; transition: transform .28s cubic-bezier(.16, 1, .3, 1); }
+  .cekmece-bas { position: sticky; top: 0; z-index: 1; display: flex; justify-content: space-between; align-items: center;
+                 padding: 14px 20px; background: var(--s1); border-bottom: 1px solid var(--line); }
+  .cekmece-bas h2 { margin: 0; font: 700 18px/1 var(--display); letter-spacing: .16em; text-transform: uppercase; }
+  #ayaralan { padding: 0 20px; }
+  #ayaralan h3 { font: 700 12px/1 var(--display); letter-spacing: .2em; text-transform: uppercase; color: var(--red); margin: 24px 0 4px; }
+  .ayar { display: grid; grid-template-columns: 1fr auto; gap: 3px 14px; align-items: center; padding: 11px 0; border-bottom: 1px solid var(--line); }
+  .ayar > b { font-weight: 600; font-size: 14px; }
+  .ayar > span { grid-column: 1 / -1; color: var(--muted); font-size: 12.5px; }
+  .ayar input, .ayar select { background: var(--bg); border: 1px solid var(--line-hi); border-radius: 6px; color: var(--text); font: 13px var(--mono); padding: 6px 8px; width: 112px; }
+  .ayar input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--red); }
+  .ayar input[type=time] { width: 92px; }
+  .ayar .aralik { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+  .isler { display: flex; flex-wrap: wrap; gap: 6px 16px; grid-column: 1 / -1; padding-top: 6px; }
+  .isler label { font: 12.5px var(--mono); cursor: pointer; display: flex; gap: 6px; align-items: center; color: var(--text-2); }
+  .isler input { width: 16px !important; height: 16px; }
+  #ayardurum { position: sticky; bottom: 0; padding: 12px 20px 16px; min-height: 3em; background: var(--s1); color: var(--muted); font: 12px var(--mono); }
+  #ayardurum.hata { color: var(--amber); }
+
+  .mnav { display: none; grid-template-columns: 1fr 1fr; background: var(--s1); border-top: 1px solid var(--line-hi); }
+  .mnav button { background: none; border: 0; height: 54px; color: var(--muted); font: 700 14px var(--display); letter-spacing: .18em; text-transform: uppercase; }
+  .mnav button[aria-pressed=true] { color: var(--text); box-shadow: inset 0 2px 0 var(--red); }
+  .mnav i { font: 600 12px var(--mono); font-style: normal; letter-spacing: 0; color: var(--bg); background: var(--amber); border-radius: 9px; padding: 1px 6px; margin-left: 8px; }
+  .mnav i:empty { display: none; }
+
+  @media (max-width: 900px) {
+    header { height: 56px; padding: 0 12px 0 16px; gap: 12px; } .mark { font-size: 19px; } #tarih { display: none; } #saat { font-size: 21px; }
+    main { display: block; min-height: 0; }
+    .chat, .side { height: 100%; }
+    .side { border-left: 0; }
+    body[data-v=durum] .chat, body:not([data-v=durum]) .side { display: none; }
+    .mnav { display: grid; }
+    #kscroll { padding: 18px 16px 10px; } .msg { max-width: 96%; }
+    .alt { padding: 0 12px 10px; }
+    .ipucu { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+
+<header>
+  <span class="mark" id="mark">{{NAME}}</span>
+  <span id="durum" role="status"><span class="dot" id="nokta"></span><span id="durumyazi"></span></span>
+  <span class="spacer"></span>
+  <div class="zaman"><div id="saat">--:--</div><div id="tarih"></div></div>
+  <button type="button" class="ikon" id="ayarac"><svg class="i" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></button>
+</header>
+
+<main>
+  <section class="chat" id="sohbetalan">
+    <div id="kscroll"><div id="konusma" aria-live="polite"></div></div>
+    <div class="alt">
+      <div id="secenekler"></div>
+      <form id="form">
+        <textarea id="mesaj" rows="1" autofocus></textarea>
+        <button type="button" class="ikon" id="mik"><svg class="i" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
+        <button type="submit" class="ikon" id="gonder"><svg class="i" viewBox="0 0 24 24"><path d="M4 20.5 21 12 4 3.5v6.4l11 2.1-11 2.1z"/></svg></button>
+      </form>
+      <div class="ipucu"><span id="ipucu"></span><span id="say"></span></div>
+    </div>
+  </section>
+
+  <aside class="side" id="durumalan">
+    <section class="oda">
+      <div class="stage"><canvas id="cekirdek" aria-hidden="true"></canvas></div>
+      <p class="sr" id="koltuklar"></p>
+      <div class="kontrol">
+        <button type="button" class="btn" id="durdur"></button>
+        <button type="button" class="btn" id="internet"></button>
+      </div>
+      <button type="button" class="btn" id="beyin"></button>
+    </section>
+    <section class="blok" id="onaykutu" hidden><h2><span data-t="approvals"></span><small id="hak"></small></h2><div id="onaylar"></div></section>
+    <section class="blok"><h2><span data-t="reminders"></span><small id="remsay"></small></h2><div id="hatirlatmalar"></div></section>
+    <section class="blok"><h2 data-t="jobs"></h2><div class="tabs" id="sekmeler"></div><div id="aktif"></div></section>
+    <section class="blok"><h2 data-t="system"></h2><div class="vitals" id="saglik"></div><div id="harcama"></div><div id="kota"></div></section>
+    <details class="blok" id="olaykutu"><summary data-t="events"></summary><ol id="olaylar"></ol></details>
+  </aside>
+</main>
+
+<nav class="mnav" id="mnav"><button type="button" data-v="sohbet" aria-pressed="true" data-t="chat"></button><button type="button" data-v="durum" aria-pressed="false"><span data-t="status"></span><i id="mnavonay"></i></button></nav>
+
+<div id="perde"></div>
+<aside id="ayarlar" role="dialog" aria-modal="true" aria-labelledby="ayarbaslik">
+  <div class="cekmece-bas"><h2 id="ayarbaslik" data-t="settings"></h2>
+    <button type="button" class="ikon" id="ayarkapa"><svg class="i" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+  <div id="ayaralan"></div><div id="ayardurum" role="status"></div>
+</aside>
+
+<script>
+const TOKEN = "{{TOKEN}}", NAME = "{{NAME}}".startsWith("{{") ? "Pentarch" : "{{NAME}}", LANG = document.documentElement.lang === "en" ? "en" : "tr", EN = LANG === "en";
+const YER = EN ? "en-GB" : "tr-TR";
+const T = {
+  tr: {
+    connecting: "bağlanıyor", ready: "hazır", thinking: "düşünüyor", min: "dk", queued: n => `${n} sırada`,
+    offline: "bağlantı yok", restarting: "yeniden başlıyor",
+    chat: "Sohbet", status: "Durum", settings: "Ayarlar", close: "Kapat (Esc)",
+    placeholder: `${NAME} ile konuş…`, mic: "Sesli yaz (Ctrl+M)", send: "Gönder (Enter)",
+    hint: "<kbd>Enter</kbd> gönderir · <kbd>Shift+Enter</kbd> yeni satır · <kbd>Ctrl+M</kbd> ses", chars: "karakter",
+    recording: "kayıt sürüyor, bitirmek için tekrar bas", transcribing: "yazıya çevriliyor…", noMic: "mikrofon yok",
+    sttFail: "çevrilemedi", sttEmpty: "ses anlaşılmadı",
+    noChat: "Henüz konuşma yok.", more: "devamı ▾", less: "kısalt ▴", deliberating: `${NAME} düşünüyor`,
+    approvals: "Onay bekliyor", left: n => `bugün ${n} öneri hakkı kaldı`, yes: "Evet", no: "Hayır",
+    reminders: "Geri sayım", waiting: n => `${n} bekliyor`, noRem: "Bekleyen hatırlatma yok", hourly: n => `saatlik · ${n} kez kaldı`, day: "g",
+    jobs: "İş panosu", tabs: {calisiyor: "çalışıyor", bekliyor: "bekliyor", bitti: "bitti", hata: "hata"},
+    noErr: "Son 24 saatte hata yok", none: "Boş", plan: "Gün planı",
+    system: "Sistem", down: "kesik", scanning: "sistem taranıyor", spent: "bugün harcanan", runs: n => `${n} koşu`,
+    net: "internet bugün", netLeft: k => `ay sonuna ${k} GB`, netOver: "bütçe aşıldı", netOver2: "bütçenin iki katı",
+    netOpen: "İnternet serbest", netLimited: "İnternet sınırlı",
+    netTip: "Sınırlıyken ağır rutinler seyrekleşir, büyük indirme yapılmaz. Değiştirmek için bas.",
+    pause: "Koşuları durdur", paused: t => `Sürdür · ${t}'e dek durdu`, pauseTip: "Otomatik koşular, görevler ve bildirimler 2 saat durur",
+    brain: "Beyin", oneShot: "tek seferlik", deepOff: "derin kapalı", deepAlways: "hep derin", deepAuto: "zorda derin",
+    events: "Olay günlüğü", council: "Konsey", saved: k => `kaydedildi: ${k}`, notSaved: e => `kaydedilmedi: ${e}`,
+    opt: {otomatik: "otomatik", hep: "hep", kapali: "kapalı"},
+  },
+  en: {
+    connecting: "connecting", ready: "ready", thinking: "thinking", min: "min", queued: n => `${n} queued`,
+    offline: "offline", restarting: "restarting",
+    chat: "Chat", status: "Status", settings: "Settings", close: "Close (Esc)",
+    placeholder: `Message ${NAME}…`, mic: "Dictate (Ctrl+M)", send: "Send (Enter)",
+    hint: "<kbd>Enter</kbd> sends · <kbd>Shift+Enter</kbd> new line · <kbd>Ctrl+M</kbd> voice", chars: "characters",
+    recording: "recording, press again to stop", transcribing: "transcribing…", noMic: "no microphone",
+    sttFail: "could not transcribe", sttEmpty: "couldn't make that out",
+    noChat: "No conversation yet.", more: "show more ▾", less: "show less ▴", deliberating: `${NAME} is thinking`,
+    approvals: "Needs approval", left: n => `${n} suggestions left today`, yes: "Yes", no: "No",
+    reminders: "Countdown", waiting: n => `${n} pending`, noRem: "No pending reminders", hourly: n => `hourly · ${n} left`, day: "d",
+    jobs: "Job board", tabs: {calisiyor: "running", bekliyor: "queued", bitti: "done", hata: "errors"},
+    noErr: "No errors in the last 24 hours", none: "Empty", plan: "Day plan",
+    system: "System", down: "down", scanning: "checking systems", spent: "spent today", runs: n => `${n} runs`,
+    net: "network today", netLeft: k => `${k} GB left this month`, netOver: "over budget", netOver2: "twice the budget",
+    netOpen: "Network open", netLimited: "Network limited",
+    netTip: "When limited, heavy routines run less often and large downloads are skipped. Press to toggle.",
+    pause: "Pause runs", paused: t => `Resume · paused until ${t}`, pauseTip: "Automatic runs, tasks and notifications stop for 2 hours",
+    brain: "Brain", oneShot: "one-shot", deepOff: "deep off", deepAlways: "always deep", deepAuto: "deep when hard",
+    events: "Event log", council: "Council", saved: k => `saved: ${k}`, notSaved: e => `not saved: ${e}`,
+    opt: {otomatik: "auto", hep: "always", kapali: "off"},
+  },
+}[LANG];
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+const p2 = x => String(x).padStart(2, "0");
+const tarih = s => new Date(String(s).replace(" ", "T"));
+const gunAy = new Intl.DateTimeFormat(YER, {day: "numeric", month: "short"});
+// "2026-11-05 14:20" -> bugünse "14:20", değilse "4 Kas 14:20"
+function kisaZaman(s) {
+  const d = tarih(s); if (isNaN(d)) return String(s ?? "").slice(5, 16);
+  const hm = `${p2(d.getHours())}:${p2(d.getMinutes())}`;
+  return d.toDateString() === new Date().toDateString() ? hm : `${gunAy.format(d)} ${hm}`;
+}
+let D = null, thinking = false, seen = 0, health = [], surum = "", ad = NAME, sahip = "", uyeler = [];
+
+// sabit yazılar dile göre bir kez yerleşir
+document.querySelectorAll("[data-t]").forEach(el => el.textContent = T[el.dataset.t]);
+$("mesaj").placeholder = T.placeholder; $("ipucu").innerHTML = T.hint; $("durumyazi").textContent = T.connecting;
+[["ayarac", T.settings], ["mik", T.mic], ["gonder", T.send], ["ayarkapa", T.close]].forEach(([id, s]) => { $(id).title = s; $(id).setAttribute("aria-label", s); });
+$("durdur").title = T.pauseTip; $("internet").title = T.netTip;
+$("sohbetalan").setAttribute("aria-label", T.chat); $("durumalan").setAttribute("aria-label", T.status);
+
+// yalnız değişen bölüm yeniden çizilir
+const onbellek = new Map();
+function koy(id, html) { if (onbellek.get(id) !== html) { onbellek.set(id, html); $(id).innerHTML = html; return true; } }
+
+async function post(yol, veri) {
+  const r = await fetch(yol, {method: "POST", headers: {"X-Pentarch": TOKEN, "Content-Type": "application/json"}, body: JSON.stringify(veri)});
+  surum = ""; yenile();
+  return r;
+}
+
+/* --- saat ve geri sayımlar --- */
+const tarihYaz = new Intl.DateTimeFormat(YER, {weekday: "long", day: "numeric", month: "long"});
+function clock() {
+  const n = new Date();
+  $("saat").innerHTML = `${p2(n.getHours())}:${p2(n.getMinutes())}<small>:${p2(n.getSeconds())}</small>`;
+  $("tarih").textContent = tarihYaz.format(n);
+  document.querySelectorAll(".cd[data-t]").forEach(el => {
+    let s = Math.max(0, (tarih(el.dataset.t) - n) / 1000 | 0);
+    const d = s / 86400 | 0; s %= 86400;
+    el.textContent = (d ? d + T.day + " " : "") + `${p2(s / 3600 | 0)}:${p2(s % 3600 / 60 | 0)}:${p2(s % 60)}`;
+    el.classList.toggle("soon", d === 0 && s < 3600);
+  });
+}
+setInterval(clock, 1000); clock();
+
+/* --- oda düğmeleri --- */
+$("durdur").onclick = () => post("/api/duraklat", D && D.duraklat ? {devam: true} : {saat: 2});
+$("internet").onclick = () => post("/api/internet", {sinirli: !(D && D.internet && D.internet.sinirli)});
+
+/* --- iş panosu --- */
+let sekme = "calisiyor";
+function pano() {
+  const liste = D.pano || {};
+  koy("sekmeler", Object.entries(T.tabs).map(([k, s]) =>
+    `<button type="button" data-sekme="${k}" aria-pressed="${k === sekme}" class="${k === "hata" && liste.hata?.length ? "hata" : ""}"><b>${(liste[k] || []).length}</b>${s}</button>`).join(""));
+  const L = liste[sekme] || [];
+  koy("aktif", L.length ? L.map(r => `<div class="row"><span class="k">${esc(kisaZaman(r.zaman))}</span>${esc(String(r.is).replace(/\s*\(.*$/s, "").slice(0, 140))}</div>`).join("")
+    : `<div class="bos">${sekme === "hata" ? T.noErr : T.none}</div>`);
+}
+$("sekmeler").addEventListener("click", e => { const b = e.target.closest("[data-sekme]"); if (b) { sekme = b.dataset.sekme; pano(); } });
+$("onaylar").addEventListener("click", async e => {
+  const b = e.target.closest("[data-onay]"); if (!b) return;
+  b.parentElement.querySelectorAll("button").forEach(x => x.disabled = true);
+  await post("/api/onay", {id: +b.dataset.onay, evet: !!b.dataset.evet});
+});
+
+/* --- ayarlar: gruplu; her değişiklik tek tek kaydedilir. [ad tr, not tr, ad en, not en, seçenekler] --- */
+const AYAR = [
+  [["Beyin", "Brain"], {
+    v2: ["Sürekli beyin (v2)", "kapalıysa her mesaj ayrı oturumda koşar", "Persistent brain (v2)", "when off, every message runs in its own session"],
+    beyin_model: ["Günlük model", "sohbet ve kısa işler; değişince oturum yenilenir", "Everyday model", "chat and short jobs; changing it restarts the session", ["haiku", "sonnet", "opus"]],
+    beyin_efor: ["Günlük düşünme eforu", "low hızlı ve ucuz, high yavaş", "Everyday effort", "low is fast and cheap, high is slow", ["low", "medium", "high"]],
+    derin_mod: ["Derin mod", "otomatik: analiz, araştırma, plan ya da uzun mesajda derin beyne geçer", "Deep mode", "auto: switches to the deep brain for analysis, research, plans or long messages", ["otomatik", "hep", "kapali"]],
+    derin_model: ["Derin model", "zor mesajlarda kullanılan model", "Deep model", "used for hard messages", ["sonnet", "opus"]],
+    derin_efor: ["Derin düşünme eforu", "", "Deep effort", "", ["medium", "high"]],
+  }],
+  [["Mesaj", "Messages"], {
+    sessiz: ["Sessiz saatler", "bu aralıkta haberler sabaha birikir", "Quiet hours", "updates in this window wait until morning"],
+    kelime_siniri: ["Kelime sınırı", "otomatik haberlerin üst sınırı", "Word limit", "upper limit for automatic updates"],
+  }],
+  [["Bütçe ve inisiyatif", "Budget and initiative"], {
+    otomatik_gunluk_usd: ["Rutin bütçesi $/gün", "kalp, sabah, gece turları", "Routine budget $/day", "heartbeat, morning and night rounds"],
+    gorev_gunluk_usd: ["Görev bütçesi $/gün", "kuyruktaki işler", "Task budget $/day", "queued jobs"],
+    inisiyatif_gunluk: ["Günlük öneri hakkı", "asistanın kendiliğinden önerebileceği iş sayısı; 0 kapatır", "Daily suggestions", "how many jobs the assistant may propose on its own; 0 turns it off"],
+  }],
+  [["Rutinler", "Routines"], {
+    kapali_isler: ["Kapalı işler", "işaretli rutinler çalışmaz", "Disabled routines", "checked routines don't run"],
+  }],
+];
+const DI = EN ? 1 : 0, AYAR_AD = Object.assign({}, ...AYAR.map(([, g]) => g));
+function ayarCiz() {
+  const A = D.ayarlar || {};
+  $("ayaralan").innerHTML = AYAR.map(([baslik, grup]) => `<h3>${baslik[DI]}</h3>` + Object.entries(grup).map(([k, d]) => {
+    const v = A[k], isim = d[DI * 2], not = d[DI * 2 + 1], sec = (D.secenek || {})[k] || d[4], al = `data-k="${k}" aria-label="${esc(isim)}"`;
+    if (v === undefined) return "";
+    let alan;
+    if (sec) alan = `<select ${al}>${sec.map(o => `<option value="${o}" ${o === v ? "selected" : ""}>${esc(T.opt[o] || o)}</option>`).join("")}</select>`;
+    else if (typeof v === "boolean") alan = `<input type="checkbox" ${al} ${v ? "checked" : ""}>`;
+    else if (k === "sessiz") alan = `<div class="aralik"><input type="time" ${al} value="${esc(v[0])}">–<input type="time" ${al} value="${esc(v[1])}"></div>`;
+    else if (k === "kapali_isler") alan = "";
+    else alan = `<input type="number" min="0" step="${Number.isInteger(v) ? 1 : 0.5}" ${al} value="${esc(v)}">`;
+    const isler = k === "kapali_isler" ? `<div class="isler">${(D.isler || []).map(j =>
+      `<label><input type="checkbox" data-k="kapali_isler" value="${esc(j)}" ${v.includes(j) ? "checked" : ""}>${esc(j)}</label>`).join("")}</div>` : "";
+    return `<div class="ayar"><b>${isim}</b>${alan}${not ? `<span>${not}</span>` : ""}${isler}</div>`;
+  }).join("")).join("");
+}
+$("ayaralan").addEventListener("change", async e => {
+  const el = e.target, k = el.dataset.k; if (!k) return;
+  let v;
+  if (k === "sessiz") v = [...document.querySelectorAll('[data-k="sessiz"]')].map(x => x.value);
+  else if (k === "kapali_isler") v = [...document.querySelectorAll('[data-k="kapali_isler"]:checked')].map(x => x.value);
+  else if (el.type === "checkbox") v = el.checked;
+  else if (el.type === "number") v = +el.value;
+  else v = el.value;
+  const r = await post("/api/ayar", {anahtar: k, deger: v}), j = await r.json().catch(() => ({}));
+  $("ayardurum").textContent = r.ok ? T.saved(AYAR_AD[k][DI * 2]) : T.notSaved(j.hata || r.status);
+  $("ayardurum").classList.toggle("hata", !r.ok);
+});
+let ayarDonus = null;
+function ayarAc() {
+  if (!D) return; ayarDonus = document.activeElement; ayarCiz(); $("ayardurum").textContent = "";
+  $("ayarlar").classList.add("acik"); $("perde").classList.add("acik"); $("ayarkapa").focus();
+}
+function ayarKapa() {
+  if (!$("ayarlar").classList.contains("acik")) return;
+  $("ayarlar").classList.remove("acik"); $("perde").classList.remove("acik"); ayarDonus?.focus();
+}
+$("ayarac").onclick = ayarAc; $("beyin").onclick = ayarAc;
+$("ayarkapa").onclick = ayarKapa; $("perde").onclick = ayarKapa;
+document.addEventListener("keydown", e => { if (e.key === "Escape") ayarKapa(); });
+
+/* --- sohbet --- */
+const clean = s => s.replaceAll(" / ", "\n").replace(/\*\*|`|^#+\s*|^[-*]\s+/gm, "").replace(/\n{3,}/g, "\n\n").trim();
+// konuşan: sahip -> kullanıcı, ad -> asistan, gerisi sistem satırı. Eski sunucu sahip göndermezse asistan dışı her şey kullanıcıdır.
+function kim(s) {
+  if (s.startsWith(ad)) return "bot";
+  if (!sahip) return "r";
+  return s.startsWith(sahip) ? "r" : "sys";
+}
+const acik = new Set();  // açılmış uzun mesajlar
+const uzun = (m, i, n) => i < n - 1 && clean(m[3]).length > 420 && !acik.has(m[1] + m[2]);
+let dugum = new Map();  // günlük satırı -> {h, el}: ekrandaki mesaj düğümleri
+const yaziyor = Object.assign(document.createElement("div"), {className: "msg typing"});
+function sohbet() {
+  const box = $("kscroll"), stick = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
+  const lines = (D.konusma || []).map(l => l.match(/^(\S+ \S+) \| ([^:]+): (.*)$/)).filter(Boolean);
+  // kullanıcının cevaplamadığı son asistan mesajı [[A|B]], [A / B] ya da "Seçenekler: A | B" ile bitiyorsa şıklar düğme olur
+  let opts = [], last = null;
+  for (let j = lines.length - 1; j >= 0; j--) {
+    const k = kim(lines[j][2]);
+    if (k === "r") break;
+    if (k === "bot") { last = lines[j]; break; }
+  }
+  if (last) {
+    const mm = last[3].match(/\s*\[\[([^\]]+)\]\]\s*$/) || last[3].match(/\s\[([^\[\]]+)\]\s*$/);
+    if (mm) opts = mm[1].split(/\s*[|\/]\s*/).filter(Boolean);
+    else {
+      const sm = last[3].match(/(?:Seçenekler|Options):\s*([^\/]+?)\s*$/);
+      if (sm && sm[1].includes("|")) { opts = sm[1].split(/\s*\|\s*/).filter(Boolean); last[3] = last[3].replace(/\s*\/?\s*(?:Seçenekler|Options):.*$/, ""); }
+    }
+  }
+  lines.forEach(m => { m[3] = m[3].replace(/\s*\[\[[^\]]+\]\]\s*$/, ""); });
+  if (opts.length) last[3] = last[3].replace(/\s\[[^\[\]]+\]\s*$/, "");
+  koy("secenekler", opts.map(o => `<button type="button" class="opt">${esc(o)}</button>`).join(""));
+  // yalnız yeni ya da değişen mesaj çizilir
+  const K = $("konusma"), ilk = !dugum.size, yeni = new Map();
+  const els = lines.map((m, i) => {
+    const k = m[1] + m[2], u = uzun(m, i, lines.length), c = kim(m[2]), metin = clean(m[3]);
+    const [, isim, kaynak] = m[2].match(/^(.*?)\s*(?:\((.*)\))?$/);
+    const h = `<div class="meta"><b>${esc(isim)}</b>${kaynak ? `<span>${esc(kaynak)}</span>` : ""}<time>${esc(kisaZaman(m[1]))}</time></div>
+      <div class="body ${u ? "kisa" : ""}">${esc(metin)}</div>${u || acik.has(k) && metin.length > 420 ? `<button type="button" class="ac" data-k="${esc(k)}" aria-expanded="${!u}">${u ? T.more : T.less}</button>` : ""}`;
+    let key = m[0]; while (yeni.has(key)) key += "+";
+    const eski = dugum.get(key);
+    if (eski && eski.h === h) { yeni.set(key, eski); return eski.el; }
+    const el = document.createElement("div");
+    el.className = `msg ${c === "bot" ? "" : c}`; el.innerHTML = h;
+    if (!ilk && !eski) { el.classList.add("new"); el.addEventListener("animationend", () => el.classList.remove("new"), {once: true}); }
+    yeni.set(key, {h, el}); return el;
+  });
+  dugum = yeni;
+  if (thinking) {
+    yaziyor.innerHTML = `<div class="meta"><b>${esc(ad)}</b></div><div class="body">${T.deliberating}<i><span></span></i></div>`;
+    els.push(yaziyor);
+  }
+  if (!els.length) K.innerHTML = `<div class="bos">${T.noChat}</div>`;
+  else {
+    [...K.children].forEach(c => els.includes(c) || c.remove());
+    els.forEach((el, i) => K.children[i] !== el && K.insertBefore(el, K.children[i] || null));
+  }
+  if (stick || lines.length > seen) box.scrollTop = box.scrollHeight;
+  seen = lines.length;
+}
+
+async function yenile() {
+  try {
+    const r = await fetch("/api/durum", {headers: {"X-Pentarch": TOKEN, "X-Surum": surum}});
+    if (r.status === 204) return;  // değişen bir şey yok
+    if (!r.ok) return location.reload();  // sunucu yeniden başladıysa token değişmiştir
+    surum = r.headers.get("X-Surum") || "";
+    D = await r.json();
+  }
+  catch { $("nokta").className = "dot off"; $("durumyazi").textContent = D && D.yenilenecek ? T.restarting : T.offline; return; }
+  thinking = !!D.calisiyor;
+  ad = D.ad || NAME; sahip = D.sahip || ""; uyeler = Array.isArray(D.uyeler) ? D.uyeler.slice(0, 5) : [];
+  $("mark").textContent = ad;
+  $("koltuklar").textContent = uyeler.length ? `${T.council}: ${uyeler.join(", ")}` : "";
+  $("nokta").className = "dot " + (thinking ? "busy" : "ok");
+  $("durumyazi").textContent = thinking ? T.thinking + (D.calisiyor_dk ? ` · ${D.calisiyor_dk} ${T.min}` : "") + (D.sirada > 1 ? ` · ${T.queued(D.sirada - 1)}` : "") : T.ready;
+
+  const A = D.ayarlar || {};
+  const derin = A.derin_mod === "kapali" ? T.deepOff : `${A.derin_mod === "hep" ? T.deepAlways : T.deepAuto} ${A.derin_model}/${A.derin_efor}`;
+  const ozet = A.v2 === false ? T.oneShot : `${A.beyin_model}/${A.beyin_efor} · ${derin}`;
+  koy("beyin", `${T.brain}<span>${esc(ozet)}</span>`); $("beyin").title = `${T.settings}: ${ozet}`;
+  koy("durdur", D.duraklat ? `<svg class="i" viewBox="0 0 24 24"><path d="M7 5l12 7-12 7z"/></svg>${T.paused(esc(String(D.duraklat).slice(11, 16)))}`
+    : `<svg class="i" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></svg>${T.pause}`);
+  $("durdur").classList.toggle("warn", !!D.duraklat);
+  const N = D.internet || {};
+  $("internet").hidden = !D.internet;
+  koy("internet", `<svg class="i" viewBox="0 0 24 24"><path d="M2 9a15 15 0 0 1 20 0M5.5 12.5a10 10 0 0 1 13 0M9 16a5 5 0 0 1 6 0"/><circle cx="12" cy="19.5" r=".8"/></svg>${N.sinirli ? T.netLimited : T.netOpen}`);
+  $("internet").classList.toggle("warn", !!N.sinirli);
+  $("internet").setAttribute("aria-pressed", !!N.sinirli);
+
+  health = Object.entries(D.saglik || {}).map(([k, v]) => ({k, ok: !!(v && v.ok)}));
+  koy("saglik", health.length ? health.map(h => `<div class="vital ${h.ok ? "" : "bad"}"><i class="dot ${h.ok ? "ok" : "off"}"></i><span>${esc(h.k)}${h.ok ? "" : ` · ${T.down}`}</span></div>`).join("")
+    : `<div class="bos">${T.scanning}</div>`);
+  const H = Object.entries(D.harcama || {});
+  const usd = H.reduce((a, [, r]) => a + (+r.usd || 0), 0), runs = H.reduce((a, [, r]) => a + (+r.kosu || 0), 0);
+  koy("harcama", `<div class="olcu"><div class="ust"><span>${T.spent}<br>${T.runs(runs)}</span><b>$${usd.toFixed(usd < 1 ? 3 : 2)}</b></div>`
+    + (H.length > 1 ? `<div class="kirilim">${H.map(([k, r]) => `<div><span>${esc(k)} · ${+r.kosu || 0}</span><span>$${(+r.usd || 0).toFixed(3)}</span></div>`).join("")}</div>` : "") + `</div>`);
+  const gun = +N.gun || 0, butce = +N.butce || 0, sev = +N.seviye || 0;
+  koy("kota", butce ? `<div class="olcu"><div class="ust"><span>${T.net}<br>${sev ? (sev > 1 ? T.netOver2 : T.netOver) : T.netLeft((+N.kalan || 0).toFixed(1))}</span>`
+    + `<b class="${sev ? "warn" : ""}">${gun.toFixed(1)}<small style="font-size:15px;color:var(--muted)"> / ${butce.toFixed(1)} GB</small></b></div>`
+    + `<div class="bar ${sev ? "warn" : ""}"><i style="width:${Math.min(100, gun / butce * 100).toFixed(1)}%"></i></div></div>` : "");
+
+  sohbet();
+
+  const R = D.hatirlatmalar || [];
+  $("remsay").textContent = R.length ? T.waiting(R.length) : "";
+  if (koy("hatirlatmalar", R.length ? R.map(h =>
+    `<div class="rem"><span class="cd" data-t="${esc(h.zaman)}"></span><span class="what">${esc(h.metin)}${h.kez > 1 ? `<small>${T.hourly(h.kez)}</small>` : ""}</span><span class="when">${esc(kisaZaman(h.zaman))}</span></div>`).join("")
+    : `<div class="bos">${T.noRem}</div>`)) clock();
+
+  pano();
+
+  const O = D.onaylar || [];
+  $("onaykutu").hidden = !O.length;
+  $("mnavonay").textContent = O.length || "";
+  $("hak").textContent = T.left(D.oneri_kalan ?? 0);
+  koy("onaylar", O.map(o => `<div class="onay"><p><span>#${esc(o.id)}</span>${esc(o.oneri)}</p>
+    <div class="butonlar"><button type="button" class="btn evet" data-onay="${esc(o.id)}" data-evet="1">${T.yes}</button><button type="button" class="btn" data-onay="${esc(o.id)}">${T.no}</button></div></div>`).join(""));
+
+  const E = D.olaylar || [];
+  $("olaykutu").hidden = !E.length;
+  koy("olaylar", E.slice().reverse().map(l => `<li><span>${esc(l.slice(11, 16))}</span>${esc(l.slice(20))}</li>`).join(""));
+  canlan();
+}
+
+/* --- sohbet kutusu --- */
+$("konusma").addEventListener("click", e => {
+  const b = e.target.closest(".ac"); if (!b) return;
+  acik.has(b.dataset.k) ? acik.delete(b.dataset.k) : acik.add(b.dataset.k); sohbet();
+});
+$("mnav").addEventListener("click", e => {
+  const b = e.target.closest("[data-v]"); if (!b) return;
+  document.body.dataset.v = b.dataset.v;
+  document.querySelectorAll("#mnav button").forEach(x => x.setAttribute("aria-pressed", x === b));
+  if (b.dataset.v === "sohbet") $("kscroll").scrollTop = $("kscroll").scrollHeight;
+  else canlan();
+});
+$("secenekler").addEventListener("click", e => {
+  const b = e.target.closest(".opt"); if (!b) return;
+  $("mesaj").value = b.textContent; $("form").requestSubmit();
+});
+$("form").onsubmit = async e => {
+  e.preventDefault();
+  const text = $("mesaj").value.trim();
+  if (!text) return;
+  koy("secenekler", "");
+  $("mesaj").value = ""; boyut();
+  pulse = 1;
+  await fetch("/api/mesaj", {method: "POST", headers: {"X-Pentarch": TOKEN, "Content-Type": "application/json"}, body: JSON.stringify({text})});
+  thinking = true; surum = ""; yenile();
+};
+function boyut() {
+  const m = $("mesaj"); m.style.height = "auto"; m.style.height = m.scrollHeight + "px";
+  $("say").textContent = m.value.length ? m.value.length + " " + T.chars : "";
+}
+$("mesaj").oninput = boyut;
+$("mesaj").onkeydown = e => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); $("form").requestSubmit(); } };
+
+/* --- sesli yazma: ilk basış kaydı başlatır, ikincisi durdurup /api/ses'e yollar; gelen yazı kutuya eklenir --- */
+let kayit = null;
+async function mikrofon() {
+  const b = $("mik");
+  if (kayit) { kayit.stop(); return; }
+  if (b.classList.contains("cevir")) return;
+  let akis;
+  try { akis = await navigator.mediaDevices.getUserMedia({audio: true}); }
+  catch { $("say").textContent = T.noMic; return; }
+  const parcalar = [];
+  kayit = new MediaRecorder(akis, {mimeType: "audio/webm;codecs=opus"});
+  kayit.ondataavailable = e => parcalar.push(e.data);
+  kayit.onstop = async () => {
+    akis.getTracks().forEach(t => t.stop());
+    kayit = null; b.classList.replace("kayit", "cevir"); b.setAttribute("aria-pressed", "false"); $("say").textContent = T.transcribing;
+    try {
+      const r = await fetch("/api/ses", {method: "POST", headers: {"X-Pentarch": TOKEN, "Content-Type": "audio/webm"},
+                                         body: new Blob(parcalar, {type: "audio/webm"})});
+      const {text, hata} = await r.json();
+      if (hata || !text) { $("say").textContent = hata ? T.sttFail : T.sttEmpty; return; }
+      const m = $("mesaj"), onu = m.value.slice(0, m.selectionStart), sonra = m.value.slice(m.selectionEnd);
+      const ek = (onu && !/\s$/.test(onu) ? " " : "") + text;
+      m.value = onu + ek + sonra; m.selectionStart = m.selectionEnd = (onu + ek).length;
+      boyut(); m.focus();
+    } catch { $("say").textContent = T.sttFail; }
+    finally { b.classList.remove("cevir"); }
+  };
+  kayit.start(); b.classList.add("kayit"); b.setAttribute("aria-pressed", "true"); $("say").textContent = T.recording;
+}
+$("mik").onclick = mikrofon;
+addEventListener("keydown", e => { if (e.ctrlKey && e.key.toLowerCase() === "m") { e.preventDefault(); mikrofon(); } });
+
+/* --- çekirdek: beş koltuklu konsey halkası. Düşünürken hızlanır, söz sırası koltuktan koltuğa geçer;
+   sağlık halkası kesikse sarı yanar. Sekme gizliyken ya da sahne görünmezken durur, azaltılmış harekette tek kare çizer. --- */
+const cv = $("cekirdek"), cx = cv.getContext("2d"), azHareket = matchMedia("(prefers-reduced-motion: reduce)");
+let W = 0, H = 0, pulse = 0, speed = 1, sonKare = 0, faz = 0, kare = 0;
+function size() { const r = cv.getBoundingClientRect(), d = devicePixelRatio || 1;
+  W = r.width; H = r.height; cv.width = W * d; cv.height = H * d; cx.setTransform(d, 0, 0, d, 0, 0); canlan(); }
+new ResizeObserver(size).observe(cv.parentElement);
+function arc(r, a0, a1, w, c, blur = 0) {
+  cx.beginPath(); cx.arc(0, 0, r, a0, a1); cx.lineWidth = w; cx.strokeStyle = c; cx.shadowBlur = blur; cx.shadowColor = c; cx.stroke();
+}
+const red = "#e5555f", amber = "#e6ad60", rgba = a => `rgba(229,85,95,${a})`;
+function ciz(t) {
+  const dt = sonKare ? Math.min(t - sonKare, 100) / 1000 : 0;
+  sonKare = t; t /= 1000;
+  speed += ((thinking ? 2.2 : 1) - speed) * .04;
+  faz += dt * speed; pulse *= .95;
+  const R = Math.min(W * .19, H * .29), sR = R * 1.42, cy = H / 2 + 6;
+  cx.clearRect(0, 0, W, H);
+  cx.save(); cx.translate(W / 2, cy);
+  // dış kadran
+  cx.save(); cx.rotate(faz * .08);
+  for (let i = 0; i < 60; i++) { const a = i / 60 * 6.283, L = R - (i % 5 ? 3 : 6);
+    cx.beginPath(); cx.moveTo(Math.cos(a) * R, Math.sin(a) * R); cx.lineTo(Math.cos(a) * L, Math.sin(a) * L);
+    cx.lineWidth = 1; cx.strokeStyle = i % 5 ? rgba(.28) : rgba(.8); cx.shadowBlur = 0; cx.stroke(); }
+  cx.restore();
+  // sağlık halkası
+  const n = Math.max(health.length, 3);
+  for (let i = 0; i < n; i++) {
+    const h = health[i], a0 = -1.571 + i / n * 6.283 + .08, a1 = a0 + 6.283 / n - .16;
+    arc(R * .76, a0, a1, 4, rgba(.1));
+    if (h && (h.ok || Math.sin(t * 3) > -.3)) arc(R * .76, a0, a1, 4, h.ok ? red : amber, 4);
+  }
+  // beş koltuk: beşgen, düşünürken söz sırası döner
+  const aktif = thinking ? Math.floor(faz * .9) % 5 : -1, P = [];
+  for (let i = 0; i < 5; i++) { const a = -1.571 + i * 1.2566; P.push([Math.cos(a), Math.sin(a)]); }
+  cx.beginPath(); P.forEach(([x, y], i) => i ? cx.lineTo(x * sR, y * sR) : cx.moveTo(x * sR, y * sR)); cx.closePath();
+  cx.lineWidth = 1; cx.strokeStyle = rgba(.16); cx.shadowBlur = 0; cx.stroke();
+  cx.font = '10px "IBM Plex Mono", Consolas, monospace'; cx.textBaseline = "middle";
+  if ("letterSpacing" in cx) cx.letterSpacing = "1px";
+  P.forEach(([x, y], i) => {
+    const on = i === aktif, X = x * sR, Y = y * sR;
+    if (on) { cx.beginPath(); cx.moveTo(x * R * .5, y * R * .5); cx.lineTo(X, Y); cx.strokeStyle = rgba(.45); cx.stroke(); }
+    cx.beginPath(); cx.arc(X, Y, on ? 4 : 3, 0, 6.283);
+    cx.fillStyle = on ? red : rgba(.55); cx.shadowColor = red; cx.shadowBlur = on ? 10 : 0; cx.fill(); cx.shadowBlur = 0;
+    const u = uyeler[i]; if (!u) return;
+    cx.fillStyle = on ? "#eee4e5" : "#9c888b";
+    const s = String(u).toUpperCase().slice(0, 10);
+    if (x > .3) { cx.textAlign = "left"; cx.fillText(s, X + 9, Y); }
+    else if (x < -.3) { cx.textAlign = "right"; cx.fillText(s, X - 9, Y); }
+    else { cx.textAlign = "center"; cx.fillText(s, X, Y - 13); }
+  });
+  // canlı zar
+  cx.beginPath();
+  const amp = (thinking ? 4 : 1) + pulse * 8;
+  for (let i = 0; i <= 96; i++) {
+    const a = i / 96 * 6.283, r = R * .46 + Math.sin(a * 5 + t * 3) * amp * .5 + Math.sin(a * 11 - t * 5.3) * amp * .3;
+    i ? cx.lineTo(Math.cos(a) * r, Math.sin(a) * r) : cx.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+  }
+  cx.closePath(); cx.lineWidth = 1.2; cx.strokeStyle = red; cx.shadowBlur = 6; cx.shadowColor = red; cx.stroke();
+  // çekirdek beşgen
+  const br = .75 + Math.sin(t * (thinking ? 6 : 1.4)) * .25, e = R * .2;
+  cx.beginPath(); P.forEach(([x, y], i) => i ? cx.lineTo(x * e, y * e) : cx.moveTo(x * e, y * e)); cx.closePath();
+  cx.fillStyle = rgba(.25 + br * .35); cx.shadowBlur = 8 + pulse * 14; cx.fill();
+  cx.beginPath(); cx.arc(0, 0, 1.6 + br * 1.3, 0, 6.283); cx.fillStyle = "#f3dfe1"; cx.shadowBlur = 0; cx.fill();
+  cx.restore();
+}
+function dongu(t) {
+  kare = 0;
+  if (document.hidden || !W || !cv.offsetParent) return;  // gizli: döngü durur, canlan() yeniden başlatır
+  if (azHareket.matches) { ciz(0); sonKare = 0; return; }  // tek durağan kare
+  if (t - sonKare >= (thinking || pulse > .02 ? 33 : 100)) ciz(t);  // boşta 10 fps
+  kare = requestAnimationFrame(dongu);
+}
+function canlan() { if (!kare) kare = requestAnimationFrame(dongu); }
+document.addEventListener("visibilitychange", canlan);
+azHareket.addEventListener("change", canlan);
+document.fonts?.ready.then(canlan);
+
+yenile();
+setInterval(yenile, 4000);
+</script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+{
+  "date": "2026-11-01",
+  "summary": "Two new junior roles fit the profile; one posting closed early.",
+  "new": [
+    {"company": "Tailspin Labs", "role": "Junior Data Engineer", "link": "https://example.com/jobs/tailspin-data", "reason": "Python + SQL, open to graduates"},
+    {"company": "Woodgrove Tech", "role": "Software Engineer Intern", "link": "https://example.com/jobs/woodgrove-intern", "reason": "Summer internship, remote friendly"}
+  ],
+  "changed": [
+    {"company": "Globex Labs", "what": "Deadline moved from Nov 15 to Nov 20"},
+    {"company": "Contoso Games", "what": "Posting now says an EU work permit is required"}
+  ],
+  "closed": [{"company": "Fabrikam Systems", "reason": "Position filled"}],
+  "dropped": [
+    {"company": "Proseware", "role": "Senior Architect", "reason": "Needs 8+ years"},
+    {"company": "Litware", "role": "Sales Engineer", "reason": "Not a fit"}
+  ],
+  "sources": ["example job board", "company career pages", "university newsletter"]
+}

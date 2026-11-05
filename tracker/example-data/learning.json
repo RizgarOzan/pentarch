@@ -1,0 +1,18 @@
+[
+  {"id": "pytest", "order": 1, "priority": "core", "week": "1", "start": "2026-10-19", "end": "2026-10-25", "name": "Python Testing Basics (pytest)",
+   "provider": "Example Academy", "link": "https://example.com/courses/pytest", "scope": "Fixtures, parametrize, mocking.",
+   "done_when": "One small project has 10 passing tests.", "status": "in progress"},
+  {"id": "sql", "order": 2, "priority": "core", "week": "2", "start": "2026-10-26", "end": "2026-11-01", "name": "SQL for Analysts",
+   "provider": "Example Academy", "link": "https://example.com/courses/sql", "scope": "Joins, window functions, CTEs.",
+   "done_when": "Solve the 20 practice queries.", "status": "done"},
+  {"id": "stats", "order": 3, "priority": "core", "week": "3", "start": "2026-11-02", "end": "2026-11-08", "name": "Intro to Statistics",
+   "provider": "Open Course Site", "link": "https://example.org/stats-101", "scope": "Distributions, confidence intervals, A/B tests.",
+   "done_when": "Explain a p-value to a friend without notes.", "status": "in progress"},
+  {"id": "docker", "order": 4, "priority": "core", "week": "4", "start": "2026-11-09", "end": "2026-11-15", "name": "Docker Fundamentals",
+   "provider": "Example Academy", "link": "https://example.com/courses/docker", "scope": "Images, volumes, compose.",
+   "done_when": "A two-service app runs with one command.", "status": "not started"},
+  {"id": "rust", "order": 5, "priority": "spare time", "week": "", "start": "", "end": "", "name": "The Rust Book, chapters 1-6",
+   "provider": "Example Docs", "link": "https://example.org/rust-book", "scope": "Ownership and borrowing.", "done_when": "", "status": "not started"},
+  {"id": "linalg", "order": 6, "priority": "nice to have", "week": "", "start": "", "end": "", "name": "Linear algebra refresher",
+   "provider": "Open Course Site", "link": "", "scope": "Vectors, matrices, eigenvalues.", "done_when": "", "status": "not started"}
+]

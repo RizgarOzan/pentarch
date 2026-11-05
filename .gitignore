@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+*.log
+# runtime data lives in ~/.pentarch, but keep strays out too
+secrets/
+*.db
+.env
+keys.env
+tracker/data/
+tracker/out/
+tracker/config.json

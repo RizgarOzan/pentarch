@@ -1,0 +1,5 @@
+# your own data, config and builds stay local
+data/
+out/
+config.json
+__pycache__/

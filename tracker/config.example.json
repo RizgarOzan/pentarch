@@ -1,0 +1,14 @@
+{
+  "title": "Tracker",
+  "lang": "en",
+  "data_dir": "example-data",
+  "out_dir": "out",
+  "backlog": "example-data/backlog.md",
+  "status_log": "example-data/jobs.log",
+  "github_user": "",
+  "important_repos": ["example-org/example-lib"],
+  "oss_goal": 20,
+  "oss_deadline": "2027-01-31",
+  "stale_days": 10,
+  "new_days": 8
+}

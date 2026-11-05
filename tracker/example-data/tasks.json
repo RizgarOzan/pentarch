@@ -1,0 +1,7 @@
+[
+  {"id": "cv-update", "task": "Add the new project to the CV", "effort": "30 min", "link": "", "due": "2026-11-06", "done": false},
+  {"id": "initech-reply", "task": "Reply to the Initech recruiter", "effort": "10 min", "link": "https://example.com/mail/initech", "due": "2026-10-28", "done": false},
+  {"id": "summit-register", "task": "Register for Open Source Summit", "effort": "5 min", "link": "https://example.com/events/oss-summit", "due": "2026-11-10", "done": false},
+  {"id": "mock-interview", "task": "Book a mock interview", "effort": "15 min", "link": "", "due": "", "done": false},
+  {"id": "photo", "task": "Upload a profile photo", "effort": "5 min", "link": "", "due": "2026-10-20", "done": true}
+]

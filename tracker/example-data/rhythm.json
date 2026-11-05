@@ -1,0 +1,9 @@
+{
+  "session": "1 hour, 19:00-20:00",
+  "note": "Missed a day? Continue with the next one, do not double up",
+  "days": ["learning", "algorithms", "learning", "algorithms", "learning", "math", "rest"],
+  "practices": {
+    "algorithms": {"label": "algorithms", "name": "Two practice problems", "goal": "One easy, one medium. Write down the pattern you used.", "link": "https://example.com/practice"},
+    "math": {"label": "math", "name": "Probability drills", "goal": "Ten questions from the problem set.", "link": "https://example.org/probability-drills"}
+  }
+}
