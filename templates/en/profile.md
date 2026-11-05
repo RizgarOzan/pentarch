@@ -2,8 +2,8 @@
 
 ## Summary
 - Who: (one sentence: what you do, where, at what stage)
-- Goals: (2-3 concrete goals for the coming months, with deadlines if any)
-- Interests: (topics, technologies and kinds of opportunities to watch for)
+- Goals: {{GOALS}}
+- Interests: {{INTERESTS}}
 - Answers: (short or detailed, which language, what you never want)
 - Hours: (when you don't want to be disturbed)
 

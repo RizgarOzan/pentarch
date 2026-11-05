@@ -16,13 +16,14 @@ import argparse, datetime, html, json, pathlib, re, shutil, subprocess
 
 HERE = pathlib.Path(__file__).parent
 DEFAULTS = {"title": "", "lang": "en", "data_dir": "data", "out_dir": "out", "backlog": "", "status_log": "",
-            "github_user": "", "important_repos": [], "oss_goal": 0, "oss_deadline": "", "stale_days": 10, "new_days": 8}
+            "github_user": "", "important_repos": [], "oss_goal": 0, "oss_deadline": "", "stale_days": 10, "new_days": 8, "followup_days": 14}
 PATH_KEYS = ("data_dir", "out_dir", "backlog", "status_log")
 STAGES = ("ready", "sent", "process", "decide", "watching", "closed")
 
 STR = {
     "en": dict(
         title="Tracker",
+        sample="Sample data from example-data/. Edit the files in data/ (or let the assistant do it) and delete data/SAMPLE to hide this.",
         months=["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
         months_long=["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"],
         days=["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
@@ -35,6 +36,8 @@ STR = {
         n_deadline="{c}: deadline passed {n} days ago; update the status if you applied, otherwise close it.",
         n_stale="Not checked for {n}+ days: {xs}.",
         n_overdue="Overdue task ({n} days): {x}",
+        n_followup="Sent {n}+ days ago, no answer yet: {xs}. Send a short follow-up or move it to closed.",
+        top_new="best",
         n_done="Finished? {xs}. If so, mark it done; if not, shift the dates.",
         n_gh="Could not get PR counts from gh.",
         n_oss="Open source: {r:.1f} merges a day needed to reach {g} ({n} days left).",
@@ -71,6 +74,7 @@ STR = {
     ),
     "tr": dict(
         title="Takip",
+        sample="Bu örnek veri (example-data/). data/ içindeki dosyaları düzenle (ya da asistana bırak) ve bu yazıyı kaldırmak için data/SAMPLE dosyasını sil.",
         months=["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"],
         months_long=["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"],
         days=["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"],
@@ -83,6 +87,8 @@ STR = {
         n_deadline="{c}: son tarih {n} gün önce geçti; başvurulduysa durumu güncelle, değilse kapat.",
         n_stale="{n}+ gündür kontrol edilmeyen ilan: {xs}.",
         n_overdue="Gecikmiş iş ({n} gün): {x}",
+        n_followup="{n}+ gün önce gönderildi, cevap yok: {xs}. Kısa bir hatırlatma yaz ya da kapat.",
+        top_new="en iyi",
         n_done="Bitti mi? {xs}. Bittiyse işaretle; bitmediyse tarihleri kaydır.",
         n_gh="gh'den PR sayısı alınamadı.",
         n_oss="Açık kaynak: {g} merge için günde {r:.1f} merge gerekiyor ({n} gün kaldı).",
@@ -252,6 +258,8 @@ def build(cfg=None, today=None):
         if k is not None and k < -3: notlar.append(S["n_deadline"].format(c=b["company"], n=-k))
         elif kt is not None and -kt > CFG["stale_days"]: bayat.append(b["company"])
     if bayat: notlar.append(S["n_stale"].format(n=CFG["stale_days"], xs=", ".join(dict.fromkeys(bayat))))
+    sessiz = [b["company"] for b in acik if stage(b) == "sent" and days(b["sent_on"]) is not None and -days(b["sent_on"]) >= CFG["followup_days"]]
+    if sessiz: notlar.append(S["n_followup"].format(n=CFG["followup_days"], xs=", ".join(dict.fromkeys(sessiz))))
     for m in man:
         k = days(m["due"])
         if k is not None and k < -3: notlar.append(S["n_overdue"].format(n=-k, x=m["task"]))
@@ -270,6 +278,9 @@ def build(cfg=None, today=None):
     print("built", TODAY, "->", OUT, "| upcoming:", len(bugun), "notes:", len(notlar), "gh:", gh)
     return ctx
 
+def badge(x):
+    """Score pill for a scan item that has one (scan.py writes 1-5); nothing for hand-written items."""
+    return f' <span class="pill s{int(x["score"])}">{int(x["score"])}/5</span>' if x.get("score") else ""
 def type_label(t): return S[{"app": "t_app", "event": "t_event", "task": "t_task", "learn": "t_learn"}[t]]
 def kalan(k):
     if k is None: return ""
@@ -335,10 +346,12 @@ def render_html(bas, acik, kapali, ser, egt, plan, sonra, cur, etk, man, rit, gh
         tk = days(tarama.get("date"))
         yas = S["today"] if tk == 0 else S["yesterday"] if tk == -1 else S["ago"].format(n=-tk) if tk is not None else ""
         eski = tk is not None and -tk > 8
+        ust = max(tarama.get("new", []), key=lambda x: x.get("score") or 0, default=None)
         sayi = [(len(tarama.get("new", [])), S["c_new"]), (len(tarama.get("changed", [])), S["c_changed"]), (len(tarama.get("closed", [])), S["c_closed"])]
         p.append(f'<div class="scan{" stale" if eski else ""}"><b>{esc(S["scan"])}</b><span class="soft">{esc(kisa_tarih(tarama.get("date")))} · {esc(yas)}</span>'
                  + "".join(f'<span><b class="mono">{n}</b> {esc(t)}</span>' for n, t in sayi)
                  + (f'<span class="warnline">{esc(S["scan_stale"])}</span>' if eski else "")
+                 + (f'<span>{esc(S["top_new"])}: {link(ust.get("link"), esc(ust.get("company"))) or esc(ust.get("company"))} · {esc(ust.get("role"))}{badge(ust)}</span>' if ust else "")
                  + f'<a href="#scan">{esc(S["details"])}</a></div>')
     else:
         p.append(f'<div class="scan stale"><b>{esc(S["scan"])}</b><span class="soft">{esc(S["no_scan"])}</span></div>')
@@ -388,7 +401,7 @@ def render_html(bas, acik, kapali, ser, egt, plan, sonra, cur, etk, man, rit, gh
                     + ('<ul>' + "".join(f(x) for x in xs) + "</ul>" if xs else f'<p class="empty">{esc(S["none"])}</p>') + "</div>")
         p = [f'<section class="panel" id="scan" aria-label="{esc(S["scan"])}"><div class="p-head"><h2>{esc(S["scan"])}</h2><span class="soft">{esc(kisa_tarih(tarama.get("date")))}</span></div>'
              + (f'<p class="lead">{esc(tarama["summary"])}</p>' if tarama.get("summary") else "") + '<div class="cards">'
-             + tcol(S["new_postings"], tarama.get("new", []), lambda x: f'<li><b>{link(x.get("link"), esc(x.get("company"))) or esc(x.get("company"))}</b> {esc(x.get("role"))}<small>{esc(x.get("reason"))}</small></li>')
+             + tcol(S["new_postings"], tarama.get("new", []), lambda x: f'<li><b>{link(x.get("link"), esc(x.get("company"))) or esc(x.get("company"))}</b> {esc(x.get("role"))}{badge(x)}<small>{esc(" · ".join(filter(None, (x.get("location"), x.get("reason")))))}</small></li>')
              + tcol(S["changed"], tarama.get("changed", []), lambda x: f'<li><b>{esc(x.get("company"))}</b><small>{esc(x.get("what"))}</small></li>')
              + tcol(S["closed"], tarama.get("closed", []), lambda x: f'<li><b>{esc(x.get("company"))}</b><small>{esc(x.get("reason"))}</small></li>')
              + "</div>"]
@@ -475,11 +488,12 @@ def render_html(bas, acik, kapali, ser, egt, plan, sonra, cur, etk, man, rit, gh
                [("learning", S["nav_learn"])] + ([("oss", S["nav_oss"])] if has_oss else []) + [("other", S["nav_other"])]
     nav = "".join(f'<a href="#{i}">{esc(t)}</a>' for i, t in bolumler)
     title = esc(CFG["title"] or S["title"])
+    sample = f'<p class="sample">{esc(S["sample"])}</p>' if (DATA / "SAMPLE").exists() else ""
     return (f'<!doctype html><html lang="{esc(CFG["lang"])}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{title}</title>'
             f'<style>{CSS}</style></head>'
             f'<body><header><div class="bar-in"><h1>{title}</h1><span class="day">{esc(long_date(TODAY))}</span>'
             f'<nav aria-label="{esc(S["sections"])}">{nav}</nav><span class="meta mono" title="{esc(S["last_build"])}">{datetime.datetime.now().strftime("%H:%M")}</span></div></header>'
-            f'<main class="wrap">{"".join(panels)}</main><script>{JS}</script></body></html>')
+            f'<main class="wrap">{sample}{"".join(panels)}</main><script>{JS}</script></body></html>')
 
 def render_md(bas, acik, kapali, ser, egt, plan, sonra, cur, etk, man, rit, gh, prog, rut, bugun, acil, odak, notlar, tarama):
     """README.md: the same content for the GitHub app / a phone."""
@@ -577,7 +591,9 @@ h3 .mono,h3 a{font-weight:400;font-size:13px;color:var(--mut)}h3 a{color:var(--a
 .agenda .mono{flex:none;font-size:12.5px;color:var(--mut)}.agenda li.hot .mono,.agenda li.past .mono{color:var(--hot)}.agenda li.warm .mono{color:var(--warm)}
 .type{display:block;color:var(--faint);font-size:11.5px;text-transform:uppercase;letter-spacing:.05em}
 .scan{margin-top:20px;padding:16px 4px 0;border-top:1px solid var(--line);display:flex;gap:10px 24px;flex-wrap:wrap;align-items:baseline;font-size:14px;color:var(--mut)}
+.pill{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;font-size:12px;font-weight:600;background:var(--sunk);color:var(--mut)}.pill.s4,.pill.s5{background:var(--acc-soft);color:var(--acc)}.pill.s1,.pill.s2{color:var(--faint)}
 .scan>b{color:var(--ink)}.scan b.mono{color:var(--ink);font-size:15px}.scan a{margin-left:auto;font-weight:600}.scan .warnline{color:var(--hot)}
+.sample{margin:14px 0 0;padding:10px 14px;border:1px dashed var(--hot);border-radius:10px;color:var(--hot);font-size:14px}
 /* applications */
 .ara{margin-left:auto}.ara input{height:40px;width:260px;border:1px solid var(--line);border-radius:8px;padding:0 12px;font:inherit;font-size:14px;background:var(--card);color:var(--ink)}
 .board{display:flex;gap:16px;overflow-x:auto;padding-bottom:8px;align-items:flex-start}
@@ -655,6 +671,7 @@ def init(dest=None):
         shutil.copy(here / "profile.example.json", dest / "profile.json"); made.append("profile.json")
     if not (dest / "data").exists():
         shutil.copytree(here / "example-data", dest / "data"); made.append("data/")
+        (dest / "data" / "SAMPLE").write_text("delete this file once data/ holds your own records; the dashboard shows a sample-data notice while it exists\n", encoding="utf-8")
     print(("created: " + ", ".join(made)) if made else "nothing to do: config.json, profile.json and data/ exist")
     return made
 

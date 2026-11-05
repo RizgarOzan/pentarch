@@ -52,6 +52,7 @@ Tests: `python -m pytest tracker -q` (or `python -m unittest discover -s tracker
 | `oss_goal` | int | `0` | Merged PR goal (0 = no goal bar) |
 | `oss_deadline` | date | `""` | Deadline for the goal |
 | `stale_days` | int | `10` | An application not checked for longer gets flagged |
+| `followup_days` | int | `14` | A sent application with no answer for longer gets a follow-up note |
 | `new_days` | int | `8` | An application added within this many days gets a "new" badge |
 
 ## Data files
@@ -138,7 +139,7 @@ Output of a job-posting scan. If the file is missing, the Scan section is hidden
 |---|---|
 | `date` | date |
 | `summary` | string |
-| `new` | list of `{company, role, link, reason}` |
+| `new` | list of `{company, role, link, reason}`; `scan.py` adds `score` (1-5, shown as a pill), `location`, `posted` |
 | `changed` | list of `{company, what}` |
 | `closed` | list of `{company, reason}` |
 | `dropped` | list of `{company, role, reason}` |
@@ -147,6 +148,29 @@ Output of a job-posting scan. If the file is missing, the Scan section is hidden
 ### Backlog file (Markdown, optional)
 
 Each `## ` heading with `- [x]` / `- [ ]` lines becomes a progress bar with its next open item. Headings without checkboxes are skipped. Text after ` — ` in a heading is dropped.
+
+## Scanning job boards without a model
+
+`scan.py` reads the public job boards you list in `profile.json`, scores every posting against the profile and writes `scan.json`. It needs no API key and no model: the rules are the profile itself.
+
+```
+python tracker/scan.py --config tracker/config.json            # scan, write data/scan.json and data/scan-state.json
+python tracker/scan.py --config tracker/config.json --dry-run  # print, write nothing
+```
+
+Supported boards (their public JSON endpoints): Greenhouse, Lever, Ashby. Find the slug in a company's careers URL, for example `boards.greenhouse.io/<slug>`, `jobs.lever.co/<slug>`, `jobs.ashbyhq.com/<slug>`, and list it under `boards` in `profile.json`.
+
+How a posting is judged, in order:
+
+1. Title: dropped when it contains an `exclude` word (senior, lead, manager, ...) or none of the `seniority` words (synonyms such as "new grad" and "working student" are built in). An empty `seniority` list skips that check: setup leaves it empty for mid-level and "any level" and only keeps `exclude` (mid-level drops lead/head/principal/staff/director/manager/chief; "any level" drops nothing).
+2. Role: a `target_roles` phrase whose every word is in the title ("product designer" in "Junior Product Designer") is a full match; its last word alone ("designer" in "UX Designer") is a weak match; a title with neither is dropped. Seniority words and generic ones (developer, engineer) are ignored here, so "junior unity developer" only needs "unity".
+3. Location: must contain one of `locations`; "remote" also accepts the board's remote flag.
+4. Description: dropped on a `signals.deal_breakers` phrase or when every "N+ years" it asks for is above `max_years`.
+5. Score 1-5: a full role match (+2) or a weak one (+1), `skills` found in the description (up to +2), a `signals.strong` phrase (+1), a `signals.weak` phrase (-1), posted within 14 days (+1), older than 90 days (-1), a company that rejected you before (-1, read from `applications.json`).
+
+Postings at or above `quality.min_score` go to `new`, sorted by score. A company you already track goes to `changed`, a posting that left the board goes to `closed`, everything else to `dropped` with the reason, so you can tune the profile. `scan-state.json` remembers what was already reported.
+
+Run it from a scheduled task, or let the Pentarch agent run it before its own judgement: the score and reason land in the dashboard either way.
 
 ## How the Pentarch agent uses it
 
@@ -163,4 +187,4 @@ The agent never edits the HTML. It edits the JSON files in `data_dir`, then runs
 5. Run `python tracker/build.py --config tracker/config.json`. Its one-line summary (upcoming count, notes count) is enough to confirm the build.
 6. Before a scan, a verdict on a posting or an application, read `profile.json`. Score each posting 1-5 on `quality.scale`, list which `strong`/`weak`/`deal_breakers` lines matched, and apply only when `apply_only_if` holds. CV and cover letter text follow `cv` and `cover_letter` (language, style, length); write the score and the reason into the application's `status`.
 
-`example-data/` shows every field in use, and every section renders from it.
+`example-data/` shows every field in use, and every section renders from it. `--init` copies it into `data/` with a `SAMPLE` marker file, so the first dashboard shows a notice that the records are samples; delete `data/SAMPLE` once your own records are in.

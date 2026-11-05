@@ -32,7 +32,7 @@ cd pentarch
 python setup.py
 ```
 
-Setup asks for your name, the assistant's name, the language (English or Turkish; the setup itself switches too), your notes folder, which agent CLI and models to use, and your Telegram bot token (make a bot with @BotFather, `/newbot`). It checks each connection as you go: it sends the agent a one-word test so a missing login shows up now, asks Telegram who the bot is, and lists the models an optional API answers with. For that API you pick OpenRouter, Groq, Ollama, LM Studio or your own URL; it tells you where to get a key and keeps it in `~/.pentarch/secrets/keys.env`. Everything goes to `~/.pentarch`, never to the repo, and it adds a startup shortcut.
+Setup asks for your name, the assistant's name, the language (English or Turkish; the setup itself switches too), your notes folder, which agent CLI and models to use (it lists the ones it finds on PATH), and your Telegram bot token (make a bot with @BotFather, `/newbot`). It checks each connection as you go: it sends the agent a one-word test so a missing login shows up now, asks Telegram who the bot is, and lists the models an optional API answers with. For that API you pick OpenRouter, Groq, Ollama, LM Studio or your own URL; it tells you where to get a key and keeps it in `~/.pentarch/secrets/keys.env`. Everything goes to `~/.pentarch`, never to the repo, and it adds a startup shortcut.
 
 Start it once by hand, then send any message to your bot. The first chat that writes becomes the owner; messages from anyone else are ignored.
 
@@ -97,6 +97,30 @@ Nothing leaves your machine except these:
 
 Local only: the panel on `127.0.0.1` and Ollama on `127.0.0.1:11434` for memory search, if you run it.
 
+## Without a model
+
+The tracker needs no agent and no API key. If setup finds no agent CLI it tells you so and lets you continue or stop; the two commands below work either way, on any machine with Python:
+
+```bash
+python -I tracker/scan.py --config tracker/config.json      # pulls your Greenhouse / Lever / Ashby boards, scores each posting 0-5 from profile.json
+python -I tracker/build.py --config tracker/config.json     # writes the offline dashboard to tracker/out/index.html
+```
+
+Scoring is a fixed rule set (title, location, years asked, your skills and signals, how fresh the posting is), so two runs on the same boards give the same answer. [`tracker/README.md`](tracker/README.md) has the config, the rules and the file formats.
+
+Everything else wants an agent CLI. Gemini CLI has a free quota with a Google account; Codex uses a ChatGPT account; OpenCode runs on your own key, including OpenRouter's free models. For the optional one-shot API, setup walks you through a free key step by step (OpenRouter, Groq and NVIDIA give one without a card; Ollama and LM Studio run on your machine and need none).
+
+## Skills
+
+[`skills/`](skills/README.md) holds agent skills you can use from the chat or from Claude Code directly, each with a small stdlib checker that runs offline:
+
+- `linkedin-post`: drafts posts in your voice from a note or a tracker event, checks hook, length, hashtags and AI tells, logs what was posted and how it did.
+- `linkedin-profile`: scores a profile section by section and rewrites the weak ones, tied to the roles in `tracker/profile.json`.
+- `linkedin-network`: who to reach out to around each application you track, a short message you send yourself, and a log so nobody is pinged twice.
+- `linkedin-analyze`: reads your post log and tells you what worked.
+
+Setup writes a pointer for each one into `~/.pentarch/beceriler` so memory search attaches it when a request matches, and offers to copy them into `~/.claude/skills` for Claude Code. They never log in to LinkedIn and never post for you; they write drafts.
+
 ## Notes
 
 Some internal names are Turkish (job names like `sabah`, files like `kurallar.md`). The project started in Turkish and renaming every file would break existing installs. Everything you see as a user follows your language setting.
@@ -120,6 +144,10 @@ python setup.py
 ```
 
 Kurulum adını, asistanın adını, dili (Türkçe ya da İngilizce; seçince kurulum da o dile geçer), not klasörünü, ajanı ve modelleri, Telegram bot token'ını sorar (@BotFather'da `/newbot`). Bağlantıları hemen dener: ajana tek kelimelik bir mesaj atar, Telegram'a botun adını sorar, isteğe bağlı API'nin model listesini çeker. API için OpenRouter, Groq, Ollama, LM Studio ya da kendi adresini seçersin; anahtarı nereden alacağını söyler ve `~/.pentarch/secrets/keys.env` içine yazar. `insa` ve `posta` rutinleri kapalı başlar; kurulumda ya da sonra panelin Ayarlar kısmından açabilirsin. Her şeyi `~/.pentarch` içine yazar, repoya hiçbir şey yazmaz, başlangıca kısayol ekler. Sonra `python -I app/pentarch.py` ile bir kez başlat ve botuna herhangi bir mesaj at: ilk yazan sohbet sahip olur.
+
+**Modelsiz kullanım:** Başvuru panosu ve ilan taraması ajan ya da anahtar istemez: `python -I tracker/scan.py --config tracker/config.json` ilanları çeker ve 0-5 puanlar, `python -I tracker/build.py --config tracker/config.json` panoyu yazar. Kurulum ajan CLI bulamazsa söyler, devam edip etmemeyi sana bırakır. Ücretsiz API anahtarı için (OpenRouter, Groq, NVIDIA; kart istemezler) kurulum adım adım yol gösterir.
+
+**Beceriler:** `skills/` altında LinkedIn için dört beceri var (gönderi yazma, profil puanlama, çevre kurma, ne işe yaradığını ölçme); hepsinin çevrimdışı çalışan küçük bir denetleyicisi var. Hiçbiri LinkedIn'e girmez, paylaşmaz; taslak yazar, paylaşmak sana kalır.
 
 **Ayarlar:** `~/.pentarch/pentarch.json`. Yazmadığın her şey [`app/config.py`](app/config.py) içindeki varsayılana düşer. Komutlar ve ayar anahtarları yukarıdaki İngilizce tablolarda; Türkçe karşılıkları da çalışır (`iptal`, `durdur 2 saat`, `konsey: soru`, `internet serbest`).
 

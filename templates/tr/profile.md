@@ -2,8 +2,8 @@
 
 ## Özet
 - Kim: (bir cümle: ne iş yapıyorsun, nerede, hangi aşamadasın)
-- Hedefler: (önümüzdeki aylar için 2-3 somut hedef, varsa son tarihleriyle)
-- İlgi alanları: (izlemem gereken konular, teknolojiler, fırsat türleri)
+- Hedefler: {{GOALS}}
+- İlgi alanları: {{INTERESTS}}
 - Cevap tercihi: (kısa mı ayrıntılı mı, hangi dilde, neyi hiç istemezsin)
 - Saatler: (hangi saatlerde rahatsız edilmek istemezsin)
 

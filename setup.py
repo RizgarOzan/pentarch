@@ -64,6 +64,23 @@ def get_json(url, key=None, timeout=10):
 sys.path.insert(0, str(APP))
 import koltuk  # noqa: E402  (presets and the council-seat helpers; config.py resolves the same HOME)
 PRESETS = koltuk.PRESETS  # name -> (base_url, key env, suggested model, where to get the key)
+KEY_STEPS = {  # free tiers, no card needed; (tr, en) per step
+    "openrouter": (("Google ya da GitHub ile giriş yap.", "Sign in with Google or GitHub."),
+                   ("Keys > Create key; adı önemsiz, limit boş kalabilir.", "Keys > Create key; any name, leave the limit empty."),
+                   ("Ücretsiz modellerin adı ':free' ile biter. 404 alırsan Settings > Privacy'den ücretsiz model kullanımını aç.",
+                    "Free models end in ':free'. If you get 404, enable free-model use under Settings > Privacy.")),
+    "groq": (("E-posta ya da GitHub ile giriş yap.", "Sign in with email or GitHub."),
+             ("API Keys > Create API Key, anahtarı hemen kopyala (bir daha gösterilmez).",
+              "API Keys > Create API Key and copy it now (it is shown once)."),
+             ("Ücretsiz katman dakikada ~30 istek; günlük işler için yeter.", "The free tier allows ~30 requests a minute, enough for daily jobs.")),
+    "nvidia": (("Giriş yap, bir model sayfası aç.", "Sign in and open any model page."),
+               ("'Get API Key' düğmesi anahtarı verir; nvapi- ile başlar.", "'Get API Key' gives the key; it starts with nvapi-."),
+               ("Ücretsiz kredi hesapla gelir, kart istemez.", "Free credits come with the account, no card.")),
+    "ollama": (("ollama.com'dan kur, sonra: ollama pull gemma3", "Install from ollama.com, then: ollama pull gemma3"),
+               ("Çalışırken http://localhost:11434 cevap verir; anahtar gerekmez.", "While it runs, http://localhost:11434 answers; no key needed.")),
+    "lmstudio": (("lmstudio.ai'dan kur, bir model indir, Developer > Start Server.", "Install from lmstudio.ai, download a model, Developer > Start Server."),
+                 ("Sunucu http://localhost:1234 üstünde; anahtar gerekmez.", "The server is on http://localhost:1234; no key needed.")),
+}
 
 
 def read_env(path):
@@ -89,6 +106,8 @@ def chat_api_setup(api):
     if need_key and (not key or yes(t("Kayıtlı API anahtarı değiştirilsin mi?", "Replace the saved API key?"))):
         if key_url:
             print(t(f"  Anahtarı buradan al: {key_url}", f"  Get a key here: {key_url}"))
+            for i, step in enumerate(KEY_STEPS.get(pick, ()), 1):
+                print(f"    {i}. {t(*step)}")
         new = secret(t(f"API anahtarı (gizli, secrets/keys.env içine {key_env} olarak yazılır; boş geçer): ",
                        f"API key (hidden, saved to secrets/keys.env as {key_env}; empty skips): ")).strip()
         if new:
@@ -162,7 +181,7 @@ def agent_test(cli):
     args = {"claude": ["-p", q], "gemini": ["-p", q], "codex": ["exec", "--skip-git-repo-check", q], "opencode": ["run", q]}[cli]
     try:
         r = subprocess.run([shutil.which(cli) or cli, *args], capture_output=True, text=True, encoding="utf-8",
-                           errors="replace", timeout=180, cwd=HOME, env={**os.environ, "GEMINI_CLI_TRUST_WORKSPACE": "true"})
+                           errors="replace", timeout=90, cwd=HOME, stdin=subprocess.DEVNULL, env={**os.environ, "GEMINI_CLI_TRUST_WORKSPACE": "true"})
         ok = r.returncode == 0 and r.stdout.strip()
         last = ((r.stdout.strip() if ok else "") or r.stderr.strip() or r.stdout.strip()).splitlines()[-1:] or [""]
     except Exception as e:
@@ -173,6 +192,81 @@ def agent_test(cli):
         login = {"claude": "claude", "gemini": "gemini", "codex": "codex login", "opencode": "opencode auth login"}[cli]
         print(t(f"  ! {cli} cevap vermedi: {last[0][:160]}\n    Giriş yapmak için bir terminalde çalıştır: {login}",
                 f"  ! {cli} did not answer: {last[0][:160]}\n    To log in, run in a terminal: {login}"))
+
+
+LEVELS = {  # answer -> (seniority words scan.py needs in a title, max years a posting may ask for, job_boards titles filter, title words to drop)
+    "entry": (["intern", "junior", "entry level"], 2, ["intern", "internship", "junior", "graduate", "new grad", "entry", "trainee"], None),
+    "mid": ([], 5, [], ["lead", "head", "principal", "staff", "director", "manager", "chief"]),
+    "any": ([], 99, [], []),
+}
+
+
+def csv(q, default):
+    return [x.strip() for x in ask(q, ", ".join(default)).split(",") if x.strip()]
+
+
+def career_setup(old_cfg, lang):
+    """Target roles, level, places, skills and job boards, once: tracker/profile.json for the scan and the agent,
+    job_boards in pentarch.json for the watch routine. Re-runs default to the saved answers. Returns job_boards."""
+    tracker = REPO / "tracker"
+    pf = tracker / "profile.json"
+    cur = json.loads(pf.read_text(encoding="utf-8")) if pf.exists() else {}
+    boards_old = old_cfg.get("job_boards") or {}
+    print(t("\nKariyer: ilan taraması, başvuru panosu ve asistanın iş hükümleri bu cevaplara göre çalışır (sonra: tracker/profile.json).",
+            "\nCareer: the job scan, the application board and the assistant's verdicts on postings follow these answers (later: tracker/profile.json)."))
+    if not yes(t("Kariyer takibi kurulsun mu?", "Set up the career tracker?"), True):
+        return boards_old
+    roles = csv(t("Hedef roller (virgülle)", "Target roles (comma separated)"), cur.get("target_roles") or ["junior software engineer"])
+    cur_level = "entry" if cur.get("seniority") else "mid" if cur and int(cur.get("max_years", 2)) <= 5 else "any" if cur else "entry"
+    level = ask(t("Seviye", "Level"), cur_level, tuple(LEVELS))
+    locs = csv(t("Yerler (remote, şehir, ülke)", "Places (remote, city, country)"), cur.get("locations") or ["remote"])
+    skills = csv(t("Becerilerin (virgülle)", "Your skills (comma separated)"), cur.get("skills") or [])
+    cb = cur.get("boards") or {}
+    print(t("  İzlenecek şirket panoları; slug, kariyer sayfasının adresindeki son parça (boards.greenhouse.io/<slug>, jobs.lever.co/<slug>, jobs.ashbyhq.com/<slug>). Boş olabilir.",
+            "  Company boards to watch; the slug is the last part of the careers URL (boards.greenhouse.io/<slug>, jobs.lever.co/<slug>, jobs.ashbyhq.com/<slug>). May be empty."))
+    boards = {k: csv(f"  {k}", cb.get(k) or boards_old.get(k) or []) for k in ("greenhouse", "lever", "ashby")}
+    seniority, years, titles, exclude = LEVELS[level]
+    sys.path.insert(0, str(tracker))
+    import build  # noqa: E402
+    build.init(tracker)
+    prof = json.loads(pf.read_text(encoding="utf-8"))
+    prof.pop("_", None)  # the example's "copy me" note
+    prof.update(target_roles=roles, seniority=seniority, locations=locs, skills=skills, max_years=years,
+                boards={**(prof.get("boards") or {}), **boards})
+    if exclude is not None:  # the example's exclude list is for entry level
+        prof["exclude"] = exclude
+    prof.setdefault("cv", {})["language"] = lang
+    pf.write_text(json.dumps(prof, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    print(t(f"  Yazıldı: {pf}. İlanları taramak için: python -I tracker/scan.py --config tracker/config.json",
+            f"  Written: {pf}. To scan the boards: python -I tracker/scan.py --config tracker/config.json"))
+    return {**boards_old, "greenhouse": boards["greenhouse"], "lever": boards["lever"], "titles": titles, "fields": [],
+            "locations": [l for l in locs if not l.lower().startswith("relocation")]}
+
+
+def skills_setup(cli):
+    """Repo skills (skills/<name>/SKILL.md): a pointer in <home>/beceriler so memory search attaches them, and for
+    Claude Code a copy under ~/.claude/skills so /<name> works in the chat too."""
+    dirs = sorted(d for d in (REPO / "skills").iterdir() if (d / "SKILL.md").exists())
+    if not dirs:
+        return
+    pointers = HOME / "beceriler"
+    pointers.mkdir(exist_ok=True)
+    for d in dirs:
+        text = (d / "SKILL.md").read_text(encoding="utf-8")
+        head = text.split("---")[1] if text.startswith("---") else ""
+        desc = next((l.split(":", 1)[1].strip() for l in head.splitlines() if l.startswith("description:")), d.name)
+        (pointers / f"{d.name}.md").write_text(f"When: {desc}\nRead and follow {d / 'SKILL.md'}\n", encoding="utf-8")
+    names = ", ".join(d.name for d in dirs)
+    if cli == "claude" and yes(t(f"Beceriler Claude Code'a da kopyalansın mı ({names})?", f"Copy the skills into Claude Code too ({names})?"), True):
+        target = Path.home() / ".claude" / "skills"
+        for d in dirs:
+            shutil.copytree(d, target / d.name, dirs_exist_ok=True)
+            sk = target / d.name / "SKILL.md"  # the copy runs from any folder, so name the tool by its full path
+            sk.write_text(sk.read_text(encoding="utf-8").replace("skills/linkedin/li.py", f'"{REPO / "skills" / "linkedin" / "li.py"}"'), encoding="utf-8")
+        print(t(f"  Kopyalandı: {target}", f"  Copied to: {target}"))
+    elif cli != "claude":
+        print(t(f"  Beceriler {REPO / 'skills'} altında; {cli} için kendi beceri klasörüne kopyalayabilirsin.",
+                f"  Skills live in {REPO / 'skills'}; copy them into {cli}'s own skills folder if it has one."))
 
 
 def shortcut(path, args, icon):
@@ -197,8 +291,24 @@ def main():
     name = ask(t("Asistanın adı", "Assistant name"), old.get("name", "Pentarch"))
     notes = ask(t("Not klasörü (markdown)", "Notes folder (markdown)"), old.get("notes_dir", "~/notes"))
 
+    HOME.mkdir(parents=True, exist_ok=True)  # agent_test runs inside it
     found = [c for c in CLIS if shutil.which(c)]
     print(t("Bulunan ajan CLI'ları: ", "Agent CLIs found: ") + (", ".join(found) or "-"))
+    if not found:
+        print(t("""  Hiçbiri PATH'te yok. Modelsiz de çalışan parçalar: başvuru panosu ve ilan taraması (tracker/README.md).
+  Asistanın tamamı için birini kur ve giriş yap:
+    claude   npm i -g @anthropic-ai/claude-code   (ücretli plan ya da API anahtarı)
+    gemini   npm i -g @google/gemini-cli          (Google hesabıyla ücretsiz kota)
+    codex    npm i -g @openai/codex               (ChatGPT hesabı)
+    opencode npm i -g opencode-ai                  (kendi anahtarınla; OpenRouter ücretsiz modelleri de olur)""",
+                """  None on PATH. The parts that work without a model: the application board and the job scan (tracker/README.md).
+  For the full assistant, install one and log in:
+    claude   npm i -g @anthropic-ai/claude-code   (paid plan or API key)
+    gemini   npm i -g @google/gemini-cli          (free quota with a Google account)
+    codex    npm i -g @openai/codex               (ChatGPT account)
+    opencode npm i -g opencode-ai                  (your own key; OpenRouter free models work too)"""))
+        if not yes(t("Yine de kuruluma devam edilsin mi?", "Continue the setup anyway?"), True):
+            sys.exit(t("Tamam. CLI'ı kurunca python setup.py ile devam et.", "OK. Run python setup.py again once a CLI is installed."))
     cli = ask(t("Ajan CLI", "Agent CLI"), agent.get("cli", found[0] if found else "claude"), CLIS)
     if not shutil.which(cli):
         print(t(f"  ! {cli} henüz PATH'te yok; Pentarch'ı başlatmadan önce kur ve giriş yap.",
@@ -224,6 +334,7 @@ def main():
     api = chat_api_setup(old.get("chat_api", {}))
     council_setup()
     telegram_setup()
+    job_boards = career_setup(old, lang)
 
     off = set(old.get("jobs_off", ["insa", "posta"]))
     print(t("\nİki rutin ilk başta kapalı; istersen şimdi aç, sonra panelden de değiştirebilirsin (Ayarlar > Kapalı işler).",
@@ -238,7 +349,7 @@ def main():
     cfg = {**old, "owner": owner or "Owner", "name": name or "Pentarch", "lang": lang, "notes_dir": notes,
            "agent": {**agent, "cli": cli, "fast_model": fast, "deep_model": deep, "light_model": light,
                      "permission_mode": perm},
-           "chat_api": api, "jobs_off": sorted(off)}
+           "chat_api": api, "jobs_off": sorted(off), "job_boards": job_boards}
     HOME.mkdir(parents=True, exist_ok=True)
     CONFIG.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
     panel_settings = HOME / "ayarlar.json"  # the panel's own switches, once Pentarch has run
@@ -250,6 +361,14 @@ def main():
 
     fill = {"{{APP}}": APP.as_posix(), "{{HOME}}": HOME.as_posix(), "{{NOTES}}": Path(notes).expanduser().as_posix(),
             "{{OWNER}}": cfg["owner"], "{{NAME}}": cfg["name"]}
+    fill.update({"{{GOALS}}": t("(önümüzdeki aylar için 2-3 somut hedef, varsa son tarihleriyle)", "(2-3 concrete goals for the coming months, with deadlines if any)"),
+                 "{{INTERESTS}}": t("(izlemem gereken konular, teknolojiler, fırsat türleri)", "(topics, technologies and kinds of opportunities to watch for)")})
+    pf = REPO / "tracker" / "profile.json"
+    if pf.exists():  # the career answers also seed the agent's profile.md
+        prof = json.loads(pf.read_text(encoding="utf-8"))
+        fill.update({"{{GOALS}}": t("şu rollerde iş bulmak: ", "find a role as ") + ", ".join(prof.get("target_roles") or []) +
+                     (" (" + ", ".join(prof.get("locations") or []) + ")" if prof.get("locations") else ""),
+                     "{{INTERESTS}}": ", ".join((prof.get("skills") or []) + (prof.get("target_roles") or []))})
     kept = []
     for src in sorted((REPO / "templates" / lang).iterdir()):
         dst = HOME / src.name
@@ -263,6 +382,7 @@ def main():
     if kept:
         print(t(f"Olduğu gibi kaldı: {', '.join(kept)} (--force üstüne yazar)", f"Kept existing: {', '.join(kept)} (--force overwrites)"))
     (HOME / "v2.on").write_text("", encoding="utf-8") if cli == "claude" else (HOME / "v2.on").unlink(missing_ok=True)
+    skills_setup(cli)
 
     if yes(t("\nPython paketleri kurulsun mu (sesli mesaj ve sesli cevap)?", "\nInstall the Python packages (voice in/out)?"), True):
         subprocess.run([sys.executable, "-m", "pip", "install", "-r", str(REPO / "requirements.txt")])
@@ -276,14 +396,25 @@ def main():
             desk = Path(os.environ.get("USERPROFILE", Path.home())) / "Desktop"
             shortcut(desk / f"{cfg['name']}.lnk", f'-I "{APP / "pentarch.py"}" --panel', icon)
 
-    print(t(f"""
-Bitti. Başlatmak için:  python -I "{APP / 'pentarch.py'}"
-Sonra Telegram'dan botuna herhangi bir mesaj at: ilk yazan sohbet sahip olur.
-Ayarlar: {CONFIG}   Hafıza ve istemler: {HOME}""", f"""
-Done. Start it with:  python -I "{APP / 'pentarch.py'}"
-Then send any message to your bot from Telegram: the first chat that writes becomes the owner.
-Settings: {CONFIG}   Memory and prompts: {HOME}"""))
-
+    todo = []
+    if not shutil.which(cli):
+        todo.append(t(f"{cli} CLI'ını kur ve giriş yap (yukarıdaki komut)", f"install {cli} and log in (command above)"))
+    if not (SECRETS / "telegram.txt").exists():
+        todo.append(t(f"Telegram token'ını {SECRETS / 'telegram.txt'} içine yaz", f"put your Telegram bot token in {SECRETS / 'telegram.txt'}"))
+    print(t("\nBitti.", "\nDone."))
+    if todo:
+        print(t("Asistanı başlatmadan önce:", "Before starting the assistant:") + "".join(f"\n  - {x}" for x in todo))
+    print(t(f"""Başlatmak için:  python -I "{APP / 'pentarch.py'}"
+Sonra Telegram'dan botuna herhangi bir mesaj at: ilk yazan sohbet sahip olur.""", f"""Start it with:  python -I "{APP / 'pentarch.py'}"
+Then send any message to your bot from Telegram: the first chat that writes becomes the owner."""))
+    if (REPO / "tracker" / "config.json").exists():
+        print(t(f"""Modelsiz çalışan kariyer parçaları (bir CLI gerekmez):
+  ilanları tara:   python -I "{REPO / 'tracker' / 'scan.py'}" --config "{REPO / 'tracker' / 'config.json'}"
+  panoyu oluştur:  python -I "{REPO / 'tracker' / 'build.py'}" --config "{REPO / 'tracker' / 'config.json'}"   (sonra tracker/out/index.html'i aç)""",
+                f"""Career parts that need no model (no CLI required):
+  scan the boards:  python -I "{REPO / 'tracker' / 'scan.py'}" --config "{REPO / 'tracker' / 'config.json'}"
+  build the board:  python -I "{REPO / 'tracker' / 'build.py'}" --config "{REPO / 'tracker' / 'config.json'}"   (then open tracker/out/index.html)"""))
+    print(t(f"Ayarlar: {CONFIG}   Hafıza ve istemler: {HOME}", f"Settings: {CONFIG}   Memory and prompts: {HOME}"))
 
 if __name__ == "__main__":
     try:

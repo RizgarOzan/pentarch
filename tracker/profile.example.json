@@ -1,5 +1,5 @@
 {
-  "_": "What the assistant reads before it scans, judges or applies for jobs. Copy to profile.json and edit; profile.json is in .gitignore.",
+  "_": "What the assistant (and scan.py, which needs no model) reads before it scans, judges or applies for jobs. Copy to profile.json and edit; profile.json is in .gitignore.",
   "target_roles": [
     "junior gameplay programmer",
     "Unity developer",
@@ -15,6 +15,20 @@
     "Europe",
     "relocation ok"
   ],
+  "boards": {
+    "_": "public job boards scan.py reads; the slug is the last part of boards.greenhouse.io/<slug>, jobs.lever.co/<slug>, jobs.ashbyhq.com/<slug>",
+    "greenhouse": [],
+    "lever": [],
+    "ashby": []
+  },
+  "exclude": ["senior", "sr", "lead", "head", "principal", "staff", "director", "manager", "chief"],
+  "max_years": 2,
+  "signals": {
+    "_": "literal phrases scan.py looks for in a posting's text; the lists under quality are for the assistant's judgement",
+    "strong": ["mentorship", "mentoring", "onboarding", "graduate program", "visa sponsorship"],
+    "weak": ["fast-paced", "wear many hats", "rockstar", "unpaid"],
+    "deal_breakers": ["security clearance", "crypto", "gambling", "betting"]
+  },
   "skills": [
     "C#",
     "Unity",
