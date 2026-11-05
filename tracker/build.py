@@ -641,6 +641,23 @@ JS = """
 })();
 """
 
+def init(dest=None):
+    """First setup: config.json, profile.json and a data/ folder copied from the examples. Existing files are kept."""
+    here = pathlib.Path(__file__).parent
+    dest = pathlib.Path(dest) if dest else here
+    dest.mkdir(parents=True, exist_ok=True)
+    made = []
+    if not (dest / "config.json").exists():
+        cfg = json.loads((here / "config.example.json").read_text(encoding="utf-8"))
+        cfg.update(data_dir="data", backlog="data/backlog.md", status_log="data/jobs.log")
+        (dest / "config.json").write_text(json.dumps(cfg, indent=2) + "\n", encoding="utf-8"); made.append("config.json")
+    if not (dest / "profile.json").exists():
+        shutil.copy(here / "profile.example.json", dest / "profile.json"); made.append("profile.json")
+    if not (dest / "data").exists():
+        shutil.copytree(here / "example-data", dest / "data"); made.append("data/")
+    print(("created: " + ", ".join(made)) if made else "nothing to do: config.json, profile.json and data/ exist")
+    return made
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Build the tracker dashboard (index.html + README.md) from JSON files.")
     ap.add_argument("--config", help="config JSON (see config.example.json)")
@@ -648,7 +665,10 @@ def main(argv=None):
     ap.add_argument("--out", help="output folder (overrides out_dir)")
     ap.add_argument("--lang", choices=sorted(STR), help="label language (overrides lang)")
     ap.add_argument("--today", type=datetime.date.fromisoformat, help="pretend today is YYYY-MM-DD (demos, tests)")
+    ap.add_argument("--init", nargs="?", const="", metavar="DIR", help="create config.json, profile.json and data/ from the examples (in DIR, default here)")
     a = ap.parse_args(argv)
+    if a.init is not None:
+        return init(a.init or None)
     build(load_config(a.config, data_dir=a.data, out_dir=a.out, lang=a.lang), a.today)
 
 if __name__ == "__main__":

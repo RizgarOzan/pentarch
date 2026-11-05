@@ -1,0 +1,71 @@
+{
+  "_": "What the assistant reads before it scans, judges or applies for jobs. Copy to profile.json and edit; profile.json is in .gitignore.",
+  "target_roles": [
+    "junior gameplay programmer",
+    "Unity developer",
+    "AI/LLM application developer"
+  ],
+  "seniority": [
+    "intern",
+    "junior",
+    "entry level"
+  ],
+  "locations": [
+    "remote",
+    "Europe",
+    "relocation ok"
+  ],
+  "skills": [
+    "C#",
+    "Unity",
+    "Python",
+    "LLM APIs"
+  ],
+  "must_have": [
+    "remote or visa sponsorship",
+    "English-speaking team"
+  ],
+  "nice_to_have": [
+    "open-source friendly",
+    "small team",
+    "salary range posted"
+  ],
+  "deal_breakers": [
+    "unpaid",
+    "gambling or crypto",
+    "asks for 5+ years"
+  ],
+  "quality": {
+    "min_score": 3,
+    "scale": "1-5: 1 generic ad, 3 real team and stack named, 5 stack matches skills and seniority fits",
+    "strong": [
+      "team or product named",
+      "stack matches skills",
+      "mentoring or onboarding mentioned"
+    ],
+    "weak": [
+      "reposted for months",
+      "3+ years asked at a junior title",
+      "no product named"
+    ]
+  },
+  "cv": {
+    "language": "en",
+    "style": "plain, first person, short sentences, a number or link under every claim",
+    "max_pages": 1,
+    "highlight": [
+      "shipped projects with links",
+      "merged open-source PRs"
+    ],
+    "avoid": [
+      "buzzwords",
+      "claims without a link or number"
+    ]
+  },
+  "cover_letter": {
+    "language": "same as the posting",
+    "length": "under 150 words",
+    "tone": "direct, specific to the posting, no flattery"
+  },
+  "apply_only_if": "score >= quality.min_score and no deal_breaker matches; otherwise add it to applications.json as stage 'watching' with a one-line reason"
+}

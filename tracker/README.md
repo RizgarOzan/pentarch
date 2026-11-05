@@ -21,7 +21,7 @@ Your Pentarch agent keeps the JSON files up to date; `build.py` only turns them 
 Python 3.10+, standard library only.
 
 ```sh
-cp tracker/config.example.json tracker/config.json   # then edit it
+python tracker/build.py --init                       # config.json, profile.json and data/ from the examples
 python tracker/build.py --config tracker/config.json
 python tracker/build.py --config tracker/config.example.json --today 2026-11-05   # demo with the example data
 ```
@@ -29,9 +29,13 @@ python tracker/build.py --config tracker/config.example.json --today 2026-11-05 
 Flags: `--config FILE`, `--data DIR`, `--out DIR`, `--lang en|tr`, `--today YYYY-MM-DD`. Flags win over the config file.
 Paths in the config file are relative to that file; paths given as flags are relative to the current folder.
 
-Tests: `python -m pytest tracker -q`. They build the example data on several days, in both languages, into a temp folder.
+Tests: `python -m pytest tracker -q` (or `python -m unittest discover -s tracker` without pytest). They build the example data on several days, in both languages, into a temp folder.
 
-`data/`, `out/` and `config.json` are in `.gitignore`, so your own data stays on your machine.
+`data/`, `out/`, `config.json` and `profile.json` are in `.gitignore`, so your own data stays on your machine.
+
+## Profile
+
+`profile.json` (from `profile.example.json`) is for the assistant, not for `build.py`: what roles and seniority to look for, where, what a good posting looks like (`quality`), what rules a posting out (`deal_breakers`), and how to write the CV and cover letter (`cv.language`, `cv.style`, `cover_letter`). Edit it once; every scan, judgement and application follows it. Keep the words in Pentarch's `job_boards` filter (titles, exclude, locations) in step with it, since that filter runs before the assistant sees a posting.
 
 ## Config
 
@@ -157,5 +161,6 @@ The agent never edits the HTML. It edits the JSON files in `data_dir`, then runs
 3. New records get a short unique `id`. Leave unknown fields out instead of writing `null`.
 4. A scheduled scan can overwrite `scan.json` as a whole.
 5. Run `python tracker/build.py --config tracker/config.json`. Its one-line summary (upcoming count, notes count) is enough to confirm the build.
+6. Before a scan, a verdict on a posting or an application, read `profile.json`. Score each posting 1-5 on `quality.scale`, list which `strong`/`weak`/`deal_breakers` lines matched, and apply only when `apply_only_if` holds. CV and cover letter text follow `cv` and `cover_letter` (language, style, length); write the score and the reason into the application's `status`.
 
 `example-data/` shows every field in use, and every section renders from it.

@@ -168,7 +168,7 @@ class Kucuk(Beyin):
 
     def __init__(self, sistem, log=print):
         super().__init__(model=C["agent"]["light_model"] or "haiku", log=log)
-        self.sistem, self.cwd = sistem, HOME  # wiki'de açılırsa oradaki CLAUDE.md'yi de yükleyebilir
+        self.sistem, self.cwd = sistem, HOME  # HOME'da CLAUDE.md yok; not klasöründe açılsaydı oradakini de yüklerdi
 
     def _args(self):
         return [CLAUDE, "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",

@@ -4,6 +4,7 @@ __pycache__/
 .venv/
 venv/
 *.log
+!tracker/example-data/jobs.log
 # runtime data lives in ~/.pentarch, but keep strays out too
 secrets/
 *.db
@@ -12,3 +13,4 @@ keys.env
 tracker/data/
 tracker/out/
 tracker/config.json
+tracker/profile.json

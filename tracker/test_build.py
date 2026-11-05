@@ -103,5 +103,13 @@ class TestBuild(unittest.TestCase):
             build.main(["--config", str(HERE / "config.example.json"), "--out", str(self.out), "--today", "2026-11-05"])
         self.assertTrue((self.out / "index.html").exists() and (self.out / "README.md").exists())
 
+    def test_init(self):
+        self.assertEqual(build.init(self.out), ["config.json", "profile.json", "data/"])
+        self.assertEqual(build.init(self.out), [])
+        self.assertIn("target_roles", (self.out / "profile.json").read_text(encoding="utf-8"))
+        with mock.patch.object(build, "gh_counts", lambda *a: GH[1]):
+            build.main(["--config", str(self.out / "config.json"), "--out", str(self.out / "o"), "--today", "2026-11-05"])
+        self.assertTrue((self.out / "o" / "index.html").exists())
+
 if __name__ == "__main__":
     unittest.main()

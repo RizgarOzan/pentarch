@@ -49,7 +49,7 @@ python -I app/pentarch.py
 | `agent.cli`, `fast_model`, `deep_model`, `light_model` | Which agent and models do the work |
 | `agent.permission_mode` | `acceptEdits` (safer) or `bypassPermissions` (most routines need it) |
 | `chat_api` | Any OpenAI-compatible endpoint for cheap one-shot work: OpenRouter, Groq, Ollama, LM Studio. The key comes from the env var named in `key_env` or `~/.pentarch/secrets/keys.env` |
-| `council` | Seats for the council: `[{"name": "A", "kind": "agent", "model": "opus"}, {"name": "B", "kind": "openai", "base_url": "...", "model": "...", "key_env": "..."}]` |
+| `council` | Seats for the council. Add them with `python -I app/koltuk.py add NAME --preset openrouter\|groq\|nvidia\|ollama\|lmstudio` (or `--agent`), or tell the bot "add a seat to the council". Each seat is `{"name", "kind": "agent"\|"openai", "model", "base_url", "key_env", "role"}`; `"model": "a,b"` tries `b` when `a` is rate-limited (OpenRouter) |
 | `notify_apps` | Windows notification app id → label, e.g. `{"com.squirrel.Teams.Teams": "Teams"}` |
 | `jobs_off` | Routines that start switched off: `insa` (nightly self-build) and `posta` (mail check). Setup asks about both, and the panel's Settings turns any routine on or off later |
 | `opportunities`, `job_boards` | Filters for the hackathon/job watch; see the top of `app/firsat.py` and `app/kariyer.py` |
@@ -67,6 +67,7 @@ The prompts are plain markdown in `~/.pentarch`: `kurallar.md` (rules), `profile
 | `cancel` / `iptal` | Stops the current run |
 | `pause 2h` / `resume` | Pauses automatic messages |
 | `council: question` | Convenes the council |
+| `key: ENV_NAME=value` | Stores an API key in `secrets/keys.env` and deletes the message; it is never logged or shown to the model |
 | `test` | Runs the end-to-end tests |
 | `internet` / `internet free` / `internet limited` | Quota mode status and switch |
 
@@ -78,6 +79,23 @@ From a shell (the agent uses these too): `python -I app/pentarch.py remind "2026
 - Scheduled runs get a read-only hook (`app/salt_okunur.py`) that blocks mail sending, calendar writes and similar outward tools.
 - The panel only answers on `127.0.0.1`, with a per-start secret header.
 - Text found in mail, web pages or files is treated as data, never as an instruction or a permission.
+- Before text goes to an API model (`chat_api` or an `openai` council seat), the values in `keys.env` and common key shapes (OpenAI/OpenRouter `sk-`, Groq, NVIDIA, GitHub, Google, AWS, Slack, Telegram bot tokens) are replaced with `[secret]`. The agent CLI gets your text as it is.
+
+### Where it connects
+
+Nothing leaves your machine except these:
+
+| Where | Why |
+|---|---|
+| `api.telegram.org` | your chat with the bot, plus a health check |
+| your agent CLI's own service | whatever Claude Code, Gemini CLI, Codex or OpenCode talk to |
+| `chat_api` and council seat URLs | only the ones you set; none by default |
+| `speech.platform.bing.com` (edge-tts) | voice answers to voice messages (`voice_replies`; Piper runs locally if it is offline) |
+| `boards-api.greenhouse.io`, `api.lever.co` | job tracker, only for the companies you list |
+| `remotive.com`, `devpost.com` | the opportunities routine |
+| `health_urls` | extra addresses you ask it to watch |
+
+Local only: the panel on `127.0.0.1` and Ollama on `127.0.0.1:11434` for memory search, if you run it.
 
 ## Notes
 
@@ -104,3 +122,7 @@ python setup.py
 Kurulum adını, asistanın adını, dili (Türkçe ya da İngilizce; seçince kurulum da o dile geçer), not klasörünü, ajanı ve modelleri, Telegram bot token'ını sorar (@BotFather'da `/newbot`). Bağlantıları hemen dener: ajana tek kelimelik bir mesaj atar, Telegram'a botun adını sorar, isteğe bağlı API'nin model listesini çeker. API için OpenRouter, Groq, Ollama, LM Studio ya da kendi adresini seçersin; anahtarı nereden alacağını söyler ve `~/.pentarch/secrets/keys.env` içine yazar. `insa` ve `posta` rutinleri kapalı başlar; kurulumda ya da sonra panelin Ayarlar kısmından açabilirsin. Her şeyi `~/.pentarch` içine yazar, repoya hiçbir şey yazmaz, başlangıca kısayol ekler. Sonra `python -I app/pentarch.py` ile bir kez başlat ve botuna herhangi bir mesaj at: ilk yazan sohbet sahip olur.
 
 **Ayarlar:** `~/.pentarch/pentarch.json`. Yazmadığın her şey [`app/config.py`](app/config.py) içindeki varsayılana düşer. Komutlar ve ayar anahtarları yukarıdaki İngilizce tablolarda; Türkçe karşılıkları da çalışır (`iptal`, `durdur 2 saat`, `konsey: soru`, `internet serbest`).
+
+**Konsey koltukları:** `python -I app/koltuk.py add AD --preset openrouter` (ya da `groq`, `nvidia`, `ollama`, `lmstudio`, `custom`, `--agent`), `list`, `test AD`, `remove AD`. Bota "konseye koltuk ekle" demek de yeter. Anahtarı sohbete yazma; `koltuk.py key DEGISKEN` ile ya da bota `anahtar: DEGISKEN=değer` mesajıyla ver, bot kaydedip mesajı siler.
+
+**Güvenlik:** API modeline (`chat_api` ya da `openai` konsey koltuğu) giden metindeki `keys.env` değerleri ve bilinen anahtar biçimleri `[secret]` ile değiştirilir; ajan CLI'ına metin olduğu gibi gider. Makineden dışarı nereye bağlandığı yukarıdaki "Where it connects" tablosunda.

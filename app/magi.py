@@ -71,11 +71,13 @@ def agent_sor(model, sistem, metin, timeout=300):
 def api_sor(seat, sistem, metin, max_tokens=4000):
     """OpenAI-compatible endpoint. The key is read from the environment and never written anywhere."""
     key = os.environ.get(seat.get("key_env") or "", "")
+    models = seat["model"].split(",")  # "a,b": OpenRouter tries b when a is rate-limited; reasoning models need room to answer
     istek = urllib.request.Request(seat["base_url"].rstrip("/") + "/chat/completions", headers={
         "Content-Type": "application/json", "User-Agent": "pentarch-council/1.0",  # Groq 403s urllib's default agent
         **({"Authorization": f"Bearer {key}"} if key else {})},
-        data=json.dumps({"model": seat["model"], "max_tokens": max_tokens,  # reasoning models need room to answer
-                         "messages": [{"role": "system", "content": sistem}, {"role": "user", "content": metin}]}).encode())
+        data=json.dumps({"model": models[0], **({"models": models} if len(models) > 1 else {}), "max_tokens": max_tokens,
+                         "messages": [{"role": "system", "content": agents.redact(sistem)},
+                                      {"role": "user", "content": agents.redact(metin)}]}).encode())
     for deneme in (1, 2):  # connection timeouts happen in bursts; try once more, but not on an HTTP error
         try:
             with urllib.request.urlopen(istek, timeout=150) as r:

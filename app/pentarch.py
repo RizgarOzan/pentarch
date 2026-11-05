@@ -54,6 +54,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 import agents  # noqa: E402
+import koltuk  # noqa: E402
 import tg  # noqa: E402
 from config import C, EXTRA_DIRS, HOME, LANG_NAME, NAME, NOTES, OWNER, T  # noqa: E402
 
@@ -1299,7 +1300,16 @@ def poll_telegram():
                 msg = upd.get("message")
                 if not msg or msg["chat"]["id"] != state["chat_id"]:
                     continue
-                texts.append(message_text(msg))
+                text = message_text(msg)
+                if km := re.fullmatch(r"\s*(?:key|anahtar)\s*:\s*([A-Z][A-Z0-9_]+)\s*=\s*(\S+)\s*", text):
+                    koltuk.save_key(km.group(1), km.group(2))  # not logged, not queued; the message itself is removed
+                    try:
+                        tg.api("deleteMessage", chat_id=msg["chat"]["id"], message_id=msg["message_id"])
+                    except Exception:
+                        pass
+                    send(T(f"{km.group(1)} kaydedildi (secrets/keys.env).", f"{km.group(1)} saved (secrets/keys.env)."))
+                    continue
+                texts.append(text)
                 tg.log(OWNER, texts[-1])
                 try:  # 👀: message received, reply on the way
                     tg.api("setMessageReaction", chat_id=msg["chat"]["id"], message_id=msg["message_id"],

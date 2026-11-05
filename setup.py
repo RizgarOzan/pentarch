@@ -61,13 +61,9 @@ def get_json(url, key=None, timeout=10):
         return json.load(r)
 
 
-# Chat API presets: name -> (base_url, suggested model, needs a key, where to get the key)
-PRESETS = {
-    "openrouter": ("https://openrouter.ai/api/v1", "google/gemma-4-31b-it:free", True, "https://openrouter.ai/keys"),
-    "groq": ("https://api.groq.com/openai/v1", "llama-3.3-70b-versatile", True, "https://console.groq.com/keys"),
-    "ollama": ("http://localhost:11434/v1", "", False, ""),
-    "lmstudio": ("http://localhost:1234/v1", "", False, ""),
-}
+sys.path.insert(0, str(APP))
+import koltuk  # noqa: E402  (presets and the council-seat helpers; config.py resolves the same HOME)
+PRESETS = koltuk.PRESETS  # name -> (base_url, key env, suggested model, where to get the key)
 
 
 def read_env(path):
@@ -83,7 +79,8 @@ def chat_api_setup(api):
     pick = ask(t("Servis", "Service"), cur, (*PRESETS, "custom", "none"))
     if pick == "none":
         return {"base_url": "", "model": "", "key_env": key_env}
-    base, model, need_key, key_url = PRESETS.get(pick, (api.get("base_url", ""), api.get("model", ""), True, ""))
+    base, preset_env, model, key_url = PRESETS.get(pick, (api.get("base_url", ""), key_env, api.get("model", ""), ""))
+    need_key = bool(preset_env)
     if pick == "custom":
         base = ask("base_url (…/v1)", base)
     env_file = SECRETS / "keys.env"
@@ -112,6 +109,25 @@ def chat_api_setup(api):
     if ids and model not in ids:
         print(t("  ! Bu model listede yok, adını kontrol et.", "  ! That model is not in the list; check the name."))
     return {"base_url": base, "model": model, "key_env": key_env}
+
+
+def council_setup():
+    """Optional council seats (MAGI): each one an OpenAI-compatible endpoint or the agent CLI. Later: koltuk.py."""
+    have = [s.get("name") for s in koltuk.seats()]
+    print(t(f"\nKonsey koltukları (konsey: soru): {', '.join(have) or 'yok, tek ajan koltuğu'}. Sonradan: python -I app/koltuk.py add ...",
+            f"\nCouncil seats (council: question): {', '.join(have) or 'none, one agent seat'}. Later: python -I app/koltuk.py add ..."))
+    while yes(t("Koltuk eklensin mi?", "Add a seat?"), not have):
+        name = ask(t("Koltuk adı", "Seat name"), "ENVOY").upper()
+        pick = ask(t("Servis", "Service"), "openrouter", (*PRESETS, "custom", "agent"))
+        role = ask(t("Rolü (boş olabilir)", "Its role (may be empty)"), "")
+        if pick == "agent":
+            s = koltuk.add(name, agent=True, model=ask("Model", ""), role=role)
+        elif pick == "custom":
+            s = koltuk.add(name, "custom", ask("Model", ""), ask("base_url (…/v1)", ""), ask("key env", f"PENTARCH_{name}_KEY"), role)
+        else:
+            s = koltuk.add(name, pick, ask("Model", PRESETS[pick][2]), role=role)
+        have.append(s["name"])
+        print(t(f"  Eklendi: {s['name']} ({s['model']})", f"  Added: {s['name']} ({s['model']})"))
 
 
 def telegram_setup():
@@ -206,6 +222,7 @@ def main():
 
     SECRETS.mkdir(parents=True, exist_ok=True)
     api = chat_api_setup(old.get("chat_api", {}))
+    council_setup()
     telegram_setup()
 
     off = set(old.get("jobs_off", ["insa", "posta"]))

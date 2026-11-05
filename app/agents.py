@@ -8,6 +8,7 @@
 """
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -15,7 +16,7 @@ import urllib.request
 import uuid
 from pathlib import Path
 
-from config import C, EXTRA_DIRS, NOTES
+from config import C, EXTRA_DIRS, NOTES, SECRETS
 
 CLI = C["agent"]["cli"]
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
@@ -83,12 +84,31 @@ def run_other(prompt, model=None, timeout=3600, cwd=None, resume=None, keep=Fals
             "session_id": sid if keep else None, "usage": {}}
 
 
+SECRET_RE = re.compile(r"\b(sk-[A-Za-z0-9_-]{20,}|gsk_[A-Za-z0-9]{20,}|nvapi-[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9]{30,}"
+                       r"|github_pat_[A-Za-z0-9_]{30,}|AIza[0-9A-Za-z_-]{35,}|AKIA[0-9A-Z]{16}|xox[abp]-[A-Za-z0-9-]{10,}"
+                       r"|\d{8,10}:[A-Za-z0-9_-]{35,})")
+
+
+def redact(text):
+    """Masks keys and tokens before text goes to an API model: the values in secrets/keys.env, then known key shapes."""
+    if not isinstance(text, str):
+        return text
+    f = SECRETS / "keys.env"
+    if f.exists():
+        for line in f.read_text(encoding="utf-8").splitlines():
+            v = line.partition("=")[2].strip().strip('"')
+            if len(v) >= 12:
+                text = text.replace(v, "[secret]")
+    return SECRET_RE.sub("[secret]", text)
+
+
 def chat(messages, model=None, timeout=60, api=None):
     """POST to an OpenAI-compatible endpoint. api = {base_url, model, key_env}; defaults to config chat_api."""
     api = api or C["chat_api"]
     key = os.environ.get(api.get("key_env") or "", "")
     req = urllib.request.Request(api["base_url"].rstrip("/") + "/chat/completions",
-                                 json.dumps({"model": model or api["model"], "messages": messages}).encode(),
+                                 json.dumps({"model": model or api["model"],
+                                             "messages": [{**m, "content": redact(m["content"])} for m in messages]}).encode(),
                                  {"Content-Type": "application/json", **({"Authorization": f"Bearer {key}"} if key else {})})
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return json.load(r)["choices"][0]["message"]["content"].strip()

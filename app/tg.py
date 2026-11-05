@@ -74,7 +74,8 @@ def download(file_id, dest):
 def log(who, text):
     """Appends one line to the conversation log; jobs and new sessions read context from it."""
     LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
-    line = text.replace("\n", " / ")
+    import agents  # late: tg.py also runs on its own from the shell
+    line = agents.redact(text).replace("\n", " / ")
     with LOG_FILE.open("a", encoding="utf-8") as f:
         f.write(f"{datetime.now():%Y-%m-%d %H:%M} | {who}: {line}\n")
 
