@@ -192,7 +192,8 @@ Newsletters, ads and automatic notices don't matter. {ANSWER}"""},
 Refresh {NAME}'s memory across days. First read {MEMORY_PAGE}, then the sources of the last 24 hours: {HOME / "konusma.log"}
 (last 24 hours of lines) and, in the same folder, kopru.jsonl, gorevler.json, bekleyen.json, hatirlatmalar.json.
 Rewrite the file with the same sections in the same order. Remove what is finished, add what is new; when unsure
-about deleting, leave it. Never delete lines from the rejected section: when {OWNER} said "no", "drop it", "done",
+about deleting, leave it. Never delete lines from the rules section; you may only merge lines that say the same
+thing into one. Never delete lines from the rejected section: when {OWNER} said "no", "drop it", "done",
 "I don't want it" in the last 24 hours, add a dated line there and remove that topic from open tasks and decisions.
 Don't move a rejected topic back to open tasks. When a decision changed, replace the old line and append
 "(before: <old decision>, changed <date>)": never leave two conflicting lines. End each open task line with its
@@ -262,8 +263,31 @@ def now():
     return f"{datetime.now():%Y-%m-%d %H:%M}"
 
 
+GIDEN = HOME / "giden.json"  # hashes of messages sent in the last 10 minutes (so a restart doesn't send one twice)
+giden_lock = threading.Lock()
+
+
+def zaten_gitti(text):
+    """True if the same long text went out in the last 10 minutes; otherwise records it. Short texts ("Stopped.") don't count."""
+    if len(text) < 80:
+        return False
+    iz, simdi = hashlib.sha1(text.encode()).hexdigest()[:16], time.time()
+    with giden_lock:
+        try:
+            kayit = [k for k in json.loads(GIDEN.read_text(encoding="utf-8")) if simdi - k["z"] < 600]
+        except (OSError, ValueError, KeyError, TypeError):
+            kayit = []
+        if any(k["iz"] == iz for k in kayit):
+            return True
+        GIDEN.write_text(json.dumps([*kayit, {"z": simdi, "iz": iz}]), encoding="utf-8")
+    return False
+
+
 def send(text, buttons=None):
     """Telegram'a gönderir. Cevabın son satırı [[A|B]] ise düğmeye çevrilir."""
+    if zaten_gitti(text):
+        note(f"aynı mesaj 10 dk içinde gitmişti, ikinci kez gönderilmedi: {text[:80]}")
+        return
     m = re.search(r"\n?\[\[([^\]]+)\]\]\s*$", text)
     if m and not buttons:
         buttons = [b.strip() for b in m.group(1).split("|") if b.strip()]
@@ -584,6 +608,8 @@ def run_claude(prompt, model=None, effort=None, resume=True, kind="telegram", li
 
 
 def _run_claude(prompt, model=None, effort=None, resume=True, kind="telegram", light=False, budget=None):
+    if kind == "telegram" and (kurallar := reddedilenler()):  # jobs and tasks already carry them
+        prompt = f"({OWNER}'s standing rules and closed topics; follow them:\n{kurallar})\n\n{prompt}"
     if agents.CLI != "claude":  # other CLIs: the chat keeps one session per day like claude; no budgets or hooks
         sid = session_id() if resume else None
         for rid in ([sid, None] if sid else [None]):
@@ -713,27 +739,151 @@ def konusma_arasi(ofset, sinir=4000):
 REJECTED = ("Rejected", "Reddedilenler")
 
 
+RULES_SECTION = ("Rules", "Kurallar")
+
+
 def reddedilenler():
-    """The rejected section of memory.md: topics the owner closed. Goes into chat and job prompts."""
+    """The rules and rejected sections of memory.md: what the owner told it to always/never do and topics they closed.
+    Goes into every chat message, job and task (once at session start was not enough; it got lost in long contexts)."""
     try:
-        name, body = _section(MEMORY_PAGE.read_text(encoding="utf-8"), *REJECTED)
-        return f"## {name}" + re.split(r"\n## ", body, maxsplit=1)[0].rstrip() if body else ""
+        sayfa = MEMORY_PAGE.read_text(encoding="utf-8")
     except OSError:
         return ""
+    parcalar = []
+    for names in (RULES_SECTION, REJECTED):
+        name, body = _section(sayfa, *names)
+        if body:
+            parcalar.append(f"## {name}" + re.split(r"\n## ", body, maxsplit=1)[0].rstrip())
+    return "\n\n".join(parcalar)
+
+
+# Saving a rule was left to the model's "should I save this" and got missed. Now the code catches it: if the owner's
+# message carries one of these marks, the small model looks for a lasting rule and writes it to memory.md. If the small
+# model fails too, the message stays in the pending file and is handled later.
+KURAL_BEKLEYEN = HOME / "kural-bekleyen.jsonl"
+KURAL_IZI = re.compile(r"\basla\b|bir daha|hiç ?bir zaman|her zaman|bundan sonra|artık|sakın|kural|istemiyorum|dedim|demedim|"
+                       r"söyledim|kaç kere|unutma|tekrar tekrar|(ma|me)(yacak|yecek)s[ıi]n|"
+                       r"\b(yazma|yapma|etme|atma|sorma|gönderme|girme|önerme|bulaşma|dokunma|verme)\b|"
+                       r"\b(never|always|from now on|don'?t ever|stop (doing|sending|asking)|any ?more|no more|rule|"
+                       r"i told you|i said|how many times|remember to|don'?t (write|send|ask|post|touch|suggest|contact|do))\b", re.I)
+KURAL_PROMPT = (f"Read the message {OWNER} wrote to their assistant {NAME}. Does it contain a rule, a ban or a lasting "
+                f"preference {NAME} must follow from now on? A one-off request for today, a question, chat or an insult "
+                f"is not a rule. If there is one, write each as a one-line order to {NAME} (example: \"Don't post "
+                f"anything in the X Discord server and don't wait for an answer from there.\"), at most 3 lines, each "
+                f"starting with -, in the language of the message. If there is none, write only -.")
+kural_lock = threading.Lock()
+
+
+def kural_yakala(metin):
+    """Pulls a lasting rule out of the owner's message and writes it to memory. Runs in the background; on failure the
+    message stays pending. Called with empty text (at start-up) it only handles the pending ones."""
+    if metin and not KURAL_IZI.search(metin):
+        return
+    with kural_lock:
+        bekleyen = []
+        try:
+            bekleyen = [json.loads(l)["metin"] for l in KURAL_BEKLEYEN.read_text(encoding="utf-8").splitlines() if l.strip()]
+        except (OSError, ValueError, KeyError):
+            pass
+        if metin:
+            bekleyen.append(metin)
+            # to disk before the small model: if the process restarts meanwhile, the message is not lost
+            KURAL_BEKLEYEN.write_text("".join(json.dumps({"metin": m}, ensure_ascii=False) + "\n" for m in bekleyen),
+                                      encoding="utf-8")
+        kalan = []
+        for m in bekleyen:
+            try:
+                out = kucuk("kural", KURAL_PROMPT, f"Message (independent of earlier ones):\n{m[:2000]}", 60)
+                spend("süzgeç", out)
+                if out.get("is_error"):
+                    raise RuntimeError(out.get("result"))
+                for satir in (out.get("result") or "").splitlines():
+                    satir = satir.strip().lstrip("-• ").strip()
+                    # the small model sometimes explains instead of writing "-"
+                    if len(satir) > 8 and not re.search(r"^(bu mesaj|this message)|kural (içermiyor|yok)|tek seferlik|"
+                                                        r"no (rule|lasting)|one-off|does not contain", satir, re.I):
+                        kural_yaz(satir)
+            except Exception as e:
+                note(f"kural süzgeci olmadı ({e!r}), bekleyene kaldı")
+                kalan.append(m)
+        KURAL_BEKLEYEN.write_text("".join(json.dumps({"metin": m}, ensure_ascii=False) + "\n" for m in kalan),
+                                  encoding="utf-8")
+
+
+# The memory round rewrites the page; a rule or rejected line written meanwhile was overwritten by the round, and lost
+# again when the backup was put back. Everything that writes the page goes through this lock; during the round, lines
+# go to a queue and are written once the round and its check are done.
+hafiza_lock = threading.Lock()
+hafiza_turu = threading.Event()
+HAFIZA_KUYRUK = HOME / "hafiza-kuyruk.jsonl"
+KURAL_TAVAN = 40  # above this the rules section takes no new lines; the memory round should merge them
+
+
+def hafiza_ekle(names, satir):
+    """Adds a dated line right under the first existing heading in `names`; queued while the memory round runs."""
+    with hafiza_lock:
+        if hafiza_turu.is_set():
+            with HAFIZA_KUYRUK.open("a", encoding="utf-8") as f:
+                f.write(json.dumps({"bolum": list(names), "satir": satir}, ensure_ascii=False) + "\n")
+            note(f"hafıza turu sürüyor, kuyruğa alındı: {satir[:80]}")
+            return
+        _hafiza_ekle(names, satir)
+
+
+def _hafiza_ekle(names, satir):
+    import difflib
+    try:
+        sayfa = MEMORY_PAGE.read_text(encoding="utf-8")
+        if tuple(names) == RULES_SECTION:
+            if _section(sayfa, *RULES_SECTION)[1] is None:  # older memory.md without the section: open it above Rejected
+                rname, _ = _section(sayfa, *REJECTED)
+                baslik = T("Kurallar", "Rules")
+                sayfa = (sayfa.replace(f"\n## {rname}", f"\n## {baslik}\n\n## {rname}", 1) if rname
+                         else sayfa.rstrip() + f"\n\n## {baslik}\n")
+            _, body = _section(sayfa, *RULES_SECTION)
+            mevcut = [re.sub(r"^- (\d{4}-\d\d-\d\d[ \d:]*: )?", "", l).lower()
+                      for l in re.split(r"\n## ", body or "", maxsplit=1)[0].splitlines() if l.startswith("- ")]
+            # the same rule keeps coming back in other words; the section grew and got lost again
+            if any(difflib.SequenceMatcher(None, satir.lower(), m).ratio() > 0.7 or satir.lower() in m for m in mevcut):
+                return
+            if len(mevcut) >= KURAL_TAVAN:
+                note(f"kural bölümü {len(mevcut)} satır, yazılmadı (gece turu birleştirsin): {satir[:100]}")
+                return
+        elif satir.lower() in sayfa.lower():
+            return
+        name, _ = _section(sayfa, *names)
+        if name is None:
+            note(f"hafızada bölüm yok ({names[0]}), yazılmadı: {satir[:80]}")
+            return
+        bas, son = sayfa.split(f"\n## {name}", 1)
+        baslik, govde = son.split("\n", 1) if "\n" in son else (son, "")
+        MEMORY_PAGE.write_text(f"{bas}\n## {name}{baslik}\n- {now()}: {satir}\n{govde}", encoding="utf-8")
+        note(f"hafızaya yazıldı ({name}): {satir[:100]}")
+    except (OSError, ValueError, IndexError) as e:
+        note(f"hafızaya yazılamadı ({names[0]}): {e!r}")
+
+
+def hafiza_turu_bitti():
+    """Writes the lines queued during the memory round to the page."""
+    with hafiza_lock:
+        hafiza_turu.clear()
+        try:
+            satirlar = [json.loads(l) for l in HAFIZA_KUYRUK.read_text(encoding="utf-8").splitlines() if l.strip()]
+        except (OSError, ValueError):
+            return
+        for s in satirlar:
+            _hafiza_ekle(tuple(s["bolum"]), s["satir"])
+        HAFIZA_KUYRUK.unlink(missing_ok=True)
+
+
+def kural_yaz(kural):
+    """Adds the rule as a dated line at the top of the rules section (opened above Rejected if missing)."""
+    hafiza_ekle(RULES_SECTION, kural)
 
 
 def reddet(metin):
     """Adds a closed topic as a dated line at the top of the rejected section."""
-    try:
-        sayfa = MEMORY_PAGE.read_text(encoding="utf-8")
-        for name in REJECTED:
-            if f"\n## {name}" in sayfa:
-                bas, son = sayfa.split(f"\n## {name}", 1)
-                baslik, govde = son.split("\n", 1)
-                MEMORY_PAGE.write_text(f"{bas}\n## {name}{baslik}\n- {now()}: {metin}\n{govde}", encoding="utf-8")
-                return
-    except OSError as e:
-        note(f"reddedilen yazılamadı: {e!r}")
+    hafiza_ekle(REJECTED, metin)
 
 
 TRIAJ_PROMPT = (f"Classify the message sent to {OWNER}'s assistant. Write one word. DERIN: a decision, priority, "
@@ -774,8 +924,11 @@ def ask_v2(prompt, derin=False):
     if B is None:
         B = BEYINLER[tur] = beyin.yeni(model, efor, log=note, ilk=core_memory)
     if (B.model, getattr(B, "effort", efor)) != (model, efor):
-        B.rotate()  # the model changed in settings: close with a summary, the next process opens with the new model
-        B.model, B.effort = model, efor
+        with B.lock:  # a background renewal may be running on the same process
+            B.rotate()  # the model changed in settings: close with a summary, the next process opens with the new model
+            B.model, B.effort = model, efor
+    if getattr(B, "kayip", False):  # the process died without a summary: the new one gets recent chat from the log
+        B.ofset, B.kayip = 0, False
     # Everything this session didn't see (the other brain, jobs, notifications, chat before a restart) goes first;
     # without it the two brains contradicted each other.
     kacan = konusma_arasi(B.ofset)
@@ -786,6 +939,8 @@ def ask_v2(prompt, derin=False):
         ek_baglam += ("[Deep mode: this message asks for analysis, research or a plan. Take your time; read the files "
                       "you need, search the web or open a subagent if needed, keep guesses apart from facts. Result "
                       "first, then as much reasoning as needed.]\n")
+    if kurallar := reddedilenler():  # every message: once at session start got lost in long contexts
+        ek_baglam = f"({OWNER}'s standing rules and closed topics; follow them:\n{kurallar})\n\n" + ek_baglam
     key = object()
     active_runs[key] = {"kind": "telegram", "zaman": now(), "is": prompt.strip().splitlines()[-1][:90]}
     try:
@@ -840,8 +995,10 @@ def ask(texts, source="Telegram"):
     if any(t.strip().lower() in NEW for t in texts):
         SESSION_FILE.unlink(missing_ok=True)
         for B in BEYINLER.values():
-            B.rotate(summarize=False)
-            B.ofset = tg.LOG_FILE.stat().st_size if tg.LOG_FILE.exists() else 0  # clean start: old chat stays out
+            with B.lock:
+                B.rotate(summarize=False)
+                B.ofset = tg.LOG_FILE.stat().st_size if tg.LOG_FILE.exists() else 0  # clean start: old chat stays out
+                B.kayip = False
         texts = [t for t in texts if t.strip().lower() not in NEW]
         if not texts:
             send(T("Yeni oturum açılacak, bir sonraki mesajından itibaren temiz başlıyorum.",
@@ -852,6 +1009,7 @@ def ask(texts, source="Telegram"):
     if light:
         texts = [texts[0].lstrip()[1:].lstrip(), *texts[1:]]
     prompt = f"[{source}, {now()}] {OWNER}:\n" + "\n".join(texts)
+    threading.Thread(target=kural_yakala, args=("\n".join(texts),), daemon=True).start()
     # The owner often answers a job/task/notification message the main chat never saw. If the last assistant line
     # isn't the chat's own last reply, it goes first as context (so it doesn't ask "what do you mean").
     try:
@@ -874,7 +1032,9 @@ def ask(texts, source="Telegram"):
             reply = T("Bu iş bir saati geçti, durdurdum. Neyi farklı yapayım?",
                       "This went past an hour, so I stopped it. What should I do differently?")
         except TimeoutError:  # never leave it half done: the job becomes a full task and reports when finished
-            add_task("şimdi", "Finish, start to end, this request that timed out in chat:\n" + "\n".join(texts))
+            add_task("şimdi", "Finish, start to end, this request that timed out in chat. The chat may have done part "
+                     "of it already: before sending, posting or emailing anything, check the conversation log and the "
+                     "sent mail/messages so nothing goes out twice.\n" + "\n".join(texts))
             reply = T("Bu iş sohbette 20 dakikayı geçti; göreve çevirdim, ayrı oturumda bitirip haber vereceğim.",
                       "This took over 20 minutes in chat; I turned it into a task and will report when it's done.")
         except RuntimeError as e:
@@ -1060,15 +1220,22 @@ def run_job_once(name, job, since):
     """Zamanlı işi bir kez koşar; kalp için son haberi saklar, hafıza için yedek alır ve kaybı denetler."""
     if job.get("run"):  # modelsiz iş (betik)
         return job["run"]()
-    if name == "hafiza":
-        memory_backup()
-    reply = run_light(job["prompt"].format(ts=now(), since=since, harcama=spend_summary(),
-                                           son=heart_state().get("son") or "-", kalan=oneri_kalan()), job.get("model", FAST),
-                      light=name in LIGHT_JOBS)
-    if name == "kalp" and reply and reply != "-":
-        heart_update(son=f"{now()} {reply[:300]}")
-    if name == "hafiza":
-        memory_check()
+    if name == "hafiza":  # lines written during the round wait in the queue (hafiza_ekle)
+        with hafiza_lock:
+            hafiza_turu.set()
+            memory_backup()
+    try:
+        reply = run_light(job["prompt"].format(ts=now(), since=since, harcama=spend_summary(),
+                                               son=heart_state().get("son") or "-", kalan=oneri_kalan()),
+                          job.get("model", FAST), light=name in LIGHT_JOBS)
+        if name == "kalp" and reply and reply != "-":
+            heart_update(son=f"{now()} {reply[:300]}")
+        if name == "hafiza":
+            with hafiza_lock:
+                memory_check()
+    finally:
+        if name == "hafiza":
+            hafiza_turu_bitti()
     return reply
 
 
@@ -1827,7 +1994,8 @@ def watch_self():
                 continue
             kapaniyor.set()  # the scheduler starts nothing new; whatever was about to start takes its lock
             time.sleep(3)
-            if main_lock.locked() or task_lock.locked() or running_task or active_runs or not inbox.empty():  # never kill a running job
+            if (main_lock.locked() or task_lock.locked() or running_task or active_runs or not inbox.empty()
+                    or bekleyen_oku() or hafiza_turu.is_set()):  # never kill a running job, a pending reply or the memory round
                 kapaniyor.clear()
                 continue
             stamp = [f.stat().st_mtime for f in files]
@@ -2128,6 +2296,10 @@ def main():
     if kalan := bekleyen_oku():  # the previous process died before answering
         note(f"yarım kalan {len(kalan)} mesaj yeniden sırada")
         inbox.put(kalan)
+    if HAFIZA_KUYRUK.exists():  # the process died during a memory round: write the queued lines now
+        hafiza_turu_bitti()
+    if KURAL_BEKLEYEN.exists() and KURAL_BEKLEYEN.read_text(encoding="utf-8").strip():
+        in_thread(kural_yakala, "")
     for target in (telegram_worker, watch_notifications, watch_health, watch_schedule, watch_self):
         in_thread(forever, target)
     in_thread(serve_panel)

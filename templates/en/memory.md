@@ -2,6 +2,8 @@
 
 ## Open tasks and promises
 
+## Rules
+
 ## Rejected
 
 ## Recent decisions
