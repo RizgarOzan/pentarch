@@ -192,3 +192,19 @@ def chat(messages, model=None, timeout=60, api=None, kisisel=False):
 
 def has_chat_api():
     return bool(providers())
+
+
+def mcp_dosyasi():
+    """config mcp_servers as a Claude Code --mcp-config file in the runtime home, or None when none are set.
+    Only variable names go in the file (${NAME}); values stay in the environment."""
+    servers = C.get("mcp_servers") or {}
+    if not servers:
+        return None
+    out = {ad: {"command": s["command"], "args": list(s.get("args") or []),
+                **({"env": {v: "${" + v + "}" for v in s["env"]}} if s.get("env") else {})}
+           for ad, s in servers.items() if s.get("command")}
+    f = SECRETS.parent / "mcp-servers.json"
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(json.dumps({"mcpServers": out}, indent=1), encoding="utf-8")
+    return f
+

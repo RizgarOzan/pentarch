@@ -61,6 +61,9 @@ class Beyin:
             args += ["--allowedTools", ",".join(C["agent"]["allowed_tools"])]
         if C["desktop_control"] and MASAUSTU.exists():
             args += ["--mcp-config", str(MASAUSTU)]
+        if mcp := agents.mcp_dosyasi():
+            args += ["--mcp-config", str(mcp)]
+
         for d in EXTRA_DIRS:
             args += ["--add-dir", str(d)]
         return args

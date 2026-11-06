@@ -113,10 +113,22 @@ def _notlar():
             yield yol
 
 
+def beceri_dosyalari():
+    """Flat beceriler/<name>.md and agentskills.io-style beceriler/<name>/SKILL.md."""
+    if not BECERILER.exists():
+        return []
+    return sorted([*BECERILER.glob("*.md"), *BECERILER.glob("*/SKILL.md")])
+
+
+def beceri_adi(yer):
+    yer = Path(yer)
+    return yer.parent.name if yer.name == "SKILL.md" else yer.stem
+
+
 def yenile(c=None):
     c = c or _db()
     gorulen = set()
-    for kaynak, yollar in (("wiki", _notlar()), ("beceri", BECERILER.glob("*.md") if BECERILER.exists() else ())):
+    for kaynak, yollar in (("wiki", _notlar()), ("beceri", beceri_dosyalari())):
         for yol in yollar:
             gorulen.add(str(yol))
             _dosya_yenile(c, kaynak, yol)
@@ -154,7 +166,7 @@ def _seyrek(c, q, koru=()):
 
 
 def _ad(yer):
-    return set(re.split(r"[-_]", _sade(Path(yer).stem)))
+    return set(re.split(r"[-_]", _sade(beceri_adi(yer))))
 
 
 def _uyar(k, ad):
@@ -278,7 +290,7 @@ def bagla(mesaj, gorulen=None):
         if fikir and kaynak != "beceri":
             continue
         if kaynak == "beceri":
-            anahtar, satir = yer, f"- beceri {Path(yer).stem}:\n{metin.strip()}"
+            anahtar, satir = yer, f"- beceri {beceri_adi(yer)}:\n{metin.strip()}"
         elif kaynak == "wiki":
             anahtar = baslik
             rel = Path(yer).relative_to(NOTES).as_posix() if Path(yer).is_relative_to(NOTES) else Path(yer).name
@@ -327,12 +339,14 @@ def main():
     elif len(sys.argv) == 2 and sys.argv[1] == "beceriler":
         c = yenile()
         say = dict((y, (s, son)) for y, s, son in c.execute("select yer, sayi, son from kullanim"))
-        for yol in sorted(BECERILER.glob("*.md")) if BECERILER.exists() else ():
+        for yol in beceri_dosyalari():
             s, son = say.get(str(yol), (0, "-"))
             yas = datetime.fromtimestamp(yol.stat().st_mtime).strftime("%Y-%m-%d")
-            print(T(f"{yol.name}: {s} kez getirildi, son {son}, son değişiklik {yas}",
-                    f"{yol.name}: fetched {s} times, last {son}, last changed {yas}"))
-        print(T("beceri yok", "no skills") if not BECERILER.exists() or not any(BECERILER.glob("*.md")) else "")
+            ad = yol.relative_to(BECERILER).as_posix()
+            print(T(f"{ad}: {s} kez getirildi, son {son}, son değişiklik {yas}",
+                    f"{ad}: fetched {s} times, last {son}, last changed {yas}"))
+        print(T("beceri yok", "no skills") if not beceri_dosyalari() else "")
+
     else:
         sys.exit(__doc__)
 

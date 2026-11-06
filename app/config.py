@@ -51,7 +51,23 @@ DEFAULTS = {
     "health_urls": [],             # extra sites to watch on the panel (internet and agent login are always checked)
     "net_quota_gb": 0,             # monthly data cap; 0 = no metered-connection mode
     "jobs_off": ["insa", "posta"], # routines off at first start (JOBS in pentarch.py); panel Settings turns them on
+    # learning loop (ogren.py): after a chat turn a cheap model proposes notes/skill patches; the owner approves each
+    "learning": {"enabled": False, "max_pending": 20},
+    "memory": {"inject_max_chars": 8000},  # cap for the core memory a new session gets (profile + memory.md)
+    # shell work backend (kum.py): local | docker. docker missing = command refused, never run on the host instead
+    "sandbox": {"backend": "local", "image": "python:3.12-slim", "network": False},
+    # MCP servers handed to Claude Code: name -> {"command", "args": [], "env": ["VAR_NAME"]}. env lists names only;
+    # the value stays in the environment (written as ${VAR_NAME}, Claude Code expands it)
+    "mcp_servers": {},
+    # extra gateways, off by default; same commands as Telegram. Passwords/tokens come from the named env variables
+    "gateways": {
+        "email": {"enabled": False, "imap_host": "", "smtp_host": "", "smtp_port": 465, "user": "",
+                  "password_env": "PENTARCH_MAIL_PASSWORD", "allowed_from": [], "every": 120},
+        "discord": {"enabled": False, "token_env": "PENTARCH_DISCORD_TOKEN", "channel_id": "", "owner_id": "", "every": 15},
+    },
     "panel_port": 47824,
+
+
     "lock_port": 47823,
 }
 

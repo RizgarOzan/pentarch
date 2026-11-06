@@ -269,6 +269,23 @@ def skills_setup(cli):
                 f"  Skills live in {REPO / 'skills'}; copy them into {cli}'s own skills folder if it has one."))
 
 
+def mcp_setup(old):
+    """MCP servers handed to Claude Code (config mcp_servers). Env variables are asked by name only, never by value."""
+    servers = dict(old.get("mcp_servers") or {})
+    if servers:
+        print(t("  Kayıtlı MCP sunucuları: ", "  MCP servers on file: ") + ", ".join(servers))
+    while yes(t("MCP sunucusu eklensin mi?", "Add an MCP server?"), False):
+        name = ask(t("  Ad", "  Name"))
+        command = ask(t("  Komut (ör. npx)", "  Command (e.g. npx)"))
+        if not name or not command:
+            break
+        args = ask(t("  Argümanlar (boşlukla)", "  Arguments (space separated)")).split()
+        env = [v for v in csv(t("  Gereken ortam değişkeni ADLARI (virgülle, değer değil)",
+                                "  Environment variable NAMES it needs (comma separated, not values)"), []) if v]
+        servers[name] = {"command": command, "args": args, **({"env": env} if env else {})}
+    return servers
+
+
 def shortcut(path, args, icon):
     """Windows .lnk through WScript.Shell; pythonw so no console window stays open."""
     pyw = Path(sys.executable).with_name("pythonw.exe")
@@ -345,6 +362,7 @@ def main():
     council_setup()
     telegram_setup()
     job_boards = career_setup(old, lang)
+    mcp_servers = mcp_setup(old) if cli == "claude" else old.get("mcp_servers", {})
 
     off = set(old.get("jobs_off", ["insa", "posta"]))
     print(t("\nİki rutin ilk başta kapalı; istersen şimdi aç, sonra panelden de değiştirebilirsin (Ayarlar > Kapalı işler).",
@@ -359,7 +377,8 @@ def main():
     cfg = {**old, "owner": owner or "Owner", "name": name or "Pentarch", "lang": lang, "notes_dir": notes,
            "agent": {**agent, "cli": cli, "fast_model": fast, "deep_model": deep, "light_model": light,
                      "permission_mode": perm, "bypass_confirmed": bypass_ok},
-           "chat_api": api, "jobs_off": sorted(off), "job_boards": job_boards}
+           "chat_api": api, "jobs_off": sorted(off), "job_boards": job_boards, "mcp_servers": mcp_servers}
+
     HOME.mkdir(parents=True, exist_ok=True)
     CONFIG.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
     panel_settings = HOME / "ayarlar.json"  # the panel's own switches, once Pentarch has run
