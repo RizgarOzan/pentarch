@@ -387,6 +387,20 @@ def main():
         a["kapali_isler"] = sorted(set(a.get("kapali_isler", [])) - {"insa", "posta"} | off)
         panel_settings.write_text(json.dumps(a, ensure_ascii=False, indent=1), encoding="utf-8")
     Path(notes).expanduser().mkdir(parents=True, exist_ok=True)
+    if not any(Path(notes).expanduser().rglob("*.md")):
+        print(t(f"""
+  Hoş geldin, {cfg['owner']}! Not klasörün boş, yani henüz bir wikin yok.
+  {cfg['name']} öğrendiklerini kalıcı tutmak için küçük bir wiki kullanır: kim olduğun, kararların,
+  projelerin. Boş bir iskelet kurabilirim; sen konuştukça {cfg['name']} doldurur, her gece de kontrol eder.""",
+                f"""
+  Welcome, {cfg['owner']}! Your notes folder is empty, so you have no wiki yet.
+  {cfg['name']} keeps what it learns in a small wiki: who you are, your decisions, your projects.
+  I can set up an empty skeleton; {cfg['name']} fills it as you talk and checks it every night."""))
+        if yes(t("  Wiki iskeleti kurulsun mu?", "  Set up the wiki skeleton?"), True):
+            sys.path.insert(0, str(APP))
+            import wiki
+            made = wiki.kur(notes, cfg["owner"], cfg["name"], lang)
+            print(t(f"  Kuruldu: {', '.join(made)}", f"  Created: {', '.join(made)}"))
 
     fill = {"{{APP}}": APP.as_posix(), "{{HOME}}": HOME.as_posix(), "{{NOTES}}": Path(notes).expanduser().as_posix(),
             "{{OWNER}}": cfg["owner"], "{{NAME}}": cfg["name"]}

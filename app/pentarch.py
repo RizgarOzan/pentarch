@@ -231,6 +231,13 @@ and rules, last line {T("[[Uygula|Geç]]", "[[Apply|Skip]]")}. If there are no p
     "gom": {"at": "03:30", "run": lambda: subprocess.run([sys.executable, "-I", str(APP / "hafiza.py"), "gom"],
                                                         capture_output=True, timeout=1800,
                                                         creationflags=subprocess.CREATE_NO_WINDOW) and "-"},
+    # wiki keeper (wiki.py): harmless fixes are applied, anything about content comes back as a question
+    "wiki": {"at": "04:10", "model": FAST, "prompt": f"""[Wiki check, {{ts}}] {LIGHT}
+Run `{script("wiki.py", "onar")}` then `{script("wiki.py", "tara")}`. The first applies only harmless fixes (missing
+frontmatter fields, unlisted pages added to the index); the second lists what is still wrong in {NOTES}. Fix nothing
+else yourself and delete nothing. If the list is empty or only "stale", write only `-`. Otherwise tell {OWNER} in at
+most 4 lines what was fixed and what needs a decision (a broken link: create the page or change the link? an orphan
+page: link it from where?), one concrete suggestion each. {ANSWER}"""},
     "kesif": {"at": "14:00", "weekday": 3, "model": FAST, "prompt": f"""[Self-improvement round, {{ts}}] {LIGHT}
 Look for new tools for {NAME} itself. First read the last section of {HOME / "discover.md"} (create it if missing).
 Among what came out in the last 7 days (your agent CLI's changelog, agent skills, MCP servers, local models,

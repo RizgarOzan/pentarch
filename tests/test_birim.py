@@ -378,3 +378,19 @@ if __name__ == "__main__":
     unittest.main()
 
 
+
+
+class Wiki(unittest.TestCase):
+    def test_kur_tara_onar(self):
+        import wiki
+        d = Path(tempfile.mkdtemp())
+        self.assertEqual(len(wiki.kur(d, "A", "P", "tr")), 5)
+        self.assertEqual(wiki.kur(d), [])  # never over an existing wiki
+        self.assertEqual(wiki.tara(d), [])
+        (d / "wiki" / "yeni.md").write_text("# yeni\n[[yok]]\n", encoding="utf-8")
+        kinds = {f["kind"] for f in wiki.tara(d)}
+        self.assertTrue({"frontmatter", "broken_link", "orphan", "unindexed", "related"} <= kinds)
+        wiki.onar(d)
+        kinds = {f["kind"] for f in wiki.tara(d)}
+        self.assertFalse({"frontmatter", "unindexed"} & kinds)
+        self.assertIn("broken_link", kinds)  # content is left to the owner
