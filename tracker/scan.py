@@ -68,7 +68,7 @@ def lever(slug):
     for j in get(f"https://api.lever.co/v0/postings/{slug}?mode=json"):
         cat = j.get("categories") or {}
         loc = ", ".join(cat.get("allLocations") or [cat.get("location") or ""])
-        posted = datetime.date.fromtimestamp(j["createdAt"] / 1000).isoformat() if j.get("createdAt") else ""
+        posted = datetime.datetime.fromtimestamp(j["createdAt"] / 1000, datetime.timezone.utc).date().isoformat() if j.get("createdAt") else ""
         yield dict(id=f"lv-{slug}-{j['id']}", company=slug, title=j["text"].strip(), location=loc,
                    remote=(j.get("workplaceType") or "").lower() == "remote", posted=posted, link=j["hostedUrl"],
                    text=plain(j.get("descriptionPlain") or j.get("description")))

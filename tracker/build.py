@@ -673,7 +673,7 @@ def init(dest=None):
     made = []
     if not (dest / "config.json").exists():
         cfg = json.loads((here / "config.example.json").read_text(encoding="utf-8"))
-        cfg.update(data_dir="data", backlog="data/backlog.md", status_log="data/jobs.log")
+        cfg.update(data_dir="data", backlog="data/backlog.md", status_log="data/jobs.log", important_repos=[], oss_goal=0, oss_deadline="")
         (dest / "config.json").write_text(json.dumps(cfg, indent=2) + "\n", encoding="utf-8"); made.append("config.json")
     if not (dest / "profile.json").exists():
         shutil.copy(here / "profile.example.json", dest / "profile.json"); made.append("profile.json")
