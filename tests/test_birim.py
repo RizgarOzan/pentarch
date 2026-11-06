@@ -364,6 +364,16 @@ class SesliMesaj(unittest.TestCase):
                              "(voice message, transcribed): yarın toplantı var")
 
 
+
+class ForwardTest(unittest.TestCase):
+    def test_forward_note(self):
+        import pentarch
+        m = {"text": "big claim https://x.io/a", "entities": [{"type": "url", "offset": 10, "length": 14}],
+             "forward_origin": {"type": "channel", "chat": {"title": "News", "username": "news"}, "message_id": 5}}
+        n = pentarch.forward_note(m)
+        self.assertIn("https://t.me/news/5", n); self.assertIn("https://x.io/a", n)
+        self.assertEqual(pentarch.forward_note({"text": "hi"}), "")
+
 if __name__ == "__main__":
     unittest.main()
 
