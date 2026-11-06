@@ -17,6 +17,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 from config import C, HOME, LANG_NAME, T  # noqa: E402
 import agents  # noqa: E402
+import bakis  # noqa: E402
 
 KAYIT = HOME / "magi" / "kayit.jsonl"
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
@@ -135,6 +136,18 @@ def gecmis_ornekler(n=3):
     return "".join(f"\n- Q: {s['soru'][:150]} | Council: {s['karar'][:100]} | Owner: {s['owner'][:150]}" for s in hukumlu)
 
 
+def bakis_uygula(secim):
+    """Gives seats the chosen perspectives in order; with more perspectives than seats, seats take several."""
+    roller = bakis.sec(secim)
+    if not roller:
+        return
+    adlar = list(UYELER)
+    for i, u in enumerate(adlar):
+        bana = roller[i::len(adlar)] or [roller[i % len(roller)]]
+        UYELER[u]["role"] = " ".join(r for _, r in bana)
+        UYELER[u]["bakis"] = "+".join(a for a, _ in bana)
+
+
 def konsey(soru):
     son = time.time() + (C.get("council_timeout") or 900)
     KULLANIM.clear()
@@ -188,5 +201,12 @@ if __name__ == "__main__":
         print(T("Kullanım: magi.py \"soru\"  (koltuklar: ", "Usage: magi.py \"question\"  (seats: ")
               + ", ".join(f"{u}={s.get('kind', 'agent')}" for u, s in UYELER.items()) + ")")
         sys.exit(0)
-    soru = " ".join(sys.argv[1:]) or sys.stdin.read()
+    arg = sys.argv[1:]
+    if arg[:1] == ["--bakis-liste"]:
+        print(bakis.liste())
+        sys.exit(0)
+    if arg[:1] == ["--bakis"] and len(arg) > 1:
+        bakis_uygula(arg[1])
+        arg = arg[2:]
+    soru = " ".join(arg) or sys.stdin.read()
     print(konsey(soru.strip()))
