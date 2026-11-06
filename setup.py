@@ -16,6 +16,8 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+TERMUX = "TERMUX_VERSION" in os.environ  # Android phone without a computer (Termux app)
+
 if sys.version_info < (3, 10):
     sys.exit("Pentarch needs Python 3.10 or newer.")
 
@@ -296,6 +298,26 @@ def shortcut(path, args, icon):
     subprocess.run(["powershell", "-NoProfile", "-Command", ps], env=env, check=True)
 
 
+def wiki_backup(notes):
+    """Optional: the notes folder becomes a git repo pushed to a private repo the owner made; the nightly round pushes."""
+    if not shutil.which("git") or (notes / ".git").exists():
+        return
+    if not yes(t("\n  Wiki'nin geçmişi GitHub'daki özel (private) bir repoya yedeklensin mi?",
+                 "\n  Back up the wiki's history to a private GitHub repo?")):
+        return
+    url = ask(t("  Repo adresi (önce github.com/new'de private repo aç; boş = sadece yerel geçmiş)",
+                "  Repo URL (make a private repo at github.com/new first; empty = local history only)"), "")
+    run = lambda *a: subprocess.run(["git", "-C", str(notes), *a], capture_output=True, text=True)
+    run("init", "-b", "main")
+    run("add", "-A")
+    run("commit", "-m", "wiki started")
+    if url.strip():
+        run("remote", "add", "origin", url.strip())
+        ok = run("push", "-u", "origin", "main").returncode == 0
+        print(t("  Yedeklendi." if ok else "  Push olmadı; git'e giriş yaptığında gece kendisi dener.",
+                "  Backed up." if ok else "  Push failed; once git is logged in, the nightly round retries."))
+
+
 def main():
     global TR
     old = json.loads(CONFIG.read_text(encoding="utf-8")) if CONFIG.exists() else {}
@@ -306,7 +328,7 @@ def main():
     TR = lang == "tr"
     owner = ask(t("Senin adın", "Your name"), old.get("owner", ""))
     name = ask(t("Asistanın adı", "Assistant name"), old.get("name", "Pentarch"))
-    notes = ask(t("Not klasörü (markdown)", "Notes folder (markdown)"), old.get("notes_dir", "~/notes"))
+    notes = ask(t("Not klasörü (markdown)", "Notes folder (markdown)"), old.get("notes_dir", "~/storage/shared/Documents/wiki" if TERMUX else "~/notes"))
 
     HOME.mkdir(parents=True, exist_ok=True)  # agent_test runs inside it
     found = [c for c in CLIS if shutil.which(c)]
@@ -401,6 +423,7 @@ def main():
             import wiki
             made = wiki.kur(notes, cfg["owner"], cfg["name"], lang)
             print(t(f"  Kuruldu: {', '.join(made)}", f"  Created: {', '.join(made)}"))
+    wiki_backup(Path(notes).expanduser())
 
     fill = {"{{APP}}": APP.as_posix(), "{{HOME}}": HOME.as_posix(), "{{NOTES}}": Path(notes).expanduser().as_posix(),
             "{{OWNER}}": cfg["owner"], "{{NAME}}": cfg["name"]}
@@ -429,6 +452,20 @@ def main():
 
     if yes(t("\nPython paketleri kurulsun mu (sesli mesaj ve sesli cevap)?", "\nInstall the Python packages (voice in/out)?"), True):
         subprocess.run([sys.executable, "-m", "pip", "install", "-r", str(REPO / "requirements.txt")])
+
+    if TERMUX:
+        boot = Path.home() / ".termux" / "boot"
+        if yes(t("Telefon açılınca Pentarch başlasın mı (Termux:Boot uygulaması gerekir)?",
+                 "Start Pentarch when the phone boots (needs the Termux:Boot app)?"), True):
+            boot.mkdir(parents=True, exist_ok=True)
+            f = boot / "pentarch.sh"
+            f.write_text(f"#!/data/data/com.termux/files/usr/bin/sh\ntermux-wake-lock\n"
+                         f'nohup python -I "{APP / 'pentarch.py'}" --quiet > "{HOME / 'termux.log'}" 2>&1 &\n', encoding="utf-8")
+            f.chmod(0o755)
+        print(t("  Telefonda: Termux'u pil optimizasyonundan çıkar (Ayarlar > Uygulamalar > Termux > Pil > Kısıtlama yok),"
+                "\n  yoksa Android gece süreci öldürür. Wiki'yi Obsidian ile açmak için klasör: " + notes,
+                "  On the phone: take Termux out of battery optimisation (Settings > Apps > Termux > Battery > Unrestricted),"
+                "\n  or Android kills it at night. To read the wiki in Obsidian, open this folder: " + notes))
 
     if os.name == "nt":
         icon = REPO / "assets" / "pentarch.ico"

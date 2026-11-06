@@ -40,6 +40,24 @@ Start it once by hand, then send any message to your bot. The first chat that wr
 python -I app/pentarch.py
 ```
 
+### On an Android phone, no computer
+
+The phone itself can run it. Install Termux and Termux:Boot from F-Droid (the Play Store build is outdated), then in Termux:
+
+```bash
+pkg install python nodejs git
+termux-setup-storage
+npm i -g @google/gemini-cli
+gemini
+git clone https://github.com/<you>/pentarch.git && cd pentarch && python setup.py
+```
+
+`gemini` once logs you in with a Google account; its free tier is enough. Setup notices Termux, puts the wiki in `Documents/wiki` so Obsidian on the same phone can open it, and offers a boot script so Pentarch starts with the phone. Take Termux out of battery optimisation (Settings > Apps > Termux > Battery > Unrestricted), or Android kills it at night. If you don't have a wiki yet, setup creates an empty one; it can also back its history up to a private GitHub repo you make first.
+
+iPhone can't do this: iOS doesn't let an app keep a server running. Use an old Android phone or any always-on computer instead.
+
+I tested this path on Windows with the Windows-only bits switched off, not on a real phone yet.
+
 ## Configure
 
 `~/.pentarch/pentarch.json` holds the settings; anything you leave out falls back to the defaults in [`app/config.py`](app/config.py). Re-running `python setup.py` is safe and keeps your memory files. The ones you'll most likely touch:
@@ -70,6 +88,9 @@ The prompts are plain markdown in `~/.pentarch`: `kurallar.md` (rules), `profile
 | `key: ENV_NAME=value` | Stores an API key in `secrets/keys.env` and deletes the message; it is never logged or shown to the model |
 | `test` | Runs the end-to-end tests |
 | `internet` / `internet free` / `internet limited` | Quota mode status and switch |
+| `/ekle note` / `/add note` | Drops a note in the wiki's `raw/telefon/`; the nightly round files it into a page |
+| `/sor question` / `/ask question` | Answers from your wiki only, naming the pages it used |
+| `/durum` / `/status` | Last wiki health scan |
 
 From a shell (the agent uses these too): `python -I app/pentarch.py remind "2026-12-01 10:00" "text"`, `task now "job"`, `wait "where" "what"`, `search "word"`.
 

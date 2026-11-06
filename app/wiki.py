@@ -5,6 +5,8 @@
   python wiki.py onar [folder]    harmless fixes only: missing frontmatter fields, unlisted pages into index
   python wiki.py yeniden [folder] [new]  build the recommended layout in a new folder (default <folder>-yeni) and a
                                   report of what moved where; the original is only read
+Telegram (no model): `/ekle <note>` files a note under raw/telefon/, `/durum` shows the last scan. `/sor <question>`
+goes to the model with an instruction to answer from the wiki.
 The folder defaults to notes_dir. Nothing is ever deleted; content changes are left to the owner.
 """
 import difflib
@@ -19,7 +21,7 @@ LINK = re.compile(r"\[\[([^\]|#^\\]+)")
 CODE = re.compile(r"```.*?```|`[^`\n]*`", re.DOTALL)
 FIELDS = ("type", "domain", "tags", "updated")
 FREE = {"index", "log", "overview"}  # pages that need no incoming link or Related line
-MAX_BYTES = 16_000  # a bigger page should be split (Letta block limits, Claude Code memory cut-off)
+MAX_BYTES = 32_000  # a bigger page should be split (Letta block limits, Claude Code memory cut-off)
 CONTRA = re.compile(r"contradicts\s+\[\[([^\]|#]+)")  # typed relation on the Related line (basic-memory)
 # recommended layout (Karpathy LLM wiki + PARA): page type -> folder; anything unknown goes to concepts
 FOLDERS = ("entities", "concepts", "sources", "synthesis", "decisions", "archive")
@@ -231,6 +233,48 @@ def yeniden(folder, new=None):
     return dst / "RAPOR.md"
 
 
+def ekle(folder, text):
+    """A note from the phone: appended to raw/telefon/<date>.md with the time. The nightly round files it."""
+    f = Path(folder).expanduser() / "raw" / "telefon" / f"{date.today().isoformat()}.md"
+    f.parent.mkdir(parents=True, exist_ok=True)
+    with f.open("a", encoding="utf-8") as out:
+        out.write(f"- {datetime.now():%H:%M} {text.strip()}\n")
+    return f
+
+
+def komut(text, folder):
+    """Wiki commands that need no model. Returns the reply, or None when the message isn't one."""
+    t = text.strip()
+    if m := re.fullmatch(r"/(?:ekle|add)\s+(.+)", t, re.S):
+        f = ekle(folder, m.group(1))
+        from config import T
+        return T(f"Eklendi: raw/telefon/{f.name}. Gece wiki'ye işlenir.", f"Added: raw/telefon/{f.name}. Filed into the wiki tonight.")
+    if re.fullmatch(r"/(?:durum|status)", t):
+        return ozet(tara(folder))
+    return None
+
+
+def soru(text):
+    """`/sor x` becomes a prompt that keeps the answer to the wiki; any other text comes back unchanged."""
+    m = re.fullmatch(r"\s*/(?:sor|ask)\s+(.+)", text, re.S)
+    return (f"Answer from the wiki in the notes folder only: search it, read the pages you need and name them as "
+            f"[[page]] after each claim. If the wiki doesn't say, say so in one line. Question: {m.group(1)}") if m else text
+
+
+def yedek(folder):
+    """Nightly: if the notes folder is a git repo, commit what changed and push when there is a remote. Never forces."""
+    import subprocess
+    f = Path(folder).expanduser()
+    if not (f / ".git").exists() or not subprocess.run(["git", "-C", str(f), "remote"], capture_output=True,
+                                                         text=True).stdout.strip():
+        return "-"  # only a folder setup.py (or the owner) connected to a remote
+    run = lambda *a: subprocess.run(["git", "-C", str(f), *a], capture_output=True, text=True,
+                                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    run("add", "-A")
+    made = run("commit", "-q", "-m", f"wiki {date.today().isoformat()}").returncode == 0
+    return "push ok" if run("push", "-q").returncode == 0 else ("push failed" if made else "-")
+
+
 def ozet(findings):
     """One short report line per kind."""
     by = {}
@@ -248,6 +292,10 @@ if __name__ == "__main__":
         print(json.dumps(kur(folder, OWNER, NAME, C.get("lang", "en")), ensure_ascii=False))
     elif cmd == "yeniden":
         print(yeniden(folder, sys.argv[3] if len(sys.argv) > 3 else None) or "hedef klasör zaten var, dokunmadım")
+    elif cmd == "yedek":
+        print(yedek(folder))
+    elif cmd == "ekle":
+        print(ekle(folder, " ".join(sys.argv[3:])))
     elif cmd == "onar":
         print("\n".join(onar(folder)) or "-")
     else:

@@ -406,3 +406,39 @@ class Wiki(unittest.TestCase):
         self.assertIn("6 → 6", rapor.read_text(encoding="utf-8"))
         self.assertTrue((src / "wiki" / "proje-x.md").exists())
         self.assertIsNone(wiki.yeniden(src))
+
+    def test_telefon_komutlari(self):
+        import wiki
+        d = Path(tempfile.mkdtemp())
+        self.assertIn("raw/telefon/", wiki.komut("/ekle süt al", d))
+        self.assertIn("süt al", next((d / "raw" / "telefon").glob("*.md")).read_text(encoding="utf-8"))
+        self.assertIsNone(wiki.komut("merhaba", d))
+        self.assertIn("Question: x", wiki.soru("/sor x"))
+        self.assertEqual(wiki.soru("selam"), "selam")
+
+    def test_yedek(self):
+        import subprocess
+        import wiki
+        d = Path(tempfile.mkdtemp())
+        self.assertEqual(wiki.yedek(d), "-")  # not a repo: nothing happens
+        bare = Path(tempfile.mkdtemp())
+        g = lambda *a, c=d: subprocess.run(["git", "-C", str(c), *a], capture_output=True)
+        g("init", "--bare", c=bare)
+        g("init", "-b", "main")
+        g("config", "user.email", "t@t")
+        g("config", "user.name", "t")
+        g("remote", "add", "origin", str(bare))
+        (d / "a.md").write_text("x", encoding="utf-8")
+        g("add", "-A"); g("commit", "-m", "i"); g("push", "-u", "origin", "main")
+        (d / "b.md").write_text("y", encoding="utf-8")
+        self.assertEqual(wiki.yedek(d), "push ok")
+
+
+class LinuxImport(unittest.TestCase):
+    def test_no_windows_flags(self):
+        import importlib
+        import subprocess
+        with mock.patch.object(subprocess, "CREATE_NO_WINDOW", 0, create=True):
+            delattr(subprocess, "CREATE_NO_WINDOW")
+            for m in ("beyin", "wiki"):
+                importlib.reload(importlib.import_module(m))

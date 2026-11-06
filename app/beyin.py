@@ -72,7 +72,7 @@ class Beyin:
         self.proc = subprocess.Popen(self._args(), cwd=self.cwd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                      env={**os.environ, "CLAUDE_CODE_FORK_SUBAGENT": "0"},  # fork alt ajan bütün oturumu kopyalar
                                      stderr=open(HOME / "beyin.err", "a", encoding="utf-8"), encoding="utf-8",
-                                     errors="replace", creationflags=subprocess.CREATE_NO_WINDOW)
+                                     errors="replace", creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         self.events = queue.Queue()
         threading.Thread(target=self._read, args=(self.proc, self.events), daemon=True).start()
         self.ctx = self.turns = 0
@@ -115,7 +115,7 @@ class Beyin:
     def _kill(self):
         if self._alive():  # claude.CMD -> cmd.exe -> node: yalnız cmd ölürse node yetim kalıp çalışıyordu (2026-11-03)
             subprocess.run(["taskkill", "/T", "/F", "/PID", str(self.proc.pid)], capture_output=True,
-                           creationflags=subprocess.CREATE_NO_WINDOW)
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
             self.kayip = not self.summary
         self.proc = None
 

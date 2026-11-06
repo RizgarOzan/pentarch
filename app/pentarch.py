@@ -110,6 +110,7 @@ CLAUDE = shutil.which("claude") or "claude"
 NOTIF_DB = Path(os.path.expandvars(r"%LOCALAPPDATA%\Microsoft\Windows\Notifications\wpndatabase.db"))
 NOTIF_APPS = C["notify_apps"]  # Windows app id -> label; empty turns notification watching off
 
+NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)  # 0 on Linux/Termux
 PY = f'"{Path(sys.executable).with_name("python.exe") if os.name == "nt" else sys.executable}"'
 LIGHT = "This is an automatic run. Skip the start-up reading (overviews, chat history); read only what the job needs."
 ANSWER = (f"Your last reply goes to {OWNER} on Telegram: in {LANG_NAME}, at most 2 short sentences (about 35 words), "
@@ -230,14 +231,20 @@ and rules, last line {T("[[Uygula|Geç]]", "[[Apply|Skip]]")}. If there are no p
     # semantic layer of memory search: embed the note chunks that changed today (passes quietly when Ollama is off)
     "gom": {"at": "03:30", "run": lambda: subprocess.run([sys.executable, "-I", str(APP / "hafiza.py"), "gom"],
                                                         capture_output=True, timeout=1800,
-                                                        creationflags=subprocess.CREATE_NO_WINDOW) and "-"},
+                                                        creationflags=NO_WINDOW) and "-"},
     # wiki keeper (wiki.py): harmless fixes are applied, anything about content comes back as a question
     "wiki": {"at": "04:10", "model": FAST, "prompt": f"""[Wiki check, {{ts}}] {LIGHT}
 Run `{script("wiki.py", "onar")}` then `{script("wiki.py", "tara")}`. The first applies only harmless fixes (missing
 frontmatter fields, unlisted pages added to the index); the second lists what is still wrong in {NOTES}. Fix nothing
-else yourself and delete nothing. If the list is empty or only "stale", write only `-`. Otherwise tell {OWNER} in at
+else yourself and delete nothing. Then, if raw/telefon/ in {NOTES} has notes from the phone (`/ekle`) that no page
+mentions yet, file each into the page it belongs to (or a new page with frontmatter, linked from the index) and leave
+the raw file as it is. If the list is empty or only "stale" and no note was filed, write only `-`. Otherwise tell {OWNER} in at
 most 4 lines what was fixed and what needs a decision (a broken link: create the page or change the link? an orphan
 page: link it from where?), one concrete suggestion each. {ANSWER}"""},
+    # wiki history: commit and push when the notes folder is a git repo the owner set up (setup.py asks)
+    "wiki_yedek": {"at": "04:40", "run": lambda: subprocess.run([sys.executable, "-I", str(APP / "wiki.py"), "yedek"],
+                                                               capture_output=True, timeout=300,
+                                                               creationflags=NO_WINDOW) and "-"},
     "kesif": {"at": "14:00", "weekday": 3, "model": FAST, "prompt": f"""[Self-improvement round, {{ts}}] {LIGHT}
 Look for new tools for {NAME} itself. First read the last section of {HOME / "discover.md"} (create it if missing).
 Among what came out in the last 7 days (your agent CLI's changelog, agent skills, MCP servers, local models,
@@ -668,7 +675,7 @@ def _run_claude(prompt, model=None, effort=None, resume=True, kind="telegram", l
     sid = session_id() if resume else None
     for args in ([*base, "--resume", sid], base) if sid else (base,):
         p = subprocess.run(args, input=prompt, cwd=NOTES, capture_output=True, encoding="utf-8", env=env,
-                           errors="replace", timeout=CLAUDE_TIMEOUT, creationflags=subprocess.CREATE_NO_WINDOW)
+                           errors="replace", timeout=CLAUDE_TIMEOUT, creationflags=NO_WINDOW)
         try:
             out = json.loads(p.stdout)
         except json.JSONDecodeError:
@@ -1033,6 +1040,8 @@ def ask(texts, source="Telegram"):
     light = texts[0].lstrip().startswith("?")
     if light:
         texts = [texts[0].lstrip()[1:].lstrip(), *texts[1:]]
+    import wiki
+    texts = [wiki.soru(t) for t in texts]
     prompt = f"[{source}, {now()}] {OWNER}:\n" + "\n".join(texts)
     threading.Thread(target=kural_yakala, args=("\n".join(texts),), daemon=True).start()
     # The owner often answers a job/task/notification message the main chat never saw. If the last assistant line
@@ -1354,7 +1363,7 @@ def pr_events():
     The first run only records the state. Spends no tokens."""
     from pr_takip import APPROVED, WAITING
     p = subprocess.run([sys.executable, "-I", str(Path(__file__).with_name("pr_takip.py"))], capture_output=True,
-                       encoding="utf-8", errors="replace", timeout=300, creationflags=subprocess.CREATE_NO_WINDOW)
+                       encoding="utf-8", errors="replace", timeout=300, creationflags=NO_WINDOW)
     lines = [l for l in p.stdout.splitlines() if l.startswith((WAITING, APPROVED))]
     keys = {re.sub(r"\(\d+ (gün önce|days? ago), ", "(", l): l for l in lines}
     old = json.loads(PR_STATE.read_text(encoding="utf-8")) if PR_STATE.exists() else None
@@ -1427,7 +1436,7 @@ def transcribe(path):
     with whisper_lock:
         p = subprocess.run([sys.executable, "-c", WHISPER_KOD, str(path), C["whisper"]["model"],
                             C["whisper"]["language"]], cwd=HOME, capture_output=True, timeout=600,
-                           creationflags=subprocess.CREATE_NO_WINDOW)
+                           creationflags=NO_WINDOW)
         if p.returncode:
             raise RuntimeError(p.stderr.decode("utf-8", "replace").strip()[-300:])
         return p.stdout.decode("utf-8").strip()
@@ -1501,7 +1510,8 @@ def button_text(cb):
 def komut_cevap(text):
     """Commands shared by Telegram and the other gateways that need no model (learning queue, journey)."""
     import ogren
-    return ogren.komut(text, MEMORY_PAGE, lambda satir: hafiza_ekle(("Lessons", "Dersler", "Status", "Durum"), satir))
+    import wiki
+    return wiki.komut(text, NOTES) or ogren.komut(text, MEMORY_PAGE, lambda satir: hafiza_ekle(("Lessons", "Dersler", "Status", "Durum"), satir))
 
 
 def gecit_isle(text, source):
@@ -1758,7 +1768,7 @@ def claude_logged_in():
     for deneme in range(3):
         try:
             p = subprocess.run([CLAUDE, "auth", "status"], capture_output=True, encoding="utf-8",
-                               errors="replace", timeout=60, creationflags=subprocess.CREATE_NO_WINDOW)
+                               errors="replace", timeout=60, creationflags=NO_WINDOW)
             durum = json.loads(p.stdout).get("loggedIn")
             if durum is True:
                 return True
@@ -1871,10 +1881,17 @@ def net_state():
 
 def net_counter():
     """Total bytes received+sent on the physical adapters (Wi-Fi/Ethernet). VPN tunnels ride on Wi-Fi, so they are skipped."""
+    if os.name != "nt":  # Linux/Termux: /proc/net/dev, same skip list
+        try:
+            rows = Path("/proc/net/dev").read_text().splitlines()[2:]
+        except OSError:
+            return 0
+        return sum(int(c[1]) + int(c[9]) for c in (r.replace(":", " ").split() for r in rows)
+                   if not re.match(r"lo|tun|wg|warp|veth|docker", c[0]))
     p = subprocess.run(["powershell", "-NoProfile", "-Command",
                         "(Get-NetAdapterStatistics | ?{$_.Name -notmatch 'WARP|Loopback|vEthernet|Bluetooth'} | "
                         "%{$_.ReceivedBytes+$_.SentBytes} | Measure -Sum).Sum"],
-                       capture_output=True, text=True, timeout=60, creationflags=subprocess.CREATE_NO_WINDOW)
+                       capture_output=True, text=True, timeout=60, creationflags=NO_WINDOW)
     return int(float(p.stdout.strip() or 0))
 
 
@@ -2080,7 +2097,8 @@ def watch_self():
             for B in [*BEYINLER.values(), *KUCUKLER.values()]:  # os._exit doesn't kill children; brains were left orphaned
                 B.close()
             subprocess.Popen([sys.executable, "-I", str(files[0]), "--sessiz", "--bekle"],
-                             creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NO_WINDOW)
+                             start_new_session=os.name != "nt",
+                             creationflags=getattr(subprocess, "DETACHED_PROCESS", 0) | NO_WINDOW)
             time.sleep(1)
             note("kapandı (yenileme)")  # os._exit skips atexit
             os._exit(0)
