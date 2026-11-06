@@ -27,11 +27,19 @@ DEFAULTS = {
         # headless runs cannot answer permission prompts. "acceptEdits" lets the agent edit files but blocks
         # shell commands outside allowed_tools; "bypassPermissions" allows everything (needed by most jobs).
         "permission_mode": "acceptEdits",
+        "bypass_confirmed": False,  # setup sets it after a second yes; only then codex/gemini run without sandbox
         "allowed_tools": ["Read", "Grep", "Glob", "WebSearch", "WebFetch", "Bash(python *)", "Bash(gh *)"],
     },
     # optional OpenAI-compatible endpoint for cheap one-shot work (filters, shortening, council seats).
     # key_env names the environment variable that holds the key; nothing is stored here.
     "chat_api": {"base_url": "", "model": "", "key_env": "PENTARCH_CHAT_KEY"},
+    # ordered list of the same shape, tried one after another: {base_url, model, key_env, fallback_model?,
+    # trusted? | free? | trains_on_data?}. Empty = the single chat_api above.
+    "providers": [],
+    # default_deny: providers not marked "trusted" count as untrusted. Untrusted ones (and every free/trains_on_data
+    # one) get e-mails, phones, IBAN/card numbers masked; block_personal keeps profile/CV/notes away from them.
+    "privacy": {"default_deny": True, "block_personal": True},
+    "council_timeout": 900,        # seconds for a whole council; late seats are dropped
     # council ("konsey: question" in Telegram): each seat is the agent CLI or an OpenAI-compatible endpoint
     "council": [],
     "notify_apps": {},             # Windows notification app id -> label to watch; empty turns watching off

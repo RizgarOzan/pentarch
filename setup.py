@@ -329,6 +329,16 @@ def main():
             "Permission mode: acceptEdits = edits files, shell limited to allowed_tools (safer);\n"
             "                 bypassPermissions = everything allowed (most scheduled jobs need it)."))
     perm = ask(t("İzin modu", "Permission mode"), agent.get("permission_mode", "acceptEdits"), ("acceptEdits", "bypassPermissions"))
+    bypass_ok = False
+    if perm == "bypassPermissions":
+        print(t("  UYARI: bypassPermissions ajana onaysız kabuk komutu çalıştırma izni verir; codex sandbox'sız, gemini yolo"
+                " modunda çalışır. Gelen e-posta ya da web metnindeki bir talimat makinende komut çalıştırabilir.",
+                "  WARNING: bypassPermissions lets the agent run shell commands without asking; codex runs without its"
+                " sandbox and gemini in yolo mode. An instruction hidden in an e-mail or web page could run commands here."))
+        bypass_ok = ask(t("  Onaylamak için 'onaylıyorum' yaz (boş = acceptEdits)", "  Type 'i confirm' to accept (empty = acceptEdits)"),
+                        "").lower() in ("onaylıyorum", "i confirm")
+        if not bypass_ok:
+            perm = "acceptEdits"
 
     SECRETS.mkdir(parents=True, exist_ok=True)
     api = chat_api_setup(old.get("chat_api", {}))
@@ -348,7 +358,7 @@ def main():
 
     cfg = {**old, "owner": owner or "Owner", "name": name or "Pentarch", "lang": lang, "notes_dir": notes,
            "agent": {**agent, "cli": cli, "fast_model": fast, "deep_model": deep, "light_model": light,
-                     "permission_mode": perm},
+                     "permission_mode": perm, "bypass_confirmed": bypass_ok},
            "chat_api": api, "jobs_off": sorted(off), "job_boards": job_boards}
     HOME.mkdir(parents=True, exist_ok=True)
     CONFIG.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")

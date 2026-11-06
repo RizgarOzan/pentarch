@@ -48,6 +48,9 @@ class Beyin:
         self.summary = ""
         self.cwd = WIKI
         self.ofset = 0  # konusma.log'un bu oturumun gördüğü yeri (bayt); pentarch.py arada geçeni ekler
+        # Süreç özetsiz öldü (iptal, zaman aşımı, çökme): yeni süreç konuşmayı hiç görmemiş olur ama ofset son cevabı
+        # gösterir, pentarch.py yalnız aradakini ekler. ask_v2 bunu görünce ofseti sıfırlar, son konuşma günlükten gelir.
+        self.kayip = False
 
     def _args(self):
         args = [CLAUDE, "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
@@ -96,6 +99,7 @@ class Beyin:
                 self._kill()
                 raise TimeoutError(f"beyin {timeout} sn içinde cevap vermedi")
             if ev is None:
+                self.kayip = not self.summary
                 raise RuntimeError("beyin süreci beklenmedik şekilde kapandı, ayrıntı beyin.err")
             if ev.get("type") == "assistant":
                 u = ev.get("message", {}).get("usage") or {}
@@ -109,6 +113,7 @@ class Beyin:
         if self._alive():  # claude.CMD -> cmd.exe -> node: yalnız cmd ölürse node yetim kalıp çalışıyordu (2026-11-03)
             subprocess.run(["taskkill", "/T", "/F", "/PID", str(self.proc.pid)], capture_output=True,
                            creationflags=subprocess.CREATE_NO_WINDOW)
+            self.kayip = not self.summary
         self.proc = None
 
     def rotate(self, summarize=True):
@@ -176,9 +181,12 @@ class Kucuk(Beyin):
                 "--disable-slash-commands", "--no-session-persistence", "--system-prompt", self.sistem]
 
     def sor(self, text, timeout=60):
-        if agents.has_chat_api():  # ayarlıysa ucuz uç nokta; claude süreci hiç açılmaz
-            return {"result": agents.chat([{"role": "system", "content": self.sistem},
-                                           {"role": "user", "content": text}], timeout=timeout), "total_cost_usd": 0}
+        if agents.has_chat_api():  # ayarlıysa ucuz uç noktalar sırayla; hepsi düşerse ajan CLI'ye geçilir
+            try:
+                return {"result": agents.chat([{"role": "system", "content": self.sistem},
+                                               {"role": "user", "content": text}], timeout=timeout), "total_cost_usd": 0}
+            except Exception as e:
+                self.log(f"küçük: API sağlayıcıları düştü, CLI'ye geçiliyor ({str(e)[:200]})")
         if agents.CLI != "claude":
             return agents.run_other(self.sistem + "\n\n" + text, C["agent"]["light_model"] or None, timeout)
         with self.lock:
@@ -195,7 +203,7 @@ class Tek:
 
     def __init__(self, model=None, effort=None, log=print, ilk=None):
         self.model, self.log, self.ilk = model, log, ilk
-        self.gorulen, self.ofset, self.turns, self.ctx, self.summary = set(), 0, 0, 0, ""
+        self.gorulen, self.ofset, self.turns, self.ctx, self.summary, self.kayip = set(), 0, 0, 0, "", False
         self.lock = threading.Lock()
 
     def ask(self, text, timeout=900, ek=None):

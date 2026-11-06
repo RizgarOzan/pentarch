@@ -5,6 +5,7 @@ A task run is matched to the oldest unfinished "görev başlıyor" line (approxi
 A scheduled run is matched to the last "zamanlı iş: X" line before it.
 (The core writes these log lines in Turkish; they are internal markers, not user-facing text.)
 """
+import json
 import re
 import sys
 from collections import defaultdict
@@ -15,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from config import HOME, T  # noqa: E402
 
 LOG = HOME / "pentarch.log"
+KAYIT = HOME / "magi" / "kayit.jsonl"  # councils record per-seat API token usage (no $ price: free tiers vary)
 RUN = re.compile(r"^(\S+) (\d\d):\d\d:\d\d koşu (\S+?): .*?(\d+)k token, ([\d.]+)\$")
 
 
@@ -70,6 +72,14 @@ def main():
     print(T(f"En pahalı {top} koşu:", f"Top {top} runs by cost:"))
     for usd, label in sorted(items, reverse=True)[:top]:
         print(f"  {usd:.2f}$  {label}")
+    seats = defaultdict(int)
+    for line in KAYIT.read_text(encoding="utf-8").splitlines() if KAYIT.exists() else []:
+        k = json.loads(line) if line.strip() else {}
+        if k.get("zaman", "").startswith(day):
+            for seat, u in (k.get("kullanim") or {}).items():
+                seats[seat] += u.get("prompt_tokens", 0) + u.get("completion_tokens", 0)
+    if seats:
+        print(T("Konsey API tokenleri: ", "Council API tokens: ") + ", ".join(f"{s} {n // 1000}k" for s, n in seats.items()))
 
 
 if __name__ == "__main__":
