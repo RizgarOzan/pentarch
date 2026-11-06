@@ -394,3 +394,15 @@ class Wiki(unittest.TestCase):
         kinds = {f["kind"] for f in wiki.tara(d)}
         self.assertFalse({"frontmatter", "unindexed"} & kinds)
         self.assertIn("broken_link", kinds)  # content is left to the owner
+
+    def test_yeniden(self):
+        import wiki
+        src = Path(tempfile.mkdtemp())
+        wiki.kur(src, "a", "b", "tr")
+        (src / "wiki" / "proje-x.md").write_text("---\ntype: project\n---\n# x\n", encoding="utf-8")
+        dst = src.with_name(src.name + "-yeni")
+        rapor = wiki.yeniden(src)
+        self.assertTrue((dst / "wiki" / "entities" / "proje-x.md").exists())
+        self.assertIn("6 → 6", rapor.read_text(encoding="utf-8"))
+        self.assertTrue((src / "wiki" / "proje-x.md").exists())
+        self.assertIsNone(wiki.yeniden(src))
