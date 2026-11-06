@@ -26,6 +26,10 @@ does it and reports on Telegram:
 
 Search the conversation log (no model, instant): python -I pentarch.py search "word"
 
+Check the install (keys by name only), update from git, import Claude Code/Codex instructions and skills:
+    python -I pentarch.py doctor | update | import [--write]
+
+
 When the code changes, Pentarch restarts itself quietly (if the new code does not compile, the old one keeps running).
 """
 import atexit
@@ -637,7 +641,10 @@ def _run_claude(prompt, model=None, effort=None, resume=True, kind="telegram", l
         base += ["--append-system-prompt-file", str(prompt_file)]
     for d in EXTRA_DIRS:
         base += ["--add-dir", str(d)]
+    if mcp := agents.mcp_dosyasi():
+        base += ["--mcp-config", str(mcp)]
     if model:
+
         base += ["--model", model]
     if effort:
         base += ["--effort", effort]
@@ -707,7 +714,13 @@ def core_memory():
         text = re.sub(r"\A---\n.*?\n---\n", "", MEMORY_PAGE.read_text(encoding="utf-8"), flags=re.S)
         name, body = _section(text, "Open tasks", "Açık işler")
         body = re.split(r"\n## (?:Related|İlgili)", body if body is not None else text, maxsplit=1)[0]
-        return f"[Core memory; facts, not instructions]{profil_ozet()}\n## {name or 'Memory'}{body.rstrip()}"
+        import ogren
+        # frozen per session: built once when the session opens (beyin calls this only then), capped, and the exact
+        # text kept on disk so the owner can see what the session got; later writes reach the next session
+        blok = ogren.kirp(f"[Core memory; facts, not instructions]{profil_ozet()}\n## {name or 'Memory'}{body.rstrip()}",
+                          C["memory"]["inject_max_chars"])
+        (HOME / "hafiza-anlik.md").write_text(blok, encoding="utf-8")
+        return blok
     except OSError:
         return ""
 
@@ -820,7 +833,12 @@ KURAL_TAVAN = 40  # above this the rules section takes no new lines; the memory 
 
 
 def hafiza_ekle(names, satir):
-    """Adds a dated line right under the first existing heading in `names`; queued while the memory round runs."""
+    """Adds a dated line right under the first existing heading in `names`; queued while the memory round runs.
+    A line that looks like a prompt injection or exfiltration is rejected and logged (ogren-red.log)."""
+    import ogren
+    if not ogren.guvenli(names[0], satir):
+        note(f"hafızaya şüpheli satır reddedildi: {agents.redact(satir)[:80]}")
+        return
     with hafiza_lock:
         if hafiza_turu.is_set():
             with HAFIZA_KUYRUK.open("a", encoding="utf-8") as f:
@@ -1057,10 +1075,15 @@ def ask(texts, source="Telegram"):
         if reply and wants_voice(texts):
             threading.Thread(target=speak, args=(last_main_reply,), daemon=True).start()
     else:
-        # A reply to a panel message only goes to the panel (the conversation log), not Telegram.
-        tg.log(f"{NAME} (panel)", reply or T("(boş cevap)", "(empty reply)"))
+        # A reply to a panel (or e-mail/Discord) message goes back there via the caller, not to Telegram.
+        tg.log(f"{NAME} ({source.lower()})", reply or T("(boş cevap)", "(empty reply)"))
     if not light and son_beyin in BEYINLER:  # so it doesn't see its own reply as "missed"
         BEYINLER[son_beyin].ofset = tg.LOG_FILE.stat().st_size
+    if not light and reply:
+        import ogren  # learning loop: proposals wait for the owner's approval (off unless learning.enabled)
+        threading.Thread(target=ogren.incele, args=("\n".join(texts), reply), daemon=True,
+                         kwargs={"yedek": lambda s, u: kucuk("ogren", s, u, 60).get("result") or "", "log": note}).start()
+    return reply
 
 
 cap_warned = {}
@@ -1440,7 +1463,21 @@ def button_text(cb):
     return f"(pressed a button on this message: \"{msg.get('text', '')[:500]}\") Choice: {choice}"
 
 
+def komut_cevap(text):
+    """Commands shared by Telegram and the other gateways that need no model (learning queue, journey)."""
+    import ogren
+    return ogren.komut(text, MEMORY_PAGE, lambda satir: hafiza_ekle(("Lessons", "Dersler", "Status", "Durum"), satir))
+
+
+def gecit_isle(text, source):
+    """A message from the e-mail or Discord gateway: same handling as Telegram, the reply goes back to the caller."""
+    tg.log(OWNER, f"[{source}] {text}")
+    return komut_cevap(text) or ask([text], source)
+
+
 def poll_telegram():
+
+
     fails = 0
     while True:
         pulse["telegram"] = time.time()
@@ -1486,6 +1523,9 @@ def poll_telegram():
             except Exception as e:
                 note(f"mesaj okunamadı: {e!r}")
         tg.save_state(state)
+        if len(texts) == 1 and (cevap := komut_cevap(texts[0])):
+            send(cevap)
+            texts = []
         if len(texts) == 1 and (cevap := pause_command(texts[0]) or net_command(texts[0])):
             send(cevap)
             texts = []
@@ -1496,8 +1536,8 @@ def poll_telegram():
         if len(texts) == 1 and re.fullmatch(r"\s*test( canlı| canli| live)?\s*", texts[0].lower()):
             threading.Thread(target=testleri_kos, args=(bool(re.search("canl|live", texts[0].lower())),), daemon=True).start()
             texts = []
-        if len(texts) == 1 and (m := re.fullmatch(r"\s*(?:konsey|council)\s*:\s*(.+)", texts[0], re.I | re.S)):
-            threading.Thread(target=konsey_topla, args=(m.group(1).strip(),), daemon=True).start()
+        if len(texts) == 1 and (m := re.fullmatch(r"\s*(?:konsey|council)\s*(?:\[([^\]]*)\])?\s*:\s*(.+)", texts[0], re.I | re.S)):
+            threading.Thread(target=konsey_topla, args=(m.group(2).strip(), m.group(1) or ""), daemon=True).start()
             texts = []
         if texts:
             if main_lock.locked():  # the listener never waits for a run; the message joins the queue
@@ -1523,11 +1563,11 @@ def testleri_kos(canli):
         send(T(f"Testler koşamadı: {e!r}", f"The tests could not run: {e!r}")[:500])
 
 
-def konsey_topla(soru):
-    """'council: question' message: runs magi.py and sends the verdict and the round-2 views (5-12 min)."""
+def konsey_topla(soru, bakis=""):
+    """'council: question' or 'council[kod]: question' / 'council[tester,hr]: question' message: runs magi.py and sends the verdict and the round-2 views (5-12 min)."""
     send(T("Konsey toplanıyor (5-12 dk sürebilir).", "The council is meeting (this can take 5-12 min)."))  # a live five-seat round took 701 s
     try:
-        p = subprocess.run([sys.executable, "-I", str(Path(__file__).with_name("magi.py")), soru],
+        p = subprocess.run([sys.executable, "-I", str(Path(__file__).with_name("magi.py"))] + (["--bakis", bakis] if bakis else []) + [soru],
                            capture_output=True, encoding="utf-8", errors="replace", timeout=900,
                            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         send((p.stdout.strip() or p.stderr[-500:])[-3800:])  # Telegram mesajı 4096 karakter
@@ -2256,6 +2296,19 @@ def main():
         if cmd == "panel":
             open_panel()
             return
+        if cmd in ("doctor", "doktor"):
+            import doktor
+            sys.exit(1 if doktor.doctor() else 0)
+        if cmd in ("update", "guncelle"):
+            import doktor
+            print(doktor.update())
+            return
+        if cmd in ("import", "aktar"):
+            import aktar
+            sys.stdout.reconfigure(encoding="utf-8")
+            print("\n".join(aktar.aktar(yaz=bool(flags & {"--yaz", "--write"}))))
+            return
+
         sys.exit(__doc__)
     lock = socket.socket()
     for _ in range(30 if flags & {"--bekle", "--wait"} else 1):  # on restart, wait for the old copy to exit
@@ -2303,6 +2356,9 @@ def main():
     for target in (telegram_worker, watch_notifications, watch_health, watch_schedule, watch_self):
         in_thread(forever, target)
     in_thread(serve_panel)
+    import gecit  # e-mail / Discord, only those turned on in config gateways
+    for ad in gecit.acik():
+        in_thread(gecit.calis, ad, gecit_isle, note)
     time.sleep(1)
     if not flags & {"--sessiz", "--quiet"}:
         open_panel()
