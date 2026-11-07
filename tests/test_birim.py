@@ -442,3 +442,41 @@ class LinuxImport(unittest.TestCase):
             delattr(subprocess, "CREATE_NO_WINDOW")
             for m in ("beyin", "wiki"):
                 importlib.reload(importlib.import_module(m))
+
+
+class Yardimcilar(unittest.TestCase):
+    def test_dagitim_ve_rol(self):
+        import agents
+        import alt
+        cagri = []
+
+        def kos(g, model, cli=None):
+            cagri.append(cli)
+            return {"result": g, "is_error": cli == "codex"}
+        alt.tek, eski = kos, alt.tek
+        try:
+            with mock.patch.dict(alt.C["agent"], {"workers": ["gemini", "codex"]}), \
+                    mock.patch.object(agents, "CLI", "claude"):
+                r = alt.paralel(["arastirmaci: a", "b", "kodcu: c"], n=3, kos=kos)
+        finally:
+            alt.tek = eski
+        self.assertIn("[Role: arastirmaci]", r[0]["result"])
+        self.assertEqual(r[1].get("retried_from"), "codex")  # failed helper redone on claude
+        self.assertEqual(r[2]["result"].count("[Role: kodcu]"), 1)
+        self.assertNotIn("codex", [c for c in cagri[-1:]])
+        self.assertIn("claude", cagri)
+
+    def test_other_cmd_cli(self):
+        import agents
+        self.assertEqual(agents.other_cmd("x", cli="opencode")[1:], ["run", "x"])
+
+    def test_yedek_yerel_ve_bot_adi(self):
+        import subprocess
+        import wiki
+        d = Path(tempfile.mkdtemp())
+        g = lambda *a: subprocess.run(["git", "-C", str(d), *a], capture_output=True)
+        g("init", "-b", "main"); g("config", "user.email", "t@t"); g("config", "user.name", "t")
+        (d / "a.md").write_text("x", encoding="utf-8")
+        self.assertEqual(wiki.yedek(d), "commit")  # no remote: local history still grows
+        self.assertEqual(wiki.yedek(d), "-")
+        self.assertIn("raw/telefon/", wiki.komut("/ekle@PentarchBot not", d))

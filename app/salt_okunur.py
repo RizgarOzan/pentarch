@@ -39,13 +39,13 @@ def reason(tool, command):
         return None
     if tool in ("Bash", "PowerShell"):
         c = re.sub(r"\s+", " ", command or "")
-        if re.search(r"git\s+push\b", c, re.I):
+        if re.search(r"\bgit\b[^;&|]*\bpush\b", c, re.I):
             return "git push"
-        if not TASK and re.search(r"git\s+commit\b", c, re.I):
+        if not TASK and re.search(r"\bgit\b[^;&|]*\bcommit\b", c, re.I):
             return "git commit"
-        if re.search(r"gh\s+(pr|issue|release)\s+(create|comment|merge|close|edit|review)\b", c, re.I):
+        if re.search(r"\bgh\b[^;&|]*\b(pr|issue|release)\s+(create|comment|merge|close|edit|review)\b", c, re.I):
             return "writing PRs/issues with gh"
-        if re.search(r"gh\s+api\s.*(-X|--method)\s+(POST|PUT|PATCH|DELETE)\b", c, re.I):
+        if re.search(r"\bgh\b[^;&|]*\bapi\s.*(-X|--method)\s+(POST|PUT|PATCH|DELETE)\b", c, re.I):
             return "writing through gh api"
     return None
 
@@ -56,8 +56,8 @@ def main():
     try:
         inp = json.loads(sys.stdin.buffer.read().decode("utf-8", "replace"))
         why = reason(str(inp.get("tool_name") or ""), str((inp.get("tool_input") or {}).get("command") or ""))
-    except Exception:
-        return
+    except Exception as e:
+        why = f"an unreadable tool call ({type(e).__name__})"  # fail closed: a hook that can't read the call blocks it
     if not why:
         return
     if TASK:

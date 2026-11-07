@@ -32,7 +32,7 @@ cd pentarch
 python setup.py
 ```
 
-Setup asks for your name, the assistant's name, the language (English or Turkish; the setup itself switches too), your notes folder, which agent CLI and models to use (it lists the ones it finds on PATH), and your Telegram bot token (make a bot with @BotFather, `/newbot`). It checks each connection as you go: it sends the agent a one-word test so a missing login shows up now, asks Telegram who the bot is, and lists the models an optional API answers with. For that API you pick OpenRouter, Groq, Ollama, LM Studio or your own URL; it tells you where to get a key and keeps it in `~/.pentarch/secrets/keys.env`. Everything goes to `~/.pentarch`, never to the repo, and it adds a startup shortcut.
+Setup asks for your name, the assistant's name, the language (English or Turkish; the setup itself switches too), your notes folder, which agent CLI and models to use (it lists the ones it finds on PATH), and your Telegram bot token (make a bot with @BotFather, `/newbot`). It then shows a short code; send the bot `/start <code>` so only you can claim it. It checks each connection as you go: it sends the agent a one-word test so a missing login shows up now, asks Telegram who the bot is, and lists the models an optional API answers with. For that API you pick OpenRouter, Groq, Ollama, LM Studio or your own URL; it tells you where to get a key and keeps it in `~/.pentarch/secrets/keys.env`. Everything goes to `~/.pentarch`, never to the repo, and it adds a startup shortcut.
 
 Start it once by hand, then send any message to your bot. The first chat that writes becomes the owner; messages from anyone else are ignored.
 
@@ -45,18 +45,22 @@ python -I app/pentarch.py
 The phone itself can run it. Install Termux and Termux:Boot from F-Droid (the Play Store build is outdated), then in Termux:
 
 ```bash
-pkg install python nodejs git
+pkg install python nodejs git ripgrep
 termux-setup-storage
-npm i -g @google/gemini-cli
+npm i -g @google/gemini-cli --ignore-scripts
 gemini
 git clone https://github.com/<you>/pentarch.git && cd pentarch && python setup.py
 ```
 
-`gemini` once logs you in with a Google account; its free tier is enough. Setup notices Termux, puts the wiki in `Documents/wiki` so Obsidian on the same phone can open it, and offers a boot script so Pentarch starts with the phone. Take Termux out of battery optimisation (Settings > Apps > Termux > Battery > Unrestricted), or Android kills it at night. If you don't have a wiki yet, setup creates an empty one; it can also back its history up to a private GitHub repo you make first.
+`--ignore-scripts` skips a native build that fails on Termux. If Gemini's search later says `spawn rg ENOENT`, link Termux's ripgrep over the bundled one. Run `gemini` once and log in with a Google account, not an API key: the login gives about 1,000 requests a day and 60 a minute, a free key only 250 a day. Setup notices Termux, puts the wiki in `Documents/wiki` so Obsidian on the same phone can open it, and offers a boot script so Pentarch starts with the phone. Take Termux out of battery optimisation (Settings > Apps > Termux > Battery > Unrestricted), or Android kills it at night. On Android 14 and later also turn on Developer options > "Disable child process restrictions"; Android 12-13 need an adb command for the same thing. Open the Termux:Boot app once, or it never runs the boot script. The boot script restarts Pentarch 30 seconds after it dies. If you don't have a wiki yet, setup creates an empty one; it can also back its history up to a private GitHub repo you make first.
 
 iPhone can't do this: iOS doesn't let an app keep a server running. Use an old Android phone or any always-on computer instead.
 
 I tested this path on Windows with the Windows-only bits switched off, not on a real phone yet.
+
+### Claude leads, helpers widen
+
+Set `agent.cli` to `claude` and list helper CLIs in `agent.workers` (for example `["gemini", "codex"]`). Claude stays the one you talk to and the one that decides. When a job splits, it runs `alt.py` with up to `agent.max_parallel` subtasks (8 by default) spread over the helpers, and checks each answer before using it. A helper that fails gets its task redone on Claude. Tasks can start with a ready role (`arastirmaci:`, `okuyucu:`, `hata_avcisi:`, `testci:`, `elestirmen:`, `yazar:`, `ozetci:`, `wiki:`, `veri:` and more; `python -I app/alt.py --roller` lists them). Judgement roles (`kodcu`, `guvenlik`, `dogrulayici`, `planlayici`) always stay on Claude.
 
 ## Configure
 
@@ -67,7 +71,7 @@ I tested this path on Windows with the Windows-only bits switched off, not on a 
 | `agent.cli`, `fast_model`, `deep_model`, `light_model` | Which agent and models do the work |
 | `agent.permission_mode` | `acceptEdits` (safer) or `bypassPermissions` (most routines need it) |
 | `chat_api` | Any OpenAI-compatible endpoint for cheap one-shot work: OpenRouter, Groq, Ollama, LM Studio. The key comes from the env var named in `key_env` or `~/.pentarch/secrets/keys.env` |
-| `council` | Seats for the council. Add them with `python -I app/koltuk.py add NAME --preset openrouter\|groq\|nvidia\|ollama\|lmstudio` (or `--agent`), or tell the bot "add a seat to the council". Each seat is `{"name", "kind": "agent"\|"openai", "model", "base_url", "key_env", "role"}`; `"model": "a,b"` tries `b` when `a` is rate-limited (OpenRouter) |
+| `council` | Seats for the council. Add them with `python -I app/koltuk.py add NAME --preset openrouter|groq|nvidia|freellmapi|ollama|lmstudio`\|groq\|nvidia\|ollama\|lmstudio` (or `--agent`), or tell the bot "add a seat to the council". Each seat is `{"name", "kind": "agent"\|"openai", "model", "base_url", "key_env", "role"}`; `"model": "a,b"` tries `b` when `a` is rate-limited (OpenRouter) |
 | `notify_apps` | Windows notification app id → label, e.g. `{"com.squirrel.Teams.Teams": "Teams"}` |
 | `jobs_off` | Routines that start switched off: `insa` (nightly self-build) and `posta` (mail check). Setup asks about both, and the panel's Settings turns any routine on or off later |
 | `opportunities`, `job_boards` | Filters for the hackathon/job watch; see the top of `app/firsat.py` and `app/kariyer.py` |
@@ -172,6 +176,6 @@ Kurulum adını, asistanın adını, dili (Türkçe ya da İngilizce; seçince k
 
 **Ayarlar:** `~/.pentarch/pentarch.json`. Yazmadığın her şey [`app/config.py`](app/config.py) içindeki varsayılana düşer. Komutlar ve ayar anahtarları yukarıdaki İngilizce tablolarda; Türkçe karşılıkları da çalışır (`iptal`, `durdur 2 saat`, `konsey: soru`, `internet serbest`).
 
-**Konsey koltukları:** `python -I app/koltuk.py add AD --preset openrouter` (ya da `groq`, `nvidia`, `ollama`, `lmstudio`, `custom`, `--agent`), `list`, `test AD`, `remove AD`. Bota "konseye koltuk ekle" demek de yeter. Anahtarı sohbete yazma; `koltuk.py key DEGISKEN` ile ya da bota `anahtar: DEGISKEN=değer` mesajıyla ver, bot kaydedip mesajı siler.
+**Konsey koltukları:** `python -I app/koltuk.py add AD --preset openrouter|groq|nvidia|freellmapi|ollama|lmstudio`` (ya da `groq`, `nvidia`, `ollama`, `lmstudio`, `custom`, `--agent`), `list`, `test AD`, `remove AD`. Bota "konseye koltuk ekle" demek de yeter. Anahtarı sohbete yazma; `koltuk.py key DEGISKEN` ile ya da bota `anahtar: DEGISKEN=değer` mesajıyla ver, bot kaydedip mesajı siler.
 
 **Güvenlik:** API modeline (`chat_api` ya da `openai` konsey koltuğu) giden metindeki `keys.env` değerleri ve bilinen anahtar biçimleri `[secret]` ile değiştirilir; ajan CLI'ına metin olduğu gibi gider. Makineden dışarı nereye bağlandığı yukarıdaki "Where it connects" tablosunda.

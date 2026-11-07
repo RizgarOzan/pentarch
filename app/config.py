@@ -28,7 +28,12 @@ DEFAULTS = {
         # shell commands outside allowed_tools; "bypassPermissions" allows everything (needed by most jobs).
         "permission_mode": "acceptEdits",
         "bypass_confirmed": False,  # setup sets it after a second yes; only then codex/gemini run without sandbox
-        "allowed_tools": ["Read", "Grep", "Glob", "WebSearch", "WebFetch", "Bash(python *)", "Bash(gh *)"],
+        # helpers for parallel subtasks (alt.py): e.g. ["gemini", "codex"]. The main agent hands them work and
+        # checks what comes back; empty = subtasks run on the main CLI too.
+        "workers": [],
+        "max_parallel": 8,         # subtasks running at once (alt.py)
+        "allowed_tools": ["Read", "Grep", "Glob", "WebSearch", "WebFetch", "Bash(python *)", "Bash(gh pr view *)", "Bash(gh pr list *)", "Bash(gh pr diff *)",
+                          "Bash(gh issue view *)", "Bash(gh issue list *)", "Bash(gh repo view *)", "Bash(gh api *)"],
     },
     # optional OpenAI-compatible endpoint for cheap one-shot work (filters, shortening, council seats).
     # key_env names the environment variable that holds the key; nothing is stored here.
@@ -104,6 +109,13 @@ OWNER, NAME, LANG = C["owner"], C["name"], C["lang"]
 NOTES = Path(C["notes_dir"]).expanduser()
 EXTRA_DIRS = [Path(d).expanduser() for d in C["extra_dirs"]]
 LANG_NAME = {"tr": "Turkish", "en": "English"}.get(LANG, "English")
+
+
+def allowed_tools(tools):
+    """`Bash(python *)` (also in older configs) becomes Pentarch's own scripts only; `python -c ...` is not allowed."""
+    app = Path(__file__).resolve().parent.as_posix()
+    own = f'Bash(python -I "{app}/*)'
+    return ",".join(own if t == "Bash(python *)" else "Bash(gh pr view *)" if t == "Bash(gh *)" else t for t in tools)
 
 
 def T(tr, en):

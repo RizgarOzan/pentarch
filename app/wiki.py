@@ -244,7 +244,7 @@ def ekle(folder, text):
 
 def komut(text, folder):
     """Wiki commands that need no model. Returns the reply, or None when the message isn't one."""
-    t = text.strip()
+    t = re.sub(r"^(/\w+)@\w+", r"\1", text.strip())  # /ekle@BotName in groups
     if m := re.fullmatch(r"/(?:ekle|add)\s+(.+)", t, re.S):
         f = ekle(folder, m.group(1))
         from config import T
@@ -265,14 +265,17 @@ def yedek(folder):
     """Nightly: if the notes folder is a git repo, commit what changed and push when there is a remote. Never forces."""
     import subprocess
     f = Path(folder).expanduser()
-    if not (f / ".git").exists() or not subprocess.run(["git", "-C", str(f), "remote"], capture_output=True,
-                                                         text=True).stdout.strip():
-        return "-"  # only a folder setup.py (or the owner) connected to a remote
+    if not (f / ".git").exists():
+        return "-"  # only a folder setup.py (or the owner) put under git
     run = lambda *a: subprocess.run(["git", "-C", str(f), *a], capture_output=True, text=True,
                                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     run("add", "-A")
-    made = run("commit", "-q", "-m", f"wiki {date.today().isoformat()}").returncode == 0
-    return "push ok" if run("push", "-q").returncode == 0 else ("push failed" if made else "-")
+    changed = bool(run("status", "--porcelain").stdout.strip())
+    if changed and run("commit", "-q", "-m", f"wiki {date.today().isoformat()}").returncode != 0:
+        return "commit failed"  # e.g. no git identity: say so instead of a silent "-"
+    if not run("remote").stdout.strip():
+        return "commit" if changed else "-"  # local history only
+    return "push ok" if run("push", "-q").returncode == 0 else "push failed"
 
 
 def ozet(findings):

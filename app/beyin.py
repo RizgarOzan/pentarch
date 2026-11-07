@@ -15,6 +15,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 import agents  # noqa: E402
+import config  # noqa: E402
 from config import C, EXTRA_DIRS, HOME, NOTES, OWNER  # noqa: E402
 
 RULES = HOME / "kurallar.md"
@@ -58,7 +59,7 @@ class Beyin:
                 "--strict-mcp-config", "--setting-sources", "", "--tools", TOOLS,
                 "--append-system-prompt-file", str(RULES)]
         if C["agent"]["permission_mode"] != "bypassPermissions":
-            args += ["--allowedTools", ",".join(C["agent"]["allowed_tools"])]
+            args += ["--allowedTools", config.allowed_tools(C["agent"]["allowed_tools"])]
         if C["desktop_control"] and MASAUSTU.exists():
             args += ["--mcp-config", str(MASAUSTU)]
         if mcp := agents.mcp_dosyasi():

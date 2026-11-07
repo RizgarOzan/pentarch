@@ -175,6 +175,15 @@ def telegram_setup():
                     f"  ! Could not reach Telegram ({type(e).__name__}); saving the token unchecked."))
             break
     tok.write_text(tk + "\n", encoding="utf-8")
+    tok.chmod(0o600)
+    pair = SECRETS / "telegram-pair.txt"
+    if not pair.exists():
+        import secrets as _s
+        pair.write_text(_s.token_hex(4), encoding="utf-8")
+        pair.chmod(0o600)
+    code = pair.read_text(encoding="utf-8").strip()
+    print(t(f"  Bota Telegram'dan şunu yaz: /start {code}  (bu kodu bilmeyen bota sahip olamaz)",
+            f"  In Telegram, send the bot: /start {code}  (without this code nobody else can claim it)"))
 
 
 def agent_test(cli):
@@ -309,8 +318,13 @@ def wiki_backup(notes):
                 "  Repo URL (make a private repo at github.com/new first; empty = local history only)"), "")
     run = lambda *a: subprocess.run(["git", "-C", str(notes), *a], capture_output=True, text=True)
     run("init", "-b", "main")
+    if not run("config", "user.email").stdout.strip():  # a fresh phone has no git identity; commits would fail
+        run("config", "user.name", "Pentarch")
+        run("config", "user.email", "pentarch@localhost")
     run("add", "-A")
-    run("commit", "-m", "wiki started")
+    if run("commit", "-m", "wiki started").returncode != 0:
+        print(t("  Commit olmadı; wiki geçmişi başlamadı.", "  Commit failed; the wiki history didn't start."))
+        return
     if url.strip():
         run("remote", "add", "origin", url.strip())
         ok = run("push", "-u", "origin", "main").returncode == 0
@@ -459,13 +473,21 @@ def main():
                  "Start Pentarch when the phone boots (needs the Termux:Boot app)?"), True):
             boot.mkdir(parents=True, exist_ok=True)
             f = boot / "pentarch.sh"
-            f.write_text(f"#!/data/data/com.termux/files/usr/bin/sh\ntermux-wake-lock\n"
-                         f'nohup python -I "{APP / 'pentarch.py'}" --quiet > "{HOME / 'termux.log'}" 2>&1 &\n', encoding="utf-8")
+            py, log = APP / "pentarch.py", HOME / "termux.log"
+            # restart loop: a crash or Android's process killer doesn't leave it dead until the next reboot
+            f.write_text("#!/data/data/com.termux/files/usr/bin/sh\ntermux-wake-lock\n"
+                         f"nohup sh -c 'while true; do python -I \"{py}\" --quiet; sleep 30; done' >> '{log}' 2>&1 &\n",
+                         encoding="utf-8")
             f.chmod(0o755)
         print(t("  Telefonda: Termux'u pil optimizasyonundan çıkar (Ayarlar > Uygulamalar > Termux > Pil > Kısıtlama yok),"
-                "\n  yoksa Android gece süreci öldürür. Wiki'yi Obsidian ile açmak için klasör: " + notes,
+                "\n  yoksa Android gece süreci öldürür. Android 14+: Geliştirici seçenekleri > 'Alt süreç kısıtlamalarını devre dışı bırak'"
+                "\n  aç. Termux:Boot uygulamasını bir kere aç. Wiki'yi Obsidian ile açmak için klasör: " + notes,
                 "  On the phone: take Termux out of battery optimisation (Settings > Apps > Termux > Battery > Unrestricted),"
-                "\n  or Android kills it at night. To read the wiki in Obsidian, open this folder: " + notes))
+                "\n  or Android kills it at night. Android 14+: Developer options > 'Disable child process restrictions'."
+                "\n  Open the Termux:Boot app once. To read the wiki in Obsidian, open this folder: " + notes))
+        if not (Path.home() / "storage").exists():
+            print(t("  UYARI: önce `termux-setup-storage` çalıştır, yoksa wiki Obsidian'ın göremediği bir klasörde kalır.",
+                    "  WARNING: run `termux-setup-storage` first, or the wiki lands where Obsidian can't see it."))
 
     if os.name == "nt":
         icon = REPO / "assets" / "pentarch.ico"

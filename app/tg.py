@@ -10,7 +10,8 @@ Kullanım:
 
 Token: <home>/secrets/telegram.txt (the single line BotFather gives) or the PENTARCH_TELEGRAM_TOKEN env var.
 State: <home>/secrets/telegram-state.json (owner chat_id and last read update).
-The first private chat that messages the bot claims it as owner; every other chat is ignored.
+Owner claim: the first private chat that sends `/start <code>` (code in <home>/secrets/telegram-pair.txt, made on
+first run and printed only here) becomes owner; every other chat is ignored.
 """
 import json
 import sys
@@ -28,6 +29,17 @@ from config import HOME, NAME, SECRETS, T  # noqa: E402
 
 TOKEN_FILE = SECRETS / "telegram.txt"
 STATE_FILE = SECRETS / "telegram-state.json"
+PAIR_FILE = SECRETS / "telegram-pair.txt"
+
+
+def pair_code():
+    """One-time code the owner sends as `/start <code>`; someone who only found the bot cannot see it."""
+    if not PAIR_FILE.exists():
+        import secrets as _s
+        PAIR_FILE.parent.mkdir(parents=True, exist_ok=True)
+        PAIR_FILE.write_text(_s.token_hex(4), encoding="utf-8")
+        PAIR_FILE.chmod(0o600)
+    return PAIR_FILE.read_text(encoding="utf-8").strip()
 LOG_FILE = HOME / "konusma.log"
 
 
@@ -98,6 +110,8 @@ def read(state):
         if not msg or msg["chat"]["type"] != "private":
             continue
         if state["chat_id"] is None:
+            if msg.get("text", "").strip() != f"/start {pair_code()}":
+                continue
             state["chat_id"] = msg["chat"]["id"]
             print(T("sahip kaydedildi", "owner claimed") + f": @{msg['from'].get('username')} ({msg['from'].get('first_name')})")
         if msg["chat"]["id"] != state["chat_id"]:
@@ -110,7 +124,7 @@ def send(state, text, buttons=None):
     if state["chat_id"] is None:
         read(state)
     if state["chat_id"] is None:
-        sys.exit(T("Sahip yok: önce bota Telegram'dan /start yaz.", "No owner yet: send /start to the bot in Telegram first."))
+        sys.exit(T(f"Sahip yok: bota Telegram'dan /start {pair_code()} yaz.", f"No owner yet: send /start {pair_code()} to the bot in Telegram."))
     extra = {"reply_markup": keyboard(buttons)} if buttons else {}
     api("sendMessage", chat_id=state["chat_id"], text=text, **extra)
     print(T("gönderildi", "sent"))
@@ -119,7 +133,7 @@ def send(state, text, buttons=None):
 def send_photo(state, path, caption=""):
     """Resmi sıkıştırmadan belge olarak değil, fotoğraf olarak yollar (multipart)."""
     if state["chat_id"] is None:
-        sys.exit(T("Sahip yok: önce bota Telegram'dan /start yaz.", "No owner yet: send /start to the bot in Telegram first."))
+        sys.exit(T(f"Sahip yok: bota Telegram'dan /start {pair_code()} yaz.", f"No owner yet: send /start {pair_code()} to the bot in Telegram."))
     tok = token()
     boundary = "----pentarch"
     parts = []
@@ -139,7 +153,7 @@ def send_photo(state, path, caption=""):
 def send_doc(state, path, caption=""):
     """Dosyayı belge olarak yollar (PDF vb.)."""
     if state["chat_id"] is None:
-        sys.exit(T("Sahip yok: önce bota Telegram'dan /start yaz.", "No owner yet: send /start to the bot in Telegram first."))
+        sys.exit(T(f"Sahip yok: bota Telegram'dan /start {pair_code()} yaz.", f"No owner yet: send /start {pair_code()} to the bot in Telegram."))
     tok = token()
     boundary = "----pentarch"
     parts = []
@@ -159,7 +173,7 @@ def send_doc(state, path, caption=""):
 def send_voice(state, path, caption=""):
     """ogg/opus dosyasını Telegram sesli mesajı olarak yollar."""
     if state["chat_id"] is None:
-        sys.exit(T("Sahip yok: önce bota Telegram'dan /start yaz.", "No owner yet: send /start to the bot in Telegram first."))
+        sys.exit(T(f"Sahip yok: bota Telegram'dan /start {pair_code()} yaz.", f"No owner yet: send /start {pair_code()} to the bot in Telegram."))
     tok = token()
     boundary = "----pentarch"
     parts = []

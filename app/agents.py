@@ -36,13 +36,14 @@ def _yolo():
     return a["permission_mode"] == "bypassPermissions" and a.get("bypass_confirmed") is True
 
 
-def other_cmd(prompt, model=None, out_file=None, resume=None, new_id=None):
+def other_cmd(prompt, model=None, out_file=None, resume=None, new_id=None, cli=None):
     """Headless command line for a non-Claude agent CLI.
     resume: session id to continue. new_id: gemini only, the id a new kept session gets.
     codex reports its own id (--json, thread.started); opencode continues the folder's last session."""
+    cli = cli or CLI
     m = ["--model", model] if model else []
-    if CLI == "gemini":
-        cmd = [exe(), *m, "--approval-mode", "yolo" if _yolo() else "auto_edit"]
+    if cli == "gemini":
+        cmd = [exe(cli), *m, "--approval-mode", "yolo" if _yolo() else "auto_edit"]
         for d in EXTRA_DIRS:
             cmd += ["--include-directories", str(d)]
         if resume:
@@ -50,30 +51,31 @@ def other_cmd(prompt, model=None, out_file=None, resume=None, new_id=None):
         elif new_id:
             cmd += ["--session-id", new_id]
         return cmd + ["-p", prompt]
-    if CLI == "codex":
-        cmd = [exe(), "exec", *m, "--skip-git-repo-check", "--output-last-message", str(out_file), "--json",
+    if cli == "codex":
+        cmd = [exe(cli), "exec", *m, "--skip-git-repo-check", "--output-last-message", str(out_file), "--json",
                "--dangerously-bypass-approvals-and-sandbox" if _yolo() else "--full-auto"]
         return cmd + (["resume", resume, prompt] if resume else [prompt])
-    if CLI == "opencode":
-        return [exe(), "run", *m, *(["--continue"] if resume else []), prompt]
-    raise ValueError(f"unknown agent cli: {CLI}")
+    if cli == "opencode":
+        return [exe(cli), "run", *m, *(["--continue"] if resume else []), prompt]
+    raise ValueError(f"unknown agent cli: {cli}")
 
 
-def run_other(prompt, model=None, timeout=3600, cwd=None, resume=None, keep=False):
+def run_other(prompt, model=None, timeout=3600, cwd=None, resume=None, keep=False, cli=None):
     """Run on gemini/codex/opencode. Returns the same dict shape claude's JSON output has
     (result, is_error, total_cost_usd, session_id) so the rest of the code does not care which CLI ran.
     keep=True makes the run resumable: session_id comes back and goes into `resume` next time."""
+    cli = cli or CLI
     out_file = Path(tempfile.gettempdir()) / f"pentarch-codex-{uuid.uuid4().hex}.txt"  # unique: parallel runs share a PID
-    new_id = str(uuid.uuid4()) if keep and not resume and CLI == "gemini" else None
+    new_id = str(uuid.uuid4()) if keep and not resume and cli == "gemini" else None
     env = {**os.environ, "GEMINI_CLI_TRUST_WORKSPACE": "true"}  # headless gemini refuses untrusted folders
     try:
-        r = subprocess.run(other_cmd(prompt, model, out_file, resume, new_id), capture_output=True, text=True,
-                           encoding="utf-8", errors="replace", timeout=timeout, cwd=cwd or NOTES, env=env,
+        r = subprocess.run(other_cmd(prompt, model, out_file, resume, new_id, cli), capture_output=True, text=True,
+                           encoding="utf-8", errors="replace", timeout=timeout, cwd=cwd or (NOTES if NOTES.is_dir() else None), env=env,
                            creationflags=NO_WINDOW)
     except subprocess.TimeoutExpired:
-        raise TimeoutError(f"{CLI} did not finish in {timeout} s")
+        raise TimeoutError(f"{cli} did not finish in {timeout} s")
     sid = None
-    if CLI == "codex":
+    if cli == "codex":
         text = out_file.read_text(encoding="utf-8").strip() if out_file.exists() else ""
         for line in r.stdout.splitlines():
             if '"thread.started"' in line:
@@ -83,10 +85,10 @@ def run_other(prompt, model=None, timeout=3600, cwd=None, resume=None, keep=Fals
                     pass
     else:
         text = r.stdout.strip()
-        sid = resume or new_id or ("last" if CLI == "opencode" else None)
+        sid = resume or new_id or ("last" if cli == "opencode" else None)
     out_file.unlink(missing_ok=True)
     # stderr is never the answer: an empty run is an error with a marker, stderr goes to "error" for the log
-    return {"result": text or T(f"(hata: {CLI} cevap vermedi)", f"(error: {CLI} gave no answer)"),
+    return {"result": text or T(f"(hata: {cli} cevap vermedi)", f"(error: {cli} gave no answer)"),
             "is_error": r.returncode != 0 or not text, "total_cost_usd": 0,
             "session_id": sid if keep else None, "usage": {}, "error": r.stderr.strip()[-500:]}
 

@@ -30,6 +30,8 @@ PRESETS = {
     "openrouter": ("https://openrouter.ai/api/v1", "OPENROUTER_API_KEY", "google/gemma-4-31b-it:free", "https://openrouter.ai/keys"),
     "groq": ("https://api.groq.com/openai/v1", "GROQ_API_KEY", "llama-3.3-70b-versatile", "https://console.groq.com/keys"),
     "nvidia": ("https://integrate.api.nvidia.com/v1", "NVIDIA_API_KEY", "nvidia/nemotron-3-ultra-550b-a55b", "https://build.nvidia.com"),
+    # local FreeLLMAPI router (github.com/tashfeenahmed/freellmapi): auto:* models fall over to whichever provider is up
+    "freellmapi": ("http://127.0.0.1:31415/v1", "FREELLMAPI_KEY", "auto:magi-usta", ""),
     "ollama": ("http://localhost:11434/v1", "", "", ""),
     "lmstudio": ("http://localhost:1234/v1", "", "", ""),
 }

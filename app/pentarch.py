@@ -60,6 +60,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 import agents  # noqa: E402
 import koltuk  # noqa: E402
 import tg  # noqa: E402
+import config  # noqa: E402
 from config import C, EXTRA_DIRS, HOME, LANG_NAME, NAME, NOTES, OWNER, T  # noqa: E402
 
 APP = Path(__file__).parent
@@ -242,9 +243,9 @@ the raw file as it is. If the list is empty or only "stale" and no note was file
 most 4 lines what was fixed and what needs a decision (a broken link: create the page or change the link? an orphan
 page: link it from where?), one concrete suggestion each. {ANSWER}"""},
     # wiki history: commit and push when the notes folder is a git repo the owner set up (setup.py asks)
-    "wiki_yedek": {"at": "04:40", "run": lambda: subprocess.run([sys.executable, "-I", str(APP / "wiki.py"), "yedek"],
-                                                               capture_output=True, timeout=300,
-                                                               creationflags=NO_WINDOW) and "-"},
+    "wiki_yedek": {"at": "04:40", "run": lambda: (lambda o: o if "failed" in o else "-")(subprocess.run(
+        [sys.executable, "-I", str(APP / "wiki.py"), "yedek"], capture_output=True, text=True, timeout=300,
+        creationflags=NO_WINDOW).stdout.strip())},  # only a failure reaches Telegram
     "kesif": {"at": "14:00", "weekday": 3, "model": FAST, "prompt": f"""[Self-improvement round, {{ts}}] {LIGHT}
 Look for new tools for {NAME} itself. First read the last section of {HOME / "discover.md"} (create it if missing).
 Among what came out in the last 7 days (your agent CLI's changelog, agent skills, MCP servers, local models,
@@ -649,7 +650,7 @@ def _run_claude(prompt, model=None, effort=None, resume=True, kind="telegram", l
     perm = C["agent"]["permission_mode"]
     base = [CLAUDE, "-p", "--output-format", "json", "--permission-mode", perm]
     if perm != "bypassPermissions":
-        base += ["--allowedTools", ",".join(C["agent"]["allowed_tools"])]
+        base += ["--allowedTools", config.allowed_tools(C["agent"]["allowed_tools"])]
     prompt_file = LIGHT_SYSTEM_PROMPT if light and LIGHT_SYSTEM_PROMPT.exists() else SYSTEM_PROMPT
     if prompt_file.exists():
         base += ["--append-system-prompt-file", str(prompt_file)]
@@ -1887,7 +1888,7 @@ def net_counter():
         except OSError:
             return 0
         return sum(int(c[1]) + int(c[9]) for c in (r.replace(":", " ").split() for r in rows)
-                   if not re.match(r"lo|tun|wg|warp|veth|docker", c[0]))
+                   if not re.match(r"lo$|tun|wg|warp|veth|docker", c[0]))
     p = subprocess.run(["powershell", "-NoProfile", "-Command",
                         "(Get-NetAdapterStatistics | ?{$_.Name -notmatch 'WARP|Loopback|vEthernet|Bluetooth'} | "
                         "%{$_.ReceivedBytes+$_.SentBytes} | Measure -Sum).Sum"],
