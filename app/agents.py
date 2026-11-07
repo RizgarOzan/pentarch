@@ -43,7 +43,7 @@ def other_cmd(prompt, model=None, out_file=None, resume=None, new_id=None, cli=N
     cli = cli or CLI
     m = ["--model", model] if model else []
     if cli == "gemini":
-        cmd = [exe(cli), *m, "--approval-mode", "yolo" if _yolo() else "auto_edit"]
+        cmd = [exe(cli), *m, "--approval-mode", "yolo" if _yolo() else "auto_edit", "--skip-trust"]
         for d in EXTRA_DIRS:
             cmd += ["--include-directories", str(d)]
         if resume:

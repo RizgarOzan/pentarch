@@ -89,7 +89,7 @@ The prompts are plain markdown in `~/.pentarch`: `kurallar.md` (rules), `profile
 | `cancel` / `iptal` | Stops the current run |
 | `pause 2h` / `resume` | Pauses automatic messages |
 | `council: question` | Convenes the council |
-| `key: ENV_NAME=value` | Stores an API key in `secrets/keys.env` and deletes the message; it is never logged or shown to the model |
+| `key: NAME_KEY=value` | Stores an API key (the name must end in `_KEY` or `_TOKEN`) in `secrets/keys.env` and deletes the message; it is never logged or shown to the model |
 | `test` | Runs the end-to-end tests |
 | `internet` / `internet free` / `internet limited` | Quota mode status and switch |
 | `/ekle note` / `/add note` | Drops a note in the wiki's `raw/telefon/`; the nightly round files it into a page |

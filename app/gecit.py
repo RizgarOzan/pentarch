@@ -7,6 +7,7 @@ Config "gateways" (see config.py). Each incoming owner message goes through the 
 - discord: only messages by owner_id in channel_id. The bot needs the Message Content intent to see the text.
 State (last Discord message seen) is in <home>/gecit.json.
 """
+import re
 import email
 import email.utils
 import imaplib
@@ -62,6 +63,17 @@ def _govde(msg):
     return "\n".join(satirlar).strip()
 
 
+def _dogrulandi(msg, kimden):
+    """True when the receiving server (Authentication-Results, e.g. Gmail) saw DKIM or SPF pass for the sender's domain."""
+    alan = kimden.rpartition("@")[2]
+    dom = r"(?:[\w-]+\.)*" + re.escape(alan) + r"(?![\w.-])"
+    for h in msg.get_all("Authentication-Results") or []:
+        h = str(h).lower()
+        if re.search(r"dkim=pass[^;]*header\.[id]=@?" + dom, h) or re.search(r"spf=pass[^;]*smtp\.mailfrom=(?:[^;\s@]*@)?" + dom, h):
+            return True
+    return False
+
+
 def posta_oku(imap_sinifi=imaplib.IMAP4_SSL):
     """Unread mail from allowed senders: [(sender, subject, message_id, body)]. Everything read is marked seen."""
     a = ayar("email")
@@ -77,7 +89,7 @@ def posta_oku(imap_sinifi=imaplib.IMAP4_SSL):
             msg = email.message_from_bytes(data[0][1])
             kimden = email.utils.parseaddr(msg.get("From", ""))[1].lower()
             m.store(i, "+FLAGS", "\\Seen")
-            if kimden in izinli and (govde := _govde(msg)):
+            if kimden in izinli and (_dogrulandi(msg, kimden) or a.get("trust_from_header")) and (govde := _govde(msg)):
                 out.append((kimden, msg.get("Subject", ""), msg.get("Message-ID", ""), govde))
     finally:
         try:

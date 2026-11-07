@@ -1551,7 +1551,7 @@ def poll_telegram():
                 if not msg or msg["chat"]["id"] != state["chat_id"]:
                     continue
                 text = message_text(msg)
-                if km := re.fullmatch(r"\s*(?:key|anahtar)\s*:\s*([A-Z][A-Z0-9_]+)\s*=\s*(\S+)\s*", text):
+                if km := re.fullmatch(r"\s*(?:key|anahtar)\s*:\s*([A-Z][A-Z0-9_]*_(?:KEY|TOKEN))\s*=\s*(\S+)\s*", text):
                     koltuk.save_key(km.group(1), km.group(2))  # not logged, not queued; the message itself is removed
                     try:
                         tg.api("deleteMessage", chat_id=msg["chat"]["id"], message_id=msg["message_id"])

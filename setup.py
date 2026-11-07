@@ -115,6 +115,7 @@ def chat_api_setup(api):
         if new:
             key = saved[key_env] = new
             env_file.write_text("".join(f"{k}={v}\n" for k, v in saved.items()), encoding="utf-8")
+            env_file.chmod(0o600)
     try:
         ids = [m.get("id") for m in get_json(base.rstrip("/") + "/models", key).get("data", [])]
         print(t(f"  Bağlantı tamam: {len(ids)} model görünüyor.", f"  Connected: {len(ids)} models visible."))
@@ -417,6 +418,7 @@ def main():
 
     HOME.mkdir(parents=True, exist_ok=True)
     CONFIG.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
+    CONFIG.chmod(0o600)
     panel_settings = HOME / "ayarlar.json"  # the panel's own switches, once Pentarch has run
     if panel_settings.exists():
         a = json.loads(panel_settings.read_text(encoding="utf-8"))

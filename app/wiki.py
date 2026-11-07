@@ -269,6 +269,9 @@ def yedek(folder):
         return "-"  # only a folder setup.py (or the owner) put under git
     run = lambda *a: subprocess.run(["git", "-C", str(f), *a], capture_output=True, text=True,
                                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    ign = f / ".gitignore"
+    if not ign.exists():
+        ign.write_text("*.env\n.env*\nsecrets/\n*.key\n*.pem\n.obsidian/workspace*\n", encoding="utf-8")
     run("add", "-A")
     changed = bool(run("status", "--porcelain").stdout.strip())
     if changed and run("commit", "-q", "-m", f"wiki {date.today().isoformat()}").returncode != 0:

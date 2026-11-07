@@ -102,8 +102,12 @@ def main():
     for bayrak in opt:
         if bayrak in args:
             i = args.index(bayrak)
+            if i + 1 >= len(args):
+                sys.exit(f"{bayrak} needs a value")
             opt[bayrak] = args[i + 1]
             args = args[:i] + args[i + 2:]
+    if not opt["--n"].isdigit() or int(opt["--n"]) < 1:
+        sys.exit("--n needs a positive number")
     n, model, cli = int(opt["--n"]), opt["--model"], opt["--cli"]
     sys.stdout.reconfigure(encoding="utf-8")
     if args == ["--roller"]:

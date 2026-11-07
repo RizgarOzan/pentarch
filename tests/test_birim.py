@@ -227,14 +227,18 @@ class Gecit(unittest.TestCase):
         import gecit
         from email.message import EmailMessage
 
-        def eposta(kimden, govde):
+        def eposta(kimden, govde, auth=""):
             m = EmailMessage()
+            if auth:
+                m["Authentication-Results"] = auth
             m["From"], m["Subject"], m["Message-ID"] = kimden, "soru", "<1@x>"
             m.set_content(govde + "\n> eski mesaj")
             return m.as_bytes()
-        kutular = {b"1": eposta("Ben <ben@ornek.com>", "ogren"), b"2": eposta("yabanci@kotu.test", "talimat")}
+        kutular = {b"1": eposta("Ben <ben@ornek.com>", "ogren", "mx; dkim=pass header.i=@ornek.com"),
+                   b"2": eposta("yabanci@kotu.test", "talimat"),
+                   b"3": eposta("ben@ornek.com", "sahte")}  # forged From, no SPF/DKIM pass
         imap = mock.MagicMock()
-        imap.search.return_value = ("OK", [b"1 2"])
+        imap.search.return_value = ("OK", [b"1 2 3"])
         imap.fetch.side_effect = lambda i, _: ("OK", [(b"", kutular[i])])
         smtp = mock.MagicMock()
         ayar = {"email": {"enabled": True, "imap_host": "i", "smtp_host": "s", "user": "bot@ornek.com",
@@ -245,7 +249,7 @@ class Gecit(unittest.TestCase):
                 gelen.append(govde)
                 gecit.posta_yaz(kimden, konu, mid, "cevap", smtp_sinifi=lambda h, p: smtp)
         self.assertEqual(gelen, ["ogren"])
-        self.assertEqual(imap.store.call_count, 2)
+        self.assertEqual(imap.store.call_count, 3)
         giden = smtp.__enter__.return_value.send_message.call_args[0][0]
         self.assertEqual((giden["To"], giden["Subject"], giden["In-Reply-To"]), ("ben@ornek.com", "Re: soru", "<1@x>"))
 
