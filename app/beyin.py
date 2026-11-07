@@ -92,6 +92,11 @@ class Beyin:
     def _alive(self):
         return self.proc is not None and self.proc.poll() is None
 
+    def taze(self):
+        """Sıradaki ask yeni süreçte mi açılacak: ilk mesaj, ölü süreç, boşta yenileme ya da arkada yenileme sürüyor."""
+        return (not self._alive() or not self.turns or getattr(self, "yenileniyor", False)
+                or time.monotonic() - self.last_used > IDLE)
+
     def _send(self, text, timeout):
         self.proc.stdin.write(json.dumps({"type": "user", "message": {"role": "user", "content": text}}) + "\n")
         self.proc.stdin.flush()
@@ -219,6 +224,9 @@ class Tek:
             out = agents.run_other(text, self.model, timeout)
             self.turns += 1
             return out
+
+    def taze(self):  # her mesaj yeni koşu
+        return True
 
     def rotate(self, summarize=True):
         self.gorulen = set()

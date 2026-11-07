@@ -960,12 +960,14 @@ def ask_v2(prompt, derin=False):
         with B.lock:  # a background renewal may be running on the same process
             B.rotate()  # the model changed in settings: close with a summary, the next process opens with the new model
             B.model, B.effort = model, efor
-    if getattr(B, "kayip", False):  # the process died without a summary: the new one gets recent chat from the log
-        B.ofset, B.kayip = 0, False
+    # A new process (idle renewal, first message, died without a summary) only has the 120-word summary of what the old
+    # one saw; starting the bridge at the old offset made it forget the previous message. Give it recent chat from the log.
+    if getattr(B, "kayip", False) or B.taze():
+        B.ofset, B.kayip = getattr(B, "taban", 0), False
     # Everything this session didn't see (the other brain, jobs, notifications, chat before a restart) goes first;
     # without it the two brains contradicted each other.
     kacan = konusma_arasi(B.ofset)
-    ek_baglam = (f"({'Recent conversation' if not B.ofset else 'What happened without you (other session, jobs, notifications)'}; "
+    ek_baglam = (f"({'Recent conversation' if B.ofset == getattr(B, 'taban', 0) else 'What happened without you (other session, jobs, notifications)'}; "
                  f"for context, don't repeat it, don't contradict what was already said:\n{kacan})\n\n") if kacan else ""
     son_beyin = tur
     if tur == "derin":
@@ -1030,7 +1032,7 @@ def ask(texts, source="Telegram"):
         for B in BEYINLER.values():
             with B.lock:
                 B.rotate(summarize=False)
-                B.ofset = tg.LOG_FILE.stat().st_size if tg.LOG_FILE.exists() else 0  # clean start: old chat stays out
+                B.ofset = B.taban = tg.LOG_FILE.stat().st_size if tg.LOG_FILE.exists() else 0  # clean start: old chat stays out
                 B.kayip = False
         texts = [t for t in texts if t.strip().lower() not in NEW]
         if not texts:
