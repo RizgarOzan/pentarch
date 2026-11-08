@@ -30,10 +30,12 @@ You need Windows 10/11, Python 3.10+, a Telegram account, and one agent CLI inst
 ```bash
 git clone https://github.com/<you>/pentarch.git
 cd pentarch
+python -m venv .venv
+.venv\Scripts\activate
 python setup.py
 ```
 
-Setup asks for your name, the assistant's name, the language (English or Turkish; the setup itself switches too), your notes folder, which agent CLI and models to use (it lists the ones it finds on PATH), and your Telegram bot token (make a bot with @BotFather, `/newbot`). It then shows a short code; send the bot `/start <code>` so only you can claim it. It checks each connection as you go: it sends the agent a one-word test so a missing login shows up now, asks Telegram who the bot is, and lists the models an optional API answers with. For that API you pick OpenRouter, Groq, Ollama, LM Studio or your own URL; it tells you where to get a key and keeps it in `~/.pentarch/secrets/keys.env`. Everything goes to `~/.pentarch`, never to the repo, and it adds a startup shortcut.
+Setup asks for your name, the assistant's name, the language (English or Turkish; the setup itself switches too), your notes folder, which agent CLI and models to use (it lists the ones it finds on PATH), and your Telegram bot token (make a bot with @BotFather, `/newbot`). It then shows a short code; send the bot `/start <code>` so only you can claim it. It checks each connection as you go: it sends the agent a one-word test so a missing login shows up now, asks Telegram who the bot is, and lists the models an optional API answers with. For that API you pick OpenRouter, Groq, Ollama, LM Studio or your own URL; it tells you where to get a key and keeps it in `~/.pentarch/secrets/keys.env`. Settings, memory and keys go to `~/.pentarch`; only the job tracker's own files (`tracker/config.json`, `profile.json`, `data/`, all gitignored) stay in the clone. It adds a startup shortcut that uses the Python you ran setup with, so run it from the venv. Setup offers to install `requirements.txt`; about 300 MB of that is the optional local voice stack (faster-whisper).
 
 Start it once by hand, then send any message to your bot. The first chat that writes becomes the owner; messages from anyone else are ignored.
 
@@ -72,7 +74,7 @@ Set `agent.cli` to `claude` and list helper CLIs in `agent.workers` (for example
 | `agent.cli`, `fast_model`, `deep_model`, `light_model` | Which agent and models do the work |
 | `agent.permission_mode` | `acceptEdits` (safer) or `bypassPermissions` (most routines need it) |
 | `chat_api` | Any OpenAI-compatible endpoint for cheap one-shot work: OpenRouter, Groq, Ollama, LM Studio. The key comes from the env var named in `key_env` or `~/.pentarch/secrets/keys.env` |
-| `council` | Seats for the council. Add them with `python -I app/koltuk.py add NAME --preset openrouter|groq|nvidia|freellmapi|ollama|lmstudio`\|groq\|nvidia\|ollama\|lmstudio` (or `--agent`), or tell the bot "add a seat to the council". Each seat is `{"name", "kind": "agent"\|"openai", "model", "base_url", "key_env", "role"}`; `"model": "a,b"` tries `b` when `a` is rate-limited (OpenRouter) |
+| `council` | Seats for the council. Add them with `python -I app/koltuk.py add NAME --preset NAME` (presets: `openrouter`, `groq`, `nvidia`, `freellmapi`, `ollama`, `lmstudio`; or `--agent`), or tell the bot "add a seat to the council". Each seat is `{"name", "kind": "agent"\|"openai", "model", "base_url", "key_env", "role"}`; `"model": "a,b"` tries `b` when `a` is rate-limited (OpenRouter) |
 | `notify_apps` | Windows notification app id → label, e.g. `{"com.squirrel.Teams.Teams": "Teams"}` |
 | `jobs_off` | Routines that start switched off: `insa` (nightly self-build) and `posta` (mail check). Setup asks about both, and the panel's Settings turns any routine on or off later |
 | `opportunities`, `job_boards` | Filters for the hackathon/job watch; see the top of `app/firsat.py` and `app/kariyer.py` |
@@ -166,10 +168,12 @@ Pentarch, Windows bilgisayarında yaşayan ve seninle Telegram'dan konuşan kiş
 ```bash
 git clone https://github.com/<sen>/pentarch.git
 cd pentarch
+python -m venv .venv
+.venv\Scripts\activate
 python setup.py
 ```
 
-Kurulum adını, asistanın adını, dili (Türkçe ya da İngilizce; seçince kurulum da o dile geçer), not klasörünü, ajanı ve modelleri, Telegram bot token'ını sorar (@BotFather'da `/newbot`). Bağlantıları hemen dener: ajana tek kelimelik bir mesaj atar, Telegram'a botun adını sorar, isteğe bağlı API'nin model listesini çeker. API için OpenRouter, Groq, Ollama, LM Studio ya da kendi adresini seçersin; anahtarı nereden alacağını söyler ve `~/.pentarch/secrets/keys.env` içine yazar. `insa` ve `posta` rutinleri kapalı başlar; kurulumda ya da sonra panelin Ayarlar kısmından açabilirsin. Her şeyi `~/.pentarch` içine yazar, repoya hiçbir şey yazmaz, başlangıca kısayol ekler. Sonra `python -I app/pentarch.py` ile bir kez başlat ve botuna herhangi bir mesaj at: ilk yazan sohbet sahip olur.
+Kurulum adını, asistanın adını, dili (Türkçe ya da İngilizce; seçince kurulum da o dile geçer), not klasörünü, ajanı ve modelleri, Telegram bot token'ını sorar (@BotFather'da `/newbot`). Bağlantıları hemen dener: ajana tek kelimelik bir mesaj atar, Telegram'a botun adını sorar, isteğe bağlı API'nin model listesini çeker. API için OpenRouter, Groq, Ollama, LM Studio ya da kendi adresini seçersin; anahtarı nereden alacağını söyler ve `~/.pentarch/secrets/keys.env` içine yazar. `insa` ve `posta` rutinleri kapalı başlar; kurulumda ya da sonra panelin Ayarlar kısmından açabilirsin. Ayarları, hafızayı ve anahtarları `~/.pentarch` içine yazar; repoda yalnız başvuru panosunun kendi dosyaları (`tracker/config.json`, `profile.json`, `data/`, hepsi gitignore'da) kalır. Başlangıca, kurulumu hangi Python ile çalıştırdıysan onu kullanan bir kısayol ekler, o yüzden venv içinden çalıştır. `requirements.txt`'i kurmayı önerir; bunun ~300 MB'ı isteğe bağlı yerel ses paketi (faster-whisper). Sonra `python -I app/pentarch.py` ile bir kez başlat ve botuna herhangi bir mesaj at: ilk yazan sohbet sahip olur.
 
 **Modelsiz kullanım:** Başvuru panosu ve ilan taraması ajan ya da anahtar istemez: `python -I tracker/scan.py --config tracker/config.json` ilanları çeker ve 0-5 puanlar, `python -I tracker/build.py --config tracker/config.json` panoyu yazar. Kurulum ajan CLI bulamazsa söyler, devam edip etmemeyi sana bırakır. Ücretsiz API anahtarı için (OpenRouter, Groq, NVIDIA; kart istemezler) kurulum adım adım yol gösterir.
 
@@ -177,6 +181,6 @@ Kurulum adını, asistanın adını, dili (Türkçe ya da İngilizce; seçince k
 
 **Ayarlar:** `~/.pentarch/pentarch.json`. Yazmadığın her şey [`app/config.py`](app/config.py) içindeki varsayılana düşer. Komutlar ve ayar anahtarları yukarıdaki İngilizce tablolarda; Türkçe karşılıkları da çalışır (`iptal`, `durdur 2 saat`, `konsey: soru`, `internet serbest`).
 
-**Konsey koltukları:** `python -I app/koltuk.py add AD --preset openrouter|groq|nvidia|freellmapi|ollama|lmstudio`` (ya da `groq`, `nvidia`, `ollama`, `lmstudio`, `custom`, `--agent`), `list`, `test AD`, `remove AD`. Bota "konseye koltuk ekle" demek de yeter. Anahtarı sohbete yazma; `koltuk.py key DEGISKEN` ile ya da bota `anahtar: DEGISKEN=değer` mesajıyla ver, bot kaydedip mesajı siler.
+**Konsey koltukları:** `python -I app/koltuk.py add AD --preset AD` (`openrouter`, `groq`, `nvidia`, `freellmapi`, `ollama`, `lmstudio`, `custom` ya da `--agent`), `list`, `test AD`, `remove AD`. Bota "konseye koltuk ekle" demek de yeter. Anahtarı sohbete yazma; `koltuk.py key DEGISKEN` ile ya da bota `anahtar: DEGISKEN=değer` mesajıyla ver, bot kaydedip mesajı siler.
 
 **Güvenlik:** API modeline (`chat_api` ya da `openai` konsey koltuğu) giden metindeki `keys.env` değerleri ve bilinen anahtar biçimleri `[secret]` ile değiştirilir; ajan CLI'ına metin olduğu gibi gider. Makineden dışarı nereye bağlandığı yukarıdaki "Where it connects" tablosunda.
