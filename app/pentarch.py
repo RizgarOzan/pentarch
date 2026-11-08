@@ -24,6 +24,10 @@ does it and reports on Telegram:
     python -I pentarch.py task "2026-10-30 03:00" "finish the report and open a PR"
     python -I pentarch.py task now "the rest of the work"
 
+A standing goal it owns on its own (wakes, keeps notes, writes only when done or a decision is needed):
+    python -I pentarch.py sorumluluk add ci-watch "watch CI on main until it is green" her=60 [yetki=yaz] [olay="cmd"]
+    python -I pentarch.py sorumluluk list | notes <name> | pause <name> | resume <name> | remove <name>
+
 Search the conversation log (no model, instant): python -I pentarch.py search "word"
 
 Check the install (keys by name only), update from git, import Claude Code/Codex instructions and skills:
@@ -59,6 +63,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 import agents  # noqa: E402
 import koltuk  # noqa: E402
+import sorumluluk  # noqa: E402
 import tg  # noqa: E402
 import config  # noqa: E402
 from config import C, EXTRA_DIRS, HOME, LANG_NAME, NAME, NOTES, OWNER, T  # noqa: E402
@@ -1149,10 +1154,11 @@ def oneri_kalan():
     return max(0, ayar("inisiyatif_gunluk") - sum(o["zaman"].startswith(bugun) for o in onaylar()))
 
 
-def oneri_ekle(metin, is_):
+def oneri_ekle(metin, is_, butce=True):
     """An automatic run's `ÖNERİ: <one sentence to the owner> || <full description of the job>` line. Dropped when
-    the daily budget (ayarlar.json inisiyatif_gunluk) is used up. Goes out with Yes/No buttons; pressing runs onay_ver."""
-    if not oneri_kalan():
+    the daily budget (ayarlar.json inisiyatif_gunluk) is used up. Goes out with Yes/No buttons; pressing runs onay_ver.
+    A responsibility's KARAR passes butce=False: the owner asked for that job, so its questions are never dropped."""
+    if butce and not oneri_kalan():
         note(f"öneri bütçesi doldu, düştü: {metin[:80]}")
         return
     items = onaylar()
@@ -1338,6 +1344,42 @@ def run_task(item):
         note(f"görev söz verdi ama kuyruğa iş koymadı: {reply[:150]}")
         reply += T("\n(Not: sonraya söz var ama görev kaydı yok.)", "\n(Note: it promised to continue later but queued no task.)")
     send_auto(reply)
+
+
+def run_sorumluluk(s):
+    """One wake-up of a responsibility (sorumluluk.py). Shares the task lock and budget; sends nothing unless the run
+    asks a question (KARAR), has urgent news (HABER) or finished (BITTI)."""
+    with task_lock:
+        running_task.update(zaman=now(), **{"is": f"sorumluluk: {s['ad']}"})
+        try:
+            reply = run_claude(sorumluluk.istem(s, OWNER, LANG_NAME, datetime.now()), model=FAST, effort="medium",
+                               resume=False, kind="görev" if s["yetki"] == "yaz" else "otomatik",
+                               budget=TASK_RUN_USD.get(FAST, 2.0)).strip()
+        except Exception as e:
+            reply = f"Hata: {e!r}"
+        finally:
+            running_task.clear()
+    r = sorumluluk.isle(s["ad"], reply, datetime.now())
+    note(f"sorumluluk {s['ad']}: {len(r['not'])} not, {len(r['karar'])} karar" + (", bitti" if r["bitti"] else ""))
+    for soru, is_ in r["karar"]:
+        oneri_ekle(f"[{s['ad']}] {soru}", f"{is_}\n(For responsibility {s['ad']}: when done, append one line on what "
+                   f"you did to {sorumluluk.not_dosyasi(s['ad'])}.)", butce=False)
+    for h in r["haber"]:
+        send(f"[{s['ad']}] {h}")
+    if r["bitti"]:
+        send_auto(T(f"Sorumluluk bitti ({s['ad']}): {r['bitti']}", f"Responsibility done ({s['ad']}): {r['bitti']}"))
+
+
+def sorumluluk_sirasi(t):
+    """The first responsibility due now. An event one whose command output didn't change just waits again."""
+    for s in sorumluluk.oku():
+        if not sorumluluk.vakti(s, t):
+            continue
+        if s.get("olay") and not s.get("sonraki") and not sorumluluk.olay_degisti(s):
+            sorumluluk.degis(s["ad"], son=now())
+            continue
+        return s
+    return None
 
 
 # A task that writes outward (outreach, email, LinkedIn) writes a plan first, then sends; no random tactics.
@@ -2045,6 +2087,11 @@ def watch_schedule():
                     ripe[0]["basladi"] = now()
                     note(f"görev başlıyor: {ripe[0]['is'][:100]}")
                     in_thread(run_task, ripe[0])
+            if not stop and not task_lock.locked() and spent_today("görev") < task_cap():
+                if s := sorumluluk_sirasi(datetime.now()):
+                    sorumluluk.degis(s["ad"], son=now(), sonraki="")  # so the next loop doesn't start it twice
+                    note(f"sorumluluk uyanıyor: {s['ad']}")
+                    in_thread(run_sorumluluk, s)
             t = datetime.now()
             net_update()
             for name, job in JOBS.items():
@@ -2074,7 +2121,7 @@ def watch_schedule():
 def watch_self():
     """Restarts quietly when its own code changes (if it compiles and nothing is running).
     So an agent editing Pentarch never has to kill itself."""
-    files = [Path(__file__)] + [APP / f for f in ("tg.py", "beyin.py", "hafiza.py", "agents.py", "config.py")]
+    files = [Path(__file__)] + [APP / f for f in ("tg.py", "beyin.py", "hafiza.py", "agents.py", "config.py", "sorumluluk.py")]
     files = [f for f in files if f.exists()]
     stamp = [f.stat().st_mtime for f in files]
     while True:
@@ -2157,6 +2204,7 @@ def panel_status():
         "hatirlatmalar": tekil_hatirlatmalar(reminders),
         "pano": pano(),
         "onaylar": [o for o in onaylar() if o["durum"] == "bekliyor"],
+        "sorumluluklar": [{**s, "notlar": sorumluluk.notlar(s["ad"], 5)} for s in sorumluluk.oku()],
         "oneri_kalan": oneri_kalan(),
         "ayarlar": {k: ayar(k) for k in VARSAYILAN},
         "secenek": AYAR_SECENEK,
@@ -2317,6 +2365,31 @@ def open_panel():
 
 # --- Start-up ------------------------------------------------------------
 
+def sorumluluk_cli(args):
+    """sorumluluk ekle <name> "<goal>" [her=240] [yetki=oku|yaz] [izin=..] [onay=..] [yasak=..] [olay="<command>"]
+    sorumluluk liste | not <name> | dur <name> | devam <name> | sil <name>"""
+    alt = {"add": "ekle", "list": "liste", "notes": "not", "pause": "dur", "resume": "devam", "remove": "sil"}.get(
+        args[0], args[0]) if args else "liste"
+    try:
+        if alt == "ekle" and len(args) >= 3:
+            opts = dict(a.split("=", 1) for a in args[3:] if "=" in a)
+            if bad := set(opts) - set(sorumluluk.ALANLAR):
+                return T(f"bilinmeyen alan: {', '.join(bad)}", f"unknown field: {', '.join(bad)}")
+            return sorumluluk.ozet_satiri(sorumluluk.ekle(args[1], args[2], **opts))
+        if alt == "liste":
+            return "\n".join(map(sorumluluk.ozet_satiri, sorumluluk.oku())) or T("sorumluluk yok", "no responsibilities")
+        if alt == "not" and len(args) == 2:
+            return "\n".join(sorumluluk.notlar(args[1])) or T("not yok", "no notes")
+        if alt in ("dur", "devam") and len(args) == 2:
+            s = sorumluluk.degis(args[1], durum="duraklat" if alt == "dur" else "aktif", sonraki="")
+            return sorumluluk.ozet_satiri(s) if s else T("bulunamadı", "not found")
+        if alt == "sil" and len(args) == 2:
+            return T("silindi (notlar duruyor)", "removed (notes kept)") if sorumluluk.sil(args[1]) else T("bulunamadı", "not found")
+    except ValueError as e:
+        return str(e)
+    return sorumluluk_cli.__doc__
+
+
 def main():
     flags = {a for a in sys.argv[1:] if a.startswith("--")}
     sys.argv = [a for a in sys.argv if not a.startswith("--")]
@@ -2348,6 +2421,10 @@ def main():
                 import hafiza
                 hits = [f"[{k}] {z or Path(y).name} {b}\n  {m[:600].replace(chr(10), ' / ')}" for k, y, z, b, m in hafiza.ara(q, limit=5)]
             print("\n".join(hits[-40:]) or T("bulunamadı", "nothing found"))
+            return
+        if cmd in ("sorumluluk", "responsibility"):
+            sys.stdout.reconfigure(encoding="utf-8")
+            print(sorumluluk_cli(sys.argv[2:]))
             return
         if cmd == "panel":
             open_panel()

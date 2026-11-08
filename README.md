@@ -15,9 +15,10 @@ A personal assistant that lives on your Windows computer and talks to you over T
 - **Memory.** Your profile, a memory page the nightly round keeps tidy, a rules file, and fast full-text search over your notes and past chats. Optional semantic search through a local Ollama model.
 - **Routines.** Morning brief, evening summary, a heartbeat checklist, reply checks for messages you're waiting on, news in your field, a weekly retro of what went wrong, and a weekly look for new tools.
 - **Reminders and tasks.** "Remind me at 10" or "do this tonight" become entries that fire on time. A task runs in its own agent session, with a daily budget cap.
+- **Responsibilities.** A standing goal ("keep my applications list current", "watch this repo until CI is green") that the assistant owns on its own. It wakes on a timer or when a command's output changes, keeps its own notes file, picks its next wake-up, and stays quiet while it works. It writes only when the goal is done, when a decision is yours (Yes/No buttons), or for urgent news. Rules per responsibility: allowed, ask first, never. `python -I app/pentarch.py sorumluluk add <name> "goal" her=240`.
 - **Proposals.** When a routine finds work that would help you, it suggests it with Yes/No buttons. Nothing outward (sending, pushing, deleting) happens without your yes.
 - **Council.** `council: question` asks several models at once. They answer, read each other, argue a second round and vote.
-- **Career.** Watches open hackathons and remote junior jobs (Devpost, Remotive, Greenhouse and Lever boards you pick), tracks your GitHub PRs, and a small offline dashboard for applications and a learning plan (`tracker/`).
+- **Career.** Watches open hackathons and remote junior jobs (Devpost, Remotive, Greenhouse, Lever and Ashby boards you pick; postings that rule out visa sponsorship or need a clearance are flagged), tracks your GitHub PRs, and a small offline dashboard for applications and a learning plan (`tracker/`).
 - **Notifications (optional).** Reads Windows notifications from apps you choose; a cheap model filters out the noise.
 - **Voice.** Voice notes become text locally (faster-whisper); it can answer with voice (edge-tts, or Piper offline).
 - **Data quota mode (optional).** On a metered connection it spreads the monthly cap over the days left and holds heavy jobs back.
@@ -116,7 +117,7 @@ Nothing leaves your machine except these:
 | your agent CLI's own service | whatever Claude Code, Gemini CLI, Codex or OpenCode talk to |
 | `chat_api` and council seat URLs | only the ones you set; none by default |
 | `speech.platform.bing.com` (edge-tts) | voice answers to voice messages (`voice_replies`; Piper runs locally if it is offline) |
-| `boards-api.greenhouse.io`, `api.lever.co` | job tracker, only for the companies you list |
+| `boards-api.greenhouse.io`, `api.lever.co`, `api.eu.lever.co`, `api.ashbyhq.com` | job tracker, only for the companies you list |
 | `remotive.com`, `devpost.com` | the opportunities routine |
 | `health_urls` | extra addresses you ask it to watch |
 

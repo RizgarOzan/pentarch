@@ -259,6 +259,7 @@
       <button type="button" class="btn" id="beyin"></button>
     </section>
     <section class="blok" id="onaykutu" hidden><h2><span data-t="approvals"></span><small id="hak"></small></h2><div id="onaylar"></div></section>
+    <section class="blok" id="sorkutu" hidden><h2 data-t="duties"></h2><div id="sorumluluklar"></div></section>
     <section class="blok"><h2><span data-t="reminders"></span><small id="remsay"></small></h2><div id="hatirlatmalar"></div></section>
     <section class="blok"><h2 data-t="jobs"></h2><div class="tabs" id="sekmeler"></div><div id="aktif"></div></section>
     <section class="blok"><h2 data-t="system"></h2><div class="vitals" id="saglik"></div><div id="harcama"></div><div id="kota"></div></section>
@@ -288,6 +289,7 @@ const T = {
     recording: "kayıt sürüyor, bitirmek için tekrar bas", transcribing: "yazıya çevriliyor…", noMic: "mikrofon yok",
     sttFail: "çevrilemedi", sttEmpty: "ses anlaşılmadı",
     noChat: "Henüz konuşma yok.", more: "devamı ▾", less: "kısalt ▴", deliberating: `${NAME} düşünüyor`,
+    duties: "Sorumluluklar", dutyNext: "sonraki bakış", dutyDone: "bitti", dutyPaused: "duraklatıldı",
     approvals: "Onay bekliyor", left: n => `bugün ${n} öneri hakkı kaldı`, yes: "Evet", no: "Hayır",
     reminders: "Geri sayım", waiting: n => `${n} bekliyor`, noRem: "Bekleyen hatırlatma yok", hourly: n => `saatlik · ${n} kez kaldı`, day: "g",
     jobs: "İş panosu", tabs: {calisiyor: "çalışıyor", bekliyor: "bekliyor", bitti: "bitti", hata: "hata"},
@@ -310,6 +312,7 @@ const T = {
     recording: "recording, press again to stop", transcribing: "transcribing…", noMic: "no microphone",
     sttFail: "could not transcribe", sttEmpty: "couldn't make that out",
     noChat: "No conversation yet.", more: "show more ▾", less: "show less ▴", deliberating: `${NAME} is thinking`,
+    duties: "Responsibilities", dutyNext: "next look", dutyDone: "done", dutyPaused: "paused",
     approvals: "Needs approval", left: n => `${n} suggestions left today`, yes: "Yes", no: "No",
     reminders: "Countdown", waiting: n => `${n} pending`, noRem: "No pending reminders", hourly: n => `hourly · ${n} left`, day: "d",
     jobs: "Job board", tabs: {calisiyor: "running", bekliyor: "queued", bitti: "done", hata: "errors"},
@@ -574,6 +577,15 @@ async function yenile() {
   $("hak").textContent = T.left(D.oneri_kalan ?? 0);
   koy("onaylar", O.map(o => `<div class="onay"><p><span>#${esc(o.id)}</span>${esc(o.oneri)}</p>
     <div class="butonlar"><button type="button" class="btn evet" data-onay="${esc(o.id)}" data-evet="1">${T.yes}</button><button type="button" class="btn" data-onay="${esc(o.id)}">${T.no}</button></div></div>`).join(""));
+
+  /* sorumluluklar: kendi kendine yürüyen işler; son notları açılır kutuda (Dots'taki "activity" görünümü) */
+  const S = D.sorumluluklar || [];
+  $("sorkutu").hidden = !S.length;
+  koy("sorumluluklar", S.map(s => {
+    const ne = s.durum === "bitti" ? T.dutyDone : s.durum === "duraklat" ? T.dutyPaused : `${T.dutyNext} ${esc(kisaZaman(s.sonraki || s.son || s.kayit))}`;
+    return `<details class="onay"><summary><b>${esc(s.ad)}</b> · <small>${ne}</small></summary><p>${esc(s.hedef)}</p>
+      ${(s.notlar || []).map(n => `<p><small>${esc(n)}</small></p>`).join("")}</details>`;
+  }).join(""));
 
   const E = D.olaylar || [];
   $("olaykutu").hidden = !E.length;

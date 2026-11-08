@@ -484,3 +484,113 @@ class Yardimcilar(unittest.TestCase):
         self.assertEqual(wiki.yedek(d), "commit")  # no remote: local history still grows
         self.assertEqual(wiki.yedek(d), "-")
         self.assertIn("raw/telefon/", wiki.komut("/ekle@PentarchBot not", d))
+
+
+class Sorumluluk(unittest.TestCase):
+    def setUp(self):
+        import sorumluluk
+        self.s = sorumluluk
+        sorumluluk.yaz([])
+
+    def test_ekle_dogrular(self):
+        from datetime import datetime
+        t = datetime(2026, 11, 8, 10, 0)
+        self.s.ekle("is-takip", "keep the tracker current", her=60, t=t)
+        for kotu in ({"ad": "Büyük Ad"}, {"ad": "is-takip"}, {"ad": "x", "her": 5}, {"ad": "y", "yetki": "hepsi"}):
+            with self.assertRaises(ValueError):
+                self.s.ekle(**{"hedef": "g", **kotu})
+        s = self.s.bul("is-takip")
+        self.assertTrue(self.s.vakti(s, t))  # never ran: wakes at once
+        self.s.degis("is-takip", son="2026-11-08 10:00")
+        self.assertFalse(self.s.vakti(self.s.bul("is-takip"), datetime(2026, 11, 8, 10, 59)))
+        self.assertTrue(self.s.vakti(self.s.bul("is-takip"), datetime(2026, 11, 8, 11, 0)))
+        self.s.degis("is-takip", durum="duraklat")
+        self.assertFalse(self.s.vakti(self.s.bul("is-takip"), datetime(2026, 11, 9)))
+
+    def test_cevap_yalniz_gerekeni_yollar(self):
+        from datetime import datetime
+        self.s.ekle("ci", "watch CI")
+        t = datetime(2026, 11, 8, 12, 0)
+        r = self.s.isle("ci", "Looked at the runs, all green.\n- **NOT:** 3 runs green\nSONRAKI: 5 min\n"
+                              "KARAR: Rerun the flaky job? || rerun job 42 on main\nKARAR: no bars here", t)
+        self.assertEqual(r["karar"], [("Rerun the flaky job?", "rerun job 42 on main")])
+        self.assertEqual((r["haber"], r["bitti"]), ([], None))
+        s = self.s.bul("ci")
+        self.assertEqual((s["son"], s["sonraki"], s["durum"]), ("2026-11-08 12:00", "2026-11-08 12:30", "aktif"))  # 5 → 30
+        self.assertIn("3 runs green", self.s.notlar("ci")[-1])
+        self.assertNotIn("all green", "\n".join(self.s.notlar("ci")))  # summary isn't a note when NOT is there
+        self.s.isle("ci", "BITTI: the CI is fixed", t)
+        self.assertEqual((self.s.bul("ci")["durum"], self.s.bul("ci")["sonuc"]), ("bitti", "the CI is fixed"))
+        self.assertFalse(self.s.vakti(self.s.bul("ci"), datetime(2027, 1, 1)))
+
+    def test_hata_ve_unutulan_not(self):
+        from datetime import datetime
+        self.s.ekle("a", "g")
+        self.s.isle("a", "I checked the inbox, nothing new.", datetime(2026, 11, 8, 9, 0))
+        self.assertIn("nothing new", self.s.notlar("a")[-1])  # no NOT line: the summary is kept as the note
+        self.s.isle("a", "Hata: TimeoutError()\nSONRAKI: 600", datetime(2026, 11, 8, 9, 30))
+        self.assertIn("run failed", self.s.notlar("a")[-1])
+        self.assertEqual(self.s.bul("a")["sonraki"], "")  # a failed run doesn't push itself far away
+
+    def test_olay_degisince_uyanir(self):
+        d = Path(tempfile.mkdtemp()) / "durum.txt"
+        d.write_text("1", encoding="utf-8")
+        komut = f'"{sys.executable}" -c "print(open(r\'{d}\').read())"'
+        self.s.ekle("olay", "g", olay=komut)
+        self.assertFalse(self.s.olay_degisti(self.s.bul("olay")))  # first reading only records
+        self.assertFalse(self.s.olay_degisti(self.s.bul("olay")))
+        d.write_text("2", encoding="utf-8")
+        self.assertTrue(self.s.olay_degisti(self.s.bul("olay")))
+
+    def test_istem_kurallari_tasir(self):
+        from datetime import datetime
+        s = self.s.ekle("k", "goal text", izin="read mail", yasak="delete anything")
+        p = self.s.istem(s, "Sam", "English", datetime(2026, 11, 8, 8, 0))
+        for parca in ("goal text", "Allowed without asking: read mail", "Never: delete anything", "read-only", "KARAR"):
+            self.assertIn(parca, p)
+        self.assertNotIn("Ask first", p)
+
+    def test_cli(self):
+        import pentarch
+        self.assertIn("▶ rapor", pentarch.sorumluluk_cli(["add", "rapor", "weekly report", "her=120", "yetki=yaz"]))
+        self.assertIn("unknown field", pentarch.sorumluluk_cli(["add", "r2", "g", "renk=mavi"]))
+        self.assertIn("⏸", pentarch.sorumluluk_cli(["pause", "rapor"]))
+        self.assertIn("rapor", pentarch.sorumluluk_cli(["list"]))
+        self.assertIn("removed", pentarch.sorumluluk_cli(["remove", "rapor"]))
+
+    def test_kosu_sessiz_calisir(self):
+        import pentarch
+        s = self.s.ekle("kosu", "g")
+        giden = []
+        with mock.patch.object(pentarch, "run_claude", return_value="worked\nNOT: step one\nKARAR: Send it? || send the draft") as rc, \
+                mock.patch.object(pentarch, "send", lambda t, b=None: giden.append(t)), \
+                mock.patch.object(pentarch, "send_auto", lambda t, b=None: giden.append(t)), \
+                mock.patch.object(pentarch, "oneri_kalan", return_value=0):
+            pentarch.run_sorumluluk(s)
+            self.assertEqual(rc.call_args.kwargs["kind"], "otomatik")  # read-only responsibility: read-only run
+            self.assertEqual(len(giden), 1)  # only the question, not "worked"
+            self.assertIn("[kosu] Send it?", giden[0])
+            rc.return_value = "NOT: nothing yet"
+            pentarch.run_sorumluluk(self.s.bul("kosu"))
+            self.assertEqual(len(giden), 1)  # a quiet run sends nothing
+        o = pentarch.onaylar()[-1]
+        self.assertIn("send the draft", o["is"])
+        self.assertIn("kosu.md", o["is"])
+
+
+class Kariyer(unittest.TestCase):
+    def test_uyari_ve_ashby(self):
+        import kariyer
+        self.assertIn("sponsor", kariyer.warn("<p>We are unable to sponsor visas.</p>"))
+        self.assertEqual(kariyer.warn("Visa sponsorship is available."), "")
+        self.assertIn("clearance", kariyer.warn("Active TS/SCI required"))
+        jobs = {"jobs": [{"id": "1", "title": "Junior Software Engineer", "location": "Remote", "isRemote": True,
+                          "jobUrl": "https://x/1", "publishedAt": "2026-11-01T00:00", "descriptionPlain": "No visa sponsorship.",
+                          "compensation": {"compensationTierSummary": "$100K"}},
+                         {"id": "2", "title": "Senior Engineer", "location": "Remote", "jobUrl": "https://x/2"},
+                         {"id": "3", "title": "Junior Developer", "location": "Paris", "isListed": False, "jobUrl": "https://x/3"}]}
+        with mock.patch.object(kariyer, "get", return_value=jobs):
+            out = kariyer.ashby("acme")
+        self.assertEqual([k for k, _ in out], ["ab-acme-1"])
+        self.assertIn("$100K", out[0][1])
+        self.assertIn("⚠", out[0][1])
