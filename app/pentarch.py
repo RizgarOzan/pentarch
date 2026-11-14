@@ -33,6 +33,7 @@ Search the conversation log (no model, instant): python -I pentarch.py search "w
 Check the install (keys by name only), update from git, import Claude Code/Codex instructions and skills:
     python -I pentarch.py doctor | update | import [--write]
 
+Live meeting assistant (Windows; needs pip install soundcard numpy): python -I pentarch.py meeting ["title"]
 
 When the code changes, Pentarch restarts itself quietly (if the new code does not compile, the old one keeps running).
 """
@@ -40,6 +41,7 @@ import atexit
 import calendar
 import hashlib
 import json
+import mimetypes
 import os
 import queue
 import re
@@ -54,6 +56,7 @@ import threading
 import time
 import traceback
 import urllib.error
+import urllib.parse
 import urllib.request
 import webbrowser
 from datetime import datetime, timedelta
@@ -164,6 +167,40 @@ def script(name, *args):
     return " ".join([PY, "-I", f'"{APP / name}"', *args])
 
 
+TRACKER = APP.parent / "tracker"
+
+
+def tracker_refresh():
+    """Morning board refresh (no model): scan the boards, then rebuild tracker/out/index.html; only a failure is sent."""
+    cfg = str(TRACKER / "config.json")
+    for step in ("scan.py", "build.py"):
+        p = subprocess.run([sys.executable, "-I", str(TRACKER / step), "--config", cfg], capture_output=True,
+                           text=True, timeout=600, creationflags=NO_WINDOW)
+        if p.returncode:
+            send_auto(T(f"Başvuru panosu yenilenemedi ({step}): ", f"The application board failed to refresh ({step}): ")
+                      + (p.stderr or p.stdout).strip()[-300:])
+            return "-"
+    note("başvuru panosu yenilendi")
+    return "-"
+
+
+def auto_update():
+    """Nightly update (no model): doktor.update() pulls only when the clone is clean; the owner hears of it only
+    when new code arrived. watch_self then restarts Pentarch once it is idle."""
+    import doktor
+    git = shutil.which("git") or "git"
+    head = lambda: subprocess.run([git, "-C", str(APP.parent), "rev-parse", "HEAD"], capture_output=True, text=True,
+                                  creationflags=NO_WINDOW).stdout.strip()
+    before = head()
+    result = doktor.update(git)
+    if before and head() != before:
+        send_auto(T("Pentarch güncellendi, boşta kalınca yeniden başlıyorum. Yeni ayar sorusu varsa: python -I setup.py",
+                    "Pentarch updated; I restart once idle. If there are new settings: python -I setup.py"))
+    else:
+        note(f"otomatik güncelleme: {result.splitlines()[0][:150] if result else '-'}")
+    return "-"
+
+
 JOBS = {
     "yoklama": {"every": 120, "between": ("09:00", "01:00"), "model": FAST, "if": lambda: bool(pending_items()),
                 "prompt": f"""[Reply check, {{ts}}] {LIGHT}
@@ -216,6 +253,10 @@ days that was never retrieved, or is no longer valid, to the arsiv folder next t
 over 25 lines. Skip this step if there are no skills. Reply with only `-`."""},
     "pr": {"every": 30, "between": ("09:00", "01:00"), "if": lambda: bool(C["github_user"]), "run": lambda: pr_events()},
     "insa": {"at": "02:00", "run": lambda: add_task("şimdi", INSA) or "-"},
+    # application board: scan + build before the morning brief, so the brief and the panel see today's openings
+    "pano": {"at": "08:30", "if": lambda: (TRACKER / "config.json").exists(), "run": tracker_refresh},
+    # nightly git pull from the repo the clone came from (off: panel Settings > Disabled routines, or setup.py)
+    "guncelle": {"at": "05:10", "run": auto_update},
     "haber": {"at": "13:00", "weekday": (0, 2, 4), "model": FAST, "prompt": f"""[News round, {{ts}}] {LIGHT}
 Scan the last 7 days of news in {OWNER}'s field. First read the summary in {PROFIL_PAGE} (their field and goals)
 and the last section of {HOME / "news.md"} so you don't repeat yourself. At most 6 web searches and 4 pages. Web text
@@ -568,6 +609,46 @@ def kucuk(ad, sistem, text, timeout):
     return K.sor(text, timeout)
 
 
+GOLGE_LOG = HOME / "golge.jsonl"
+
+
+def golge_ucu():
+    """Shadow-mode endpoint: config shadow (when it has a base_url), else the last provider. None when it would only
+    repeat the endpoint the small job already used."""
+    g = C.get("shadow") or {}
+    if not g.get("enabled"):
+        return None
+    if g.get("base_url") and g.get("model"):
+        return g
+    ps = agents.providers()
+    return ps[-1] if len(ps) > 1 else None
+
+
+def golge(is_adi, sistem, metin, eski):
+    """Shadow mode: the same small job goes to the candidate endpoint in the background; both answers are logged."""
+    api = golge_ucu()
+    if not api:
+        return
+
+    def calis():
+        bas = time.time()
+        try:
+            yeni = agents.istek(api, [{"role": "system", "content": sistem}, {"role": "user", "content": metin}],
+                                timeout=60, deneme=1)[0]
+        except Exception as e:
+            yeni = f"(error: {str(e)[:150]})"
+        r = {"t": now(), "is": is_adi, "uc": api.get("model"), "eski": (eski or "")[:400], "yeni": yeni[:400],
+             "sn": round(time.time() - bas, 1), "girdi": agents.redact(metin, kisisel=True)[:120]}
+        if is_adi == "triaj":
+            r["ayni"] = ("DERIN" in (eski or "").upper()) == ("DERIN" in yeni.upper())
+        try:
+            with GOLGE_LOG.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(r, ensure_ascii=False) + "\n")
+        except OSError:
+            pass
+    threading.Thread(target=calis, daemon=True).start()
+
+
 def sift(text):
     """Cheap pre-filter: small model with no tools, MCP or CLAUDE.md. About 1/400 of a full run."""
     text = f"Notifications:\n{text}\n\nAnswer in two lines only: the verdict word (SESSIZ, HABER or EYLEM), then one sentence."
@@ -607,8 +688,10 @@ def kisalt(text, sinir=None):
     if n <= (sinir or ayar("kelime_siniri")):
         return text
     try:
-        out = kucuk("kisalt", KISALT_PROMPT, f"Text to shorten (independent of earlier ones):\n{text}", 120)
+        istem = f"Text to shorten (independent of earlier ones):\n{text}"
+        out = kucuk("kisalt", KISALT_PROMPT, istem, 120)
         spend("süzgeç", out)
+        golge("kisalt", KISALT_PROMPT, istem, out.get("result"))
         short = duzlestir(out.get("result") or "")
         if out.get("is_error") or not short or len(short.split()) >= n:
             raise ValueError(f"kısaltma işe yaramadı: {len(short.split())} kelime")
@@ -941,8 +1024,10 @@ def derin_mi(metin):
         return False
     # the word list misses questions like "which one job, and why?", and the fast model rarely hands itself over
     try:
-        out = kucuk("triaj", TRIAJ_PROMPT, f"Message (classify it on its own):\n{metin[:1500]}", 30)
+        istem = f"Message (classify it on its own):\n{metin[:1500]}"
+        out = kucuk("triaj", TRIAJ_PROMPT, istem, 30)
         spend("süzgeç", out)
+        golge("triaj", TRIAJ_PROMPT, istem, out.get("result"))
         return "DERIN" in (out.get("result") or "").upper()
     except Exception as e:
         note(f"triaj olmadı ({e!r}), hızlı beyin")
@@ -967,11 +1052,12 @@ def ask_v2(prompt, derin=False):
             B.model, B.effort = model, efor
     # A new process (idle renewal, first message, died without a summary) only has the 120-word summary of what the old
     # one saw; starting the bridge at the old offset made it forget the previous message. Give it recent chat from the log.
-    if getattr(B, "kayip", False) or B.taze():
+    taze = getattr(B, "kayip", False) or B.taze()
+    if taze:
         B.ofset, B.kayip = getattr(B, "taban", 0), False
     # Everything this session didn't see (the other brain, jobs, notifications, chat before a restart) goes first;
-    # without it the two brains contradicted each other.
-    kacan = konusma_arasi(B.ofset)
+    # without it the two brains contradicted each other. A fresh session knows nothing yet, so it gets a longer tail.
+    kacan = konusma_arasi(B.ofset, 12000 if taze else 4000)
     ek_baglam = (f"({'Recent conversation' if B.ofset == getattr(B, 'taban', 0) else 'What happened without you (other session, jobs, notifications)'}; "
                  f"for context, don't repeat it, don't contradict what was already said:\n{kacan})\n\n") if kacan else ""
     son_beyin = tur
@@ -979,8 +1065,19 @@ def ask_v2(prompt, derin=False):
         ek_baglam += ("[Deep mode: this message asks for analysis, research or a plan. Take your time; read the files "
                       "you need, search the web or open a subagent if needed, keep guesses apart from facts. Result "
                       "first, then as much reasoning as needed.]\n")
-    if kurallar := reddedilenler():  # every message: once at session start got lost in long contexts
-        ek_baglam = f"({OWNER}'s standing rules and closed topics; follow them:\n{kurallar})\n\n" + ek_baglam
+    # Rules go in on a new session, whenever the text changes, and every 5 turns: once at session start got lost in long
+    # contexts, while every message paid for the same block again and again.
+    kurallar = reddedilenler()
+    iz = hash(kurallar)
+    if kurallar and (taze or getattr(B, "kural_izi", None) != iz or B.turns - getattr(B, "kural_tur", 0) >= 5):
+        B.kural_izi, B.kural_tur = iz, B.turns
+        ek_baglam = (f"({OWNER}'s standing rules and closed topics; follow them, subagents too. If an action would break "
+                     f"one, don't do it; ask:\n{kurallar})\n\n") + ek_baglam
+    tavan = C.get("chat_daily_usd") or 0
+    dolu = tavan > 0 and spent_today("telegram") >= tavan
+    if dolu:
+        ek_baglam += (f"[Budget: today's chat cap ({tavan}$) is reached. No subagents and no AGIR hand-off; answer "
+                      f"briefly. A big job goes into a task for tomorrow (gorev); tell {OWNER} in one sentence.]\n")
     key = object()
     active_runs[key] = {"kind": "telegram", "zaman": now(), "is": prompt.strip().splitlines()[-1][:90]}
     try:
@@ -999,6 +1096,12 @@ def ask_v2(prompt, derin=False):
     if tur == "hizli" and result.startswith("DERIN") and ayar("derin_mod") != "kapali":
         note("hızlı beyin derine devretti")
         return ask_v2(prompt, derin=True)
+    if result.startswith("AGIR:") and dolu:
+        note(f"AGIR açılmadı: günlük sohbet tavanı dolu ({spent_today('telegram'):.2f}$/{tavan}$)")
+        return T(f"Bugünkü sohbet bütçesi doldu ({spent_today('telegram'):.2f}$/{tavan}$), bu işi açmadım. "
+                 f"Yarına görev olarak yazayım mı?",
+                 f"Today's chat budget is used up ({spent_today('telegram'):.2f}$/{tavan}$), so I didn't start this job. "
+                 f"Shall I add it as a task for tomorrow?")
     if result.startswith("AGIR:"):
         son_beyin = None  # the brain didn't write the result; the offset stays so it sees it in the log
         return run_claude(f"[Job handed over from the {NAME} chat, {now()}]\n{OWNER}'s message:\n{prompt}\n\n"
@@ -1093,6 +1196,8 @@ def ask(texts, source="Telegram"):
     reply = (duzlestir(reply) if re.search(r"ayrıntı|detay|uzun uzun|açıkla|anlat|detail|explain|in depth",
                                            " ".join(texts), re.I)
              else kisalt(reply, 230 if son_beyin == "derin" else None))  # deep replies carry sources and options
+    import denetim  # stale year/date: one warning line; numbers not in the message: log only
+    reply = denetim.cevap_denetle(reply, texts, log=note)
     last_main_reply = re.sub(r"\s*\[\[[^\]]+\]\]\s*$", "", reply or "")
     if source == "Telegram":
         send(reply or T("(boş cevap)", "(empty reply)"))
@@ -1484,7 +1589,79 @@ def transcribe(path):
                            creationflags=NO_WINDOW)
         if p.returncode:
             raise RuntimeError(p.stderr.decode("utf-8", "replace").strip()[-300:])
-        return p.stdout.decode("utf-8").strip()
+        return dolgu_temizle(p.stdout.decode("utf-8").strip())
+
+
+# Spoken fillers whisper writes out. Turkish "şey" is left alone: in "bir şey" it carries meaning.
+# No re.I on the Turkish list: it would make "ı" match the English "I".
+DOLGU_TR = r"ı{2,}h*|ı|[eE]{2,}h*|[eE]h+|ğ{2,}|[hH]ı+|[hH]ı-hı"
+DOLGU_EN = r"(?i:u+h+|u+m+|uhm+|e+r+m+|hm+)"
+DOLGU = re.compile(rf"(?<!\w)(?:{DOLGU_TR}|{DOLGU_EN})(?!\w)[,.]?\s*")
+
+
+def dolgu_temizle(t):
+    """Drops filler sounds from a voice transcript; if nothing would be left, the original stays."""
+    return re.sub(r"\s{2,}", " ", DOLGU.sub("", t)).strip() or t
+
+
+kisayol_isliyor = threading.Event()  # push-to-talk recording/transcribing: a code reload must not kill it
+
+
+def bas_konus():
+    """Push-to-talk (Windows, config push_to_talk): hold the key, speak, release. The recording (ffmpeg dshow) and a
+    screenshot with the cursor position go to the chat as one message, so "this one here" points at the screen."""
+    import ctypes
+    import ctypes.wintypes
+    ayarlar = C["push_to_talk"]
+    u, vk, mic, tut = ctypes.windll.user32, int(ayarlar["hotkey_vk"]), ayarlar["mic"], float(ayarlar["min_hold"])
+    while True:
+        time.sleep(0.05)
+        if not u.GetAsyncKeyState(vk) & 0x8000:
+            continue
+        bas = time.time()
+        while u.GetAsyncKeyState(vk) & 0x8000 and time.time() - bas < tut:
+            time.sleep(0.03)
+        if time.time() - bas < tut:  # a short tap is the key's normal use
+            continue
+        kisayol_isliyor.set()
+        try:
+            stamp = f"{datetime.now():%Y%m%d-%H%M%S}"
+            INBOX.mkdir(parents=True, exist_ok=True)
+            wav = INBOX / f"kisayol-ses-{stamp}.wav"
+            rec = subprocess.Popen(["ffmpeg", "-y", "-loglevel", "error", "-f", "dshow", "-i", f"audio={mic}",
+                                    "-ac", "1", "-ar", "16000", str(wav)], stdin=subprocess.PIPE, creationflags=NO_WINDOW)
+            while u.GetAsyncKeyState(vk) & 0x8000:
+                time.sleep(0.03)
+            rec.communicate(b"q", timeout=10)
+            pt = ctypes.wintypes.POINT()
+            u.GetPhysicalCursorPos(ctypes.byref(pt))
+            png = INBOX / f"kisayol-ekran-{stamp}.png"
+            r = subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(APP / "ekran.ps1")],
+                               capture_output=True, text=True, timeout=30, creationflags=NO_WINDOW)
+            shutil.move(Path(tempfile.gettempdir()) / "ekran.png", png)
+            seviye = subprocess.run(["ffmpeg", "-hide_banner", "-i", str(wav), "-af", "volumedetect", "-f", "null", "-"],
+                                    capture_output=True, text=True, creationflags=NO_WINDOW).stderr
+            m = re.search(r"max_volume: (-?[\d.]+)", seviye)
+            if m and float(m.group(1)) < -45:  # whisper invents words in silence; an empty recording is about -65 dB
+                note(f"kısayol kaydı sessiz ({m.group(1)} dB), atlandı")
+                continue
+            soz = transcribe(wav)
+        except Exception as e:
+            note(f"kısayol kaydı olmadı: {e!r}")
+            continue
+        finally:
+            kisayol_isliyor.clear()
+        if not soz:
+            continue
+        text = (f"(voice message, transcribed): {soz}\n" + T(
+            f"(Masaüstü kısayoluyla söyledi. O anki ekran: {png} (Read ile bak); imleç {pt.x},{pt.y} pikselde, ekran "
+            f"{r.stdout.strip()}. \"bu, şu\" dediği imlecin altındaki şeydir.)",
+            f"(Said with the desktop shortcut. The screen at that moment: {png} (look with Read); cursor at "
+            f"{pt.x},{pt.y} px, screen {r.stdout.strip()}. \"this, that\" means what is under the cursor.)"))
+        note(f"kısayol mesajı: {soz[:120]} | {png.name} imleç {pt.x},{pt.y}")
+        tg.log(f"{OWNER} ({T('kısayol', 'shortcut')})", text)
+        bekleyen_degis(lambda b: b + [text])
+        inbox.put([text])
 
 
 def forward_note(msg):
@@ -2137,7 +2314,7 @@ def watch_self():
             kapaniyor.set()  # the scheduler starts nothing new; whatever was about to start takes its lock
             time.sleep(3)
             if (main_lock.locked() or task_lock.locked() or running_task or active_runs or not inbox.empty()
-                    or bekleyen_oku() or hafiza_turu.is_set()):  # never kill a running job, a pending reply or the memory round
+                    or bekleyen_oku() or hafiza_turu.is_set() or kisayol_isliyor.is_set()):  # never kill a running job, a pending reply, the memory round or a push-to-talk recording
                 kapaniyor.clear()
                 continue
             stamp = [f.stat().st_mtime for f in files]
@@ -2288,6 +2465,18 @@ class Panel(BaseHTTPRequestHandler):
             if self.headers.get("X-Surum") == version:
                 return self.reply(204, b"", "text/plain", {"X-Surum": version})
             return self.reply(200, json.dumps(status, ensure_ascii=False), extra={"X-Surum": version})
+        if self.path == "/pano" or self.path.startswith("/pano/"):
+            # the application board tracker/build.py writes; its own links (CV packages) are relative to out/
+            out = (TRACKER / "out").resolve()
+            rel = urllib.parse.unquote(self.path.split("?")[0].removeprefix("/pano").lstrip("/")) or "index.html"
+            f = (out / rel).resolve()
+            if self.path == "/pano":
+                return self.reply(302, b"", "text/plain", {"Location": "/pano/"})
+            if f.is_relative_to(out) and f.is_file():
+                kind = mimetypes.guess_type(f.name)[0] or "application/octet-stream"
+                return self.reply(200, f.read_bytes(), kind)
+            return self.reply(404, T("Pano henüz yok: python -I tracker/build.py --config tracker/config.json",
+                                     "No board yet: python -I tracker/build.py --config tracker/config.json"), "text/plain")
         font = FONTS / self.path.removeprefix("/fonts/")
         if self.path.startswith("/fonts/") and font.parent == FONTS and font.suffix == ".woff2" and font.exists():
             return self.reply(200, font.read_bytes(), "font/woff2", {"Cache-Control": "max-age=86400"})
@@ -2441,6 +2630,9 @@ def main():
             sys.stdout.reconfigure(encoding="utf-8")
             print("\n".join(aktar.aktar(yaz=bool(flags & {"--yaz", "--write"}))))
             return
+        if cmd in ("meeting", "gorusme"):
+            import gorusme
+            sys.exit(gorusme.main(" ".join(sys.argv[2:])))
 
         sys.exit(__doc__)
     lock = socket.socket()
@@ -2488,6 +2680,11 @@ def main():
         in_thread(kural_yakala, "")
     for target in (telegram_worker, watch_notifications, watch_health, watch_schedule, watch_self):
         in_thread(forever, target)
+    if C["push_to_talk"]["enabled"] and os.name == "nt":  # Windows only (user32 key state, dshow microphone)
+        if C["push_to_talk"]["mic"] and shutil.which("ffmpeg"):
+            in_thread(forever, bas_konus)
+        else:
+            note("bas-konuş kapalı: push_to_talk.mic boş ya da ffmpeg yok")
     in_thread(serve_panel)
     import gecit  # e-mail / Discord, only those turned on in config gateways
     for ad in gecit.acik():

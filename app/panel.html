@@ -231,6 +231,7 @@
   <span id="durum" role="status"><span class="dot" id="nokta"></span><span id="durumyazi"></span></span>
   <span class="spacer"></span>
   <div class="zaman"><div id="saat">--:--</div><div id="tarih"></div></div>
+  <a class="ikon" id="panoac" href="/pano/" target="_blank" rel="noopener"><svg class="i" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 4v16M4 10h5"/></svg></a>
   <button type="button" class="ikon" id="ayarac"><svg class="i" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></button>
 </header>
 
@@ -283,7 +284,7 @@ const T = {
   tr: {
     connecting: "bağlanıyor", ready: "hazır", thinking: "düşünüyor", min: "dk", queued: n => `${n} sırada`,
     offline: "bağlantı yok", restarting: "yeniden başlıyor",
-    chat: "Sohbet", status: "Durum", settings: "Ayarlar", close: "Kapat (Esc)",
+    chat: "Sohbet", status: "Durum", settings: "Ayarlar", board: "Başvuru panosu", close: "Kapat (Esc)",
     placeholder: `${NAME} ile konuş…`, mic: "Sesli yaz (Ctrl+M)", send: "Gönder (Enter)",
     hint: "<kbd>Enter</kbd> gönderir · <kbd>Shift+Enter</kbd> yeni satır · <kbd>Ctrl+M</kbd> ses", chars: "karakter",
     recording: "kayıt sürüyor, bitirmek için tekrar bas", transcribing: "yazıya çevriliyor…", noMic: "mikrofon yok",
@@ -306,7 +307,7 @@ const T = {
   en: {
     connecting: "connecting", ready: "ready", thinking: "thinking", min: "min", queued: n => `${n} queued`,
     offline: "offline", restarting: "restarting",
-    chat: "Chat", status: "Status", settings: "Settings", close: "Close (Esc)",
+    chat: "Chat", status: "Status", settings: "Settings", board: "Application board", close: "Close (Esc)",
     placeholder: `Message ${NAME}…`, mic: "Dictate (Ctrl+M)", send: "Send (Enter)",
     hint: "<kbd>Enter</kbd> sends · <kbd>Shift+Enter</kbd> new line · <kbd>Ctrl+M</kbd> voice", chars: "characters",
     recording: "recording, press again to stop", transcribing: "transcribing…", noMic: "no microphone",
@@ -343,7 +344,7 @@ let D = null, thinking = false, seen = 0, health = [], surum = "", ad = NAME, sa
 // sabit yazılar dile göre bir kez yerleşir
 document.querySelectorAll("[data-t]").forEach(el => el.textContent = T[el.dataset.t]);
 $("mesaj").placeholder = T.placeholder; $("ipucu").innerHTML = T.hint; $("durumyazi").textContent = T.connecting;
-[["ayarac", T.settings], ["mik", T.mic], ["gonder", T.send], ["ayarkapa", T.close]].forEach(([id, s]) => { $(id).title = s; $(id).setAttribute("aria-label", s); });
+[["panoac", T.board], ["ayarac", T.settings], ["mik", T.mic], ["gonder", T.send], ["ayarkapa", T.close]].forEach(([id, s]) => { $(id).title = s; $(id).setAttribute("aria-label", s); });
 $("durdur").title = T.pauseTip; $("internet").title = T.netTip;
 $("sohbetalan").setAttribute("aria-label", T.chat); $("durumalan").setAttribute("aria-label", T.status);
 

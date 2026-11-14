@@ -1,8 +1,9 @@
 # {{OWNER}}
 
 ## Özet
-- Kim: (bir cümle: ne iş yapıyorsun, nerede, hangi aşamadasın)
+- Kim: {{WHO}}
 - Hedefler: {{GOALS}}
+- Başvurular: {{APPLY}}
 - İlgi alanları: {{INTERESTS}}
 - Cevap tercihi: (kısa mı ayrıntılı mı, hangi dilde, neyi hiç istemezsin)
 - Saatler: (hangi saatlerde rahatsız edilmek istemezsin)

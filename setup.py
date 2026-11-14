@@ -248,16 +248,78 @@ def career_setup(old_cfg, lang):
     if exclude is not None:  # the example's exclude list is for entry level
         prof["exclude"] = exclude
     prof.setdefault("cv", {})["language"] = lang
+    prof["applicant"] = applicant_setup(cur.get("applicant") or {})
     pf.write_text(json.dumps(prof, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    print(t(f"  Yazıldı: {pf}. İlanları taramak için: python -I tracker/scan.py --config tracker/config.json",
-            f"  Written: {pf}. To scan the boards: python -I tracker/scan.py --config tracker/config.json"))
+    print(t(f"  Yazıldı: {pf}. Pentarch her sabah 08:30'da ilanları tarar ve panoyu yeniler (panelde pano düğmesi);\n"
+            "  elle: python -I tracker/scan.py --config tracker/config.json",
+            f"  Written: {pf}. Pentarch scans the boards and refreshes the board every morning at 08:30 (board button\n"
+            "  in the panel); by hand: python -I tracker/scan.py --config tracker/config.json"))
     return {**boards_old, "greenhouse": boards["greenhouse"], "lever": boards["lever"], "titles": titles, "fields": [],
             "locations": [l for l in locs if not l.lower().startswith("relocation")]}
 
 
-def skills_setup(cli):
+APPLICANT = (  # key, tr question, en question: what application forms ask again and again
+    ("about", "Kendini 2-3 cümleyle anlat (ne yapıyorsun, neyi iyi yapıyorsun, ne arıyorsun)",
+     "Tell me about yourself in 2-3 sentences (what you do, what you are good at, what you look for)"),
+    ("full_name", "Ad soyad (formlarda yazılacak hâli)", "Full name (as forms should show it)"),
+    ("email", "Başvurularda kullanılacak e-posta", "Email for applications"),
+    ("phone", "Telefon (ülke koduyla)", "Phone (with country code)"),
+    ("city", "Yaşadığın şehir, ülke", "City, country you live in"),
+    ("links", "Bağlantılar: LinkedIn, GitHub, portfolyo (virgülle)", "Links: LinkedIn, GitHub, portfolio (comma separated)"),
+    ("education", "Eğitim: okul, bölüm, mezuniyet yılı (sürüyorsa beklenen)", "Education: school, degree, graduation year (expected if ongoing)"),
+    ("experience", "Deneyim özeti: iş, staj, projeler (kısa)", "Experience summary: jobs, internships, projects (short)"),
+    ("languages", "Konuştuğun diller ve seviyesi (virgülle)", "Languages you speak and level (comma separated)"),
+    ("work_authorization", "Çalışma izni: hangi ülkelerde izin gerekmeden çalışabilirsin?", "Work authorization: where can you work without a permit?"),
+    ("needs_sponsorship", "Başka ülkelerde vize sponsoru gerekir mi? (evet/hayır)", "Do you need visa sponsorship elsewhere? (yes/no)"),
+    ("relocate", "Taşınmaya açık mısın? (evet/hayır/nereye)", "Open to relocating? (yes/no/where)"),
+    ("start_date", "En erken başlama tarihi ya da ihbar süresi", "Earliest start date or notice period"),
+    ("salary", "Maaş beklentisi (tutar, para birimi; boş bırakılabilir)", "Salary expectation (amount, currency; may be empty)"),
+    ("cv_path", "Hazır CV dosyanın yolu (yoksa boş)", "Path to your existing CV file (empty if none)"),
+)
+
+
+def applicant_setup(cur):
+    """"Tell me about yourself": what application forms ask, asked once and kept in tracker/profile.json (gitignored,
+    stays on this machine). The assistant fills forms from it and still asks before every submit (rules: outward step)."""
+    print(t("\nKendini anlat: başvuru formlarının hep sorduğu bilgiler. Bir kez cevapla; asistan formları bunlarla doldurur,\n"
+            "  göndermeden önce her seferinde sana sorar. Bilmediğini boş geç, sonra tracker/profile.json'dan düzeltirsin.",
+            "\nAbout you: what application forms always ask. Answer once; the assistant fills forms from it and asks you\n"
+            "  before every submit. Skip what you don't know; fix it later in tracker/profile.json."))
+    if not yes(t("Şimdi doldurulsun mu?", "Fill it in now?"), not cur):
+        return cur
+    out = {"_": "Form answers. Filled by setup.py; the assistant reads them for applications and never submits without asking."}
+    for key, tr_q, en_q in APPLICANT:
+        old = cur.get(key, "")
+        out[key] = ask("  " + t(tr_q, en_q), ", ".join(old) if isinstance(old, list) else str(old))
+    for key in ("links", "languages"):
+        out[key] = [x.strip() for x in out[key].split(",") if x.strip()]
+    if out["cv_path"] and not Path(out["cv_path"]).expanduser().exists():
+        print(t(f"  ! {out['cv_path']} bulunamadı; yolu sonra düzelt.", f"  ! {out['cv_path']} not found; fix the path later."))
+    return out
+
+
+def _fill(text, notes):
+    """Placeholders in the shipped skills and agents: tool paths, the notes folder and the home folder."""
+    return (text.replace("skills/linkedin/li.py", f'"{REPO / "skills" / "linkedin" / "li.py"}"')
+            .replace("skills/cv/cv.py", f'"{REPO / "skills" / "cv" / "cv.py"}"')
+            .replace("{{NOTES}}", str(Path(notes).expanduser())).replace("{{HOME}}", str(HOME)))
+
+
+def _copy_new(src, dst, notes):
+    """Copy one file unless the user already has a different one there. Returns False when it was left alone."""
+    new = _fill(src.read_text(encoding="utf-8"), notes)
+    if dst.exists() and dst.read_text(encoding="utf-8") != new:
+        return False
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    dst.write_text(new, encoding="utf-8")
+    return True
+
+
+def skills_setup(cli, notes="~/notes"):
     """Repo skills (skills/<name>/SKILL.md): a pointer in <home>/beceriler so memory search attaches them, and for
-    Claude Code a copy under ~/.claude/skills so /<name> works in the chat too."""
+    Claude Code a copy under ~/.claude/skills so /<name> works in the chat too, plus the subagents in agents/
+    (the konsey council and log-avcisi) under ~/.claude/agents. A skill or agent the user already has under the
+    same name is never overwritten."""
     dirs = sorted(d for d in (REPO / "skills").iterdir() if (d / "SKILL.md").exists())
     if not dirs:
         return
@@ -271,11 +333,25 @@ def skills_setup(cli):
     names = ", ".join(d.name for d in dirs)
     if cli == "claude" and yes(t(f"Beceriler Claude Code'a da kopyalansın mı ({names})?", f"Copy the skills into Claude Code too ({names})?"), True):
         target = Path.home() / ".claude" / "skills"
+        kept = []
         for d in dirs:
-            shutil.copytree(d, target / d.name, dirs_exist_ok=True)
-            sk = target / d.name / "SKILL.md"  # the copy runs from any folder, so name the tool by its full path
-            sk.write_text(sk.read_text(encoding="utf-8").replace("skills/linkedin/li.py", f'"{REPO / "skills" / "linkedin" / "li.py"}"').replace("skills/cv/cv.py", f'"{REPO / "skills" / "cv" / "cv.py"}"'), encoding="utf-8")
-        print(t(f"  Kopyalandı: {target}", f"  Copied to: {target}"))
+            # SKILL.md decides: if the user has their own skill by this name, the whole folder is left alone
+            if not _copy_new(d / "SKILL.md", target / d.name / "SKILL.md", notes):
+                kept.append(f"skills/{d.name}")
+                continue
+            for f in d.rglob("*"):
+                if f.is_file() and f.name != "SKILL.md" and "__pycache__" not in f.parts:
+                    out = target / d.name / f.relative_to(d)
+                    out.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(f, out)
+        agents = REPO / "agents"
+        for f in sorted(agents.glob("*.md")) if agents.is_dir() else []:
+            if not _copy_new(f, Path.home() / ".claude" / "agents" / f.name, notes):
+                kept.append(f"agents/{f.name}")
+        print(t(f"  Kopyalandı: {target} ve ~/.claude/agents", f"  Copied to: {target} and ~/.claude/agents"))
+        if kept:
+            print(t("  Dokunulmadı (aynı adla senin kendi dosyan var): ", "  Left alone (you already have your own by that name): ")
+                  + ", ".join(kept))
     elif cli != "claude":
         print(t(f"  Beceriler {REPO / 'skills'} altında; {cli} için kendi beceri klasörüne kopyalayabilirsin.",
                 f"  Skills live in {REPO / 'skills'}; copy them into {cli}'s own skills folder if it has one."))
@@ -410,6 +486,14 @@ def main():
             off.discard(job)
         else:
             off.add(job)
+    print(t("  Otomatik güncelleme: her gece 05:10'da GitHub'daki yeni sürümü çeker (yalnız klasörde senin değişikliğin yoksa),\n"
+            "  Pentarch boşta kalınca kendini yeniden başlatır ve sana tek satır yazar.",
+            "  Auto-update: every night at 05:10 pulls the new version from GitHub (only when you have no local changes),\n"
+            "  Pentarch restarts itself once idle and tells you in one line."))
+    if yes(t("Otomatik güncelleme (guncelle) açık kalsın mı?", "Keep auto-update (guncelle) on?"), "guncelle" not in off):
+        off.discard("guncelle")
+    else:
+        off.add("guncelle")
 
     cfg = {**old, "owner": owner or "Owner", "name": name or "Pentarch", "lang": lang, "notes_dir": notes,
            "agent": {**agent, "cli": cli, "fast_model": fast, "deep_model": deep, "light_model": light,
@@ -422,7 +506,7 @@ def main():
     panel_settings = HOME / "ayarlar.json"  # the panel's own switches, once Pentarch has run
     if panel_settings.exists():
         a = json.loads(panel_settings.read_text(encoding="utf-8"))
-        a["kapali_isler"] = sorted(set(a.get("kapali_isler", [])) - {"insa", "posta"} | off)
+        a["kapali_isler"] = sorted(set(a.get("kapali_isler", [])) - {"insa", "posta", "guncelle"} | off)
         panel_settings.write_text(json.dumps(a, ensure_ascii=False, indent=1), encoding="utf-8")
     Path(notes).expanduser().mkdir(parents=True, exist_ok=True)
     if not any(Path(notes).expanduser().rglob("*.md")):
@@ -442,7 +526,9 @@ def main():
     wiki_backup(Path(notes).expanduser())
 
     fill = {"{{APP}}": APP.as_posix(), "{{HOME}}": HOME.as_posix(), "{{NOTES}}": Path(notes).expanduser().as_posix(),
-            "{{OWNER}}": cfg["owner"], "{{NAME}}": cfg["name"]}
+            "{{OWNER}}": cfg["owner"], "{{NAME}}": cfg["name"],
+            "{{WHO}}": t("(bir cümle: ne iş yapıyorsun, nerede, hangi aşamadasın)", "(one sentence: what you do, where, at what stage)"),
+            "{{APPLY}}": t("(başvuru bilgisi yok; setup.py'yi yeniden çalıştır)", "(no applicant details yet; run setup.py again)")}
     fill.update({"{{GOALS}}": t("(önümüzdeki aylar için 2-3 somut hedef, varsa son tarihleriyle)", "(2-3 concrete goals for the coming months, with deadlines if any)"),
                  "{{INTERESTS}}": t("(izlemem gereken konular, teknolojiler, fırsat türleri)", "(topics, technologies and kinds of opportunities to watch for)")})
     pf = REPO / "tracker" / "profile.json"
@@ -451,6 +537,13 @@ def main():
         fill.update({"{{GOALS}}": t("şu rollerde iş bulmak: ", "find a role as ") + ", ".join(prof.get("target_roles") or []) +
                      (" (" + ", ".join(prof.get("locations") or []) + ")" if prof.get("locations") else ""),
                      "{{INTERESTS}}": ", ".join((prof.get("skills") or []) + (prof.get("target_roles") or []))})
+        if (ap := prof.get("applicant") or {}).get("about"):
+            fill["{{WHO}}"] = ap["about"]
+        if any(v for k, v in ap.items() if k != "_"):
+            fill["{{APPLY}}"] = t(f"form cevapları {pf} içindeki applicant bölümünde (iletişim, eğitim, çalışma izni, maaş, CV yolu); "
+                                  "formu onlarla doldur, eksik alanı uydurma, sor; göndermeden önce her seferinde onay al",
+                                  f"form answers are in the applicant block of {pf} (contact, education, work permit, salary, CV path); "
+                                  "fill forms from it, ask instead of inventing a missing field, get approval before every submit")
     kept = []
     for src in sorted((REPO / "templates" / lang).iterdir()):
         dst = HOME / src.name
@@ -464,7 +557,7 @@ def main():
     if kept:
         print(t(f"Olduğu gibi kaldı: {', '.join(kept)} (--force üstüne yazar)", f"Kept existing: {', '.join(kept)} (--force overwrites)"))
     (HOME / "v2.on").write_text("", encoding="utf-8") if cli == "claude" else (HOME / "v2.on").unlink(missing_ok=True)
-    skills_setup(cli)
+    skills_setup(cli, cfg["notes_dir"])
 
     if yes(t("\nPython paketleri kurulsun mu (sesli mesaj ve sesli cevap)?", "\nInstall the Python packages (voice in/out)?"), True):
         subprocess.run([sys.executable, "-m", "pip", "install", "-r", str(REPO / "requirements.txt")])
@@ -509,8 +602,8 @@ def main():
     if todo:
         print(t("Asistanı başlatmadan önce:", "Before starting the assistant:") + "".join(f"\n  - {x}" for x in todo))
     print(t(f"""Başlatmak için:  python -I "{APP / 'pentarch.py'}"
-Sonra Telegram'dan botuna herhangi bir mesaj at: ilk yazan sohbet sahip olur.""", f"""Start it with:  python -I "{APP / 'pentarch.py'}"
-Then send any message to your bot from Telegram: the first chat that writes becomes the owner."""))
+Henüz yapmadıysan Telegram'dan bota /start <kod> yaz (kod: {SECRETS / 'telegram-pair.txt'}); bunu gönderen sohbet sahip olur.""", f"""Start it with:  python -I "{APP / 'pentarch.py'}"
+If you have not yet, send the bot /start <code> in Telegram (code: {SECRETS / 'telegram-pair.txt'}); that chat becomes the owner."""))
     if (REPO / "tracker" / "config.json").exists():
         print(t(f"""Modelsiz çalışan kariyer parçaları (bir CLI gerekmez):
   ilanları tara:   python -I "{REPO / 'tracker' / 'scan.py'}" --config "{REPO / 'tracker' / 'config.json'}"

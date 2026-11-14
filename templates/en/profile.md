@@ -1,8 +1,9 @@
 # {{OWNER}}
 
 ## Summary
-- Who: (one sentence: what you do, where, at what stage)
+- Who: {{WHO}}
 - Goals: {{GOALS}}
+- Applications: {{APPLY}}
 - Interests: {{INTERESTS}}
 - Answers: (short or detailed, which language, what you never want)
 - Hours: (when you don't want to be disturbed)
