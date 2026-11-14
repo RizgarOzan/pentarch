@@ -66,9 +66,67 @@ def kontroller():
     return r
 
 
+VPN = ("tap", "wintun", "wireguard", "vpn", "tun")
+# Windows only: app crashes in the last 24 h, fixed drives, adapters that are up. One PowerShell call, JSON back
+SISTEM_PS = (
+    "[Console]::OutputEncoding=[Text.Encoding]::UTF8;"  # otherwise the OEM code page garbles non-ASCII event text
+    "$ev=@(Get-WinEvent -FilterHashtable @{LogName='Application';Id=1000,1002;StartTime=(Get-Date).AddHours(-24)} "
+    "-ErrorAction SilentlyContinue | select -First 10 | %{ $_.TimeCreated.ToString('MM-dd HH:mm')+' '+(($_.Message -split \"`n\")[0]) });"
+    "$d=@(Get-CimInstance Win32_LogicalDisk -Filter 'DriveType=3' | %{ @{ad=$_.DeviceID;bos=[double]$_.FreeSpace;boyut=[double]$_.Size} });"
+    "$a=@(Get-NetAdapter -ErrorAction SilentlyContinue | ?{$_.Status -eq 'Up'} | %{ $_.Name+' | '+$_.InterfaceDescription });"
+    "@{ev=$ev;disk=$d;ag=$a} | ConvertTo-Json -Depth 3 -Compress")
+
+
+def sistem_yorumla(js):
+    """[(ok, line)] from the SISTEM_PS answer: crashes and a VPN are notes, a nearly full drive is a problem."""
+    r = []
+    ev = js.get("ev") or []
+    r.append((None, T(f"son 24 saatte {len(ev)} uygulama çökmesi/donması", f"{len(ev)} app crash/hang event(s) in the last 24 h")
+              + (": " + "; ".join(e[:90] for e in ev[:3]) if ev else "")))
+    for d in js.get("disk") or []:
+        bos, boyut = d.get("bos") or 0, d.get("boyut") or 0
+        dolu = boyut and (bos < 10 * 2**30 or bos / boyut < 0.1)
+        r.append((not dolu, T(f"disk {d.get('ad')}: {bos / 2**30:.0f} GB boş / {boyut / 2**30:.0f} GB",
+                              f"drive {d.get('ad')}: {bos / 2**30:.0f} GB free of {boyut / 2**30:.0f} GB")))
+    vpn = [a for a in js.get("ag") or [] if any(w in a.partition(" | ")[2].lower() for w in VPN)]
+    r.append((None, T("VPN bağdaştırıcısı açık: ", "VPN adapter up: ") + "; ".join(vpn) if vpn
+              else T("VPN bağdaştırıcısı görünmüyor", "no VPN adapter up")))
+    return r
+
+
+def erisim(url):
+    """True when the host answered at all (any HTTP status means the network works)."""
+    import urllib.error
+    import urllib.request
+    try:
+        urllib.request.urlopen(urllib.request.Request(url, method="HEAD"), timeout=6)
+    except urllib.error.HTTPError:
+        pass
+    except Exception:
+        return False
+    return True
+
+
+def sistem_kontrolleri():
+    """Real connectivity, plus the Windows checks. Kept out of kontroller(): it touches the network and takes seconds."""
+    hedef = {"google": "https://www.google.com", "telegram": "https://api.telegram.org"}
+    sonuc = {k: erisim(u) for k, u in hedef.items()}
+    r = [(any(sonuc.values()), T("internet: ", "internet: ") + ", ".join(
+        f"{k} {T('açık', 'reachable') if v else T('YOK', 'UNREACHABLE')}" for k, v in sonuc.items()))]
+    if os.name != "nt":
+        return r
+    try:
+        import json
+        p = subprocess.run(["powershell", "-NoProfile", "-Command", SISTEM_PS], capture_output=True, text=True,
+                           encoding="utf-8", errors="replace", timeout=60, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        return r + sistem_yorumla(json.loads(p.stdout))
+    except Exception as e:
+        return r + [(None, T(f"Windows kontrolleri okunamadı: {e!r}"[:200], f"Windows checks unreadable: {e!r}"[:200]))]
+
+
 def doctor():
     sorun = 0
-    for ok, satir in kontroller():
+    for ok, satir in kontroller() + sistem_kontrolleri():
         print(("OK " if ok else "-- " if ok is None else "!! ") + satir)
         sorun += ok is False
     print(T(f"{sorun} sorun", f"{sorun} problem(s)"))

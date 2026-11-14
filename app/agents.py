@@ -100,10 +100,16 @@ EMAIL_RE = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
 IBAN_RE = re.compile(r"\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]){11,30}\b")
 KART_RE = re.compile(r"\b\d(?:[ -]?\d){12,18}\b")  # card-like: 13-19 digits
 TEL_RE = re.compile(r"(?<![\w])\+?\(?\d{1,4}\)?(?:[ .-]?\(?\d{2,4}\)?){2,5}(?![\w])")
+BEARER_RE = re.compile(r"(?i)\bbearer\s+[\w.~+/=-]{8,}")
+PAROLA_RE = re.compile(r"(?i)\b(password|passwd|parola|şifre)(\s*[:=]\s*)\S+|\b(pass)(\s*=\s*)\S+")
+_EV = Path.home()
+EV_RE = re.compile("(?:" + re.escape(str(_EV)).replace(r"\\", r"[\\/]") + "|" + re.escape(_EV.as_posix()) + r")(?![\w.-])",
+                   re.I) if len(_EV.parts) > 1 else None  # the home folder path names the OS user
 
 
 def redact(text, kisisel=False):
-    """Masks keys and tokens before text goes to an API model: the values in secrets/keys.env, then known key shapes.
+    """Masks keys and tokens before text goes to an API model: the values in secrets/keys.env, known key shapes,
+    `Bearer <token>`, values after password:/şifre:/pass=, and the home-folder path (it names the OS user).
     kisisel=True also masks e-mail addresses, IBAN/card-like numbers and phone numbers."""
     if not isinstance(text, str):
         return text
@@ -114,6 +120,10 @@ def redact(text, kisisel=False):
             if len(v) >= 12:
                 text = text.replace(v, "[secret]")
     text = SECRET_RE.sub("[secret]", text)
+    text = BEARER_RE.sub("Bearer [secret]", text)
+    text = PAROLA_RE.sub(lambda m: (m[1] or m[3]) + (m[2] or m[4]) + "[secret]", text)
+    if EV_RE:
+        text = EV_RE.sub("~", text)
     if kisisel:
         text = EMAIL_RE.sub("[e-posta]", text)
         text = IBAN_RE.sub("[iban]", text)
@@ -137,6 +147,26 @@ def guvensiz(api):
     return C.get("privacy", {}).get("default_deny", True) and not api.get("trusted")
 
 
+ROUTE_LOG = SECRETS.parent / "yol.jsonl"
+
+
+def yol_yaz(base_url, model, via=None):
+    """Route log: which endpoint/model really answered (gateways put the upstream in X-Routed-Via).
+    One short JSON line per answer; past ~200 KB only the newer half is kept."""
+    try:
+        r = {"t": time.strftime("%Y-%m-%d %H:%M:%S"), "url": base_url, "model": str(model)}
+        if isinstance(via, str) and via:
+            r["via"] = via[:120]
+        ROUTE_LOG.parent.mkdir(parents=True, exist_ok=True)
+        if ROUTE_LOG.exists() and ROUTE_LOG.stat().st_size > 200_000:
+            lines = ROUTE_LOG.read_text(encoding="utf-8").splitlines()
+            ROUTE_LOG.write_text("\n".join(lines[len(lines) // 2:]) + "\n", encoding="utf-8")
+        with ROUTE_LOG.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(r, ensure_ascii=False) + "\n")
+    except OSError:
+        pass  # the log is never worth failing an answer
+
+
 def istek(api, messages, model=None, timeout=60, max_tokens=None, deneme=3, kisisel=False):
     """One POST with retries. Returns (text, usage). 429/5xx/timeouts are retried with backoff (Retry-After honoured);
     on 429 the provider's fallback_model is tried first when configured. Untrusted providers only get redacted text,
@@ -157,9 +187,11 @@ def istek(api, messages, model=None, timeout=60, max_tokens=None, deneme=3, kisi
         try:
             with urllib.request.urlopen(req, timeout=timeout) as r:
                 j = json.loads(r.read())
+                yol = r.headers.get("X-Routed-Via") if r.headers else None
             text = (j["choices"][0]["message"]["content"] or "").strip()
             if not text:
                 raise RuntimeError(f"{api['base_url']}: empty answer")
+            yol_yaz(api["base_url"], j.get("model") or govde["model"], yol)
             return text, j.get("usage") or {}
         except urllib.error.HTTPError as e:
             if e.code != 429 and e.code < 500:

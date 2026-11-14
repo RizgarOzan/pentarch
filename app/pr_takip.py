@@ -2,7 +2,7 @@
 
 No packages, no model; uses the `gh` CLI. Comments, reviews and line comments all count, bots are dropped.
     python -I pr_takip.py
-    python -I pr_takip.py --taslak   # prints a polite reminder draft under each silent PR; does NOT send it
+    python -I pr_takip.py --taslak   # a polite reminder draft under each silent PR, also in <home>/pr_taslak.md; NOT sent
 Needs config "github_user"; when it is empty the script exits quietly. The morning brief runs this and the core
 reads lines starting with WAITING / APPROVED (import them from here rather than matching the text).
 """
@@ -14,9 +14,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from config import C, T  # noqa: E402
+from config import C, HOME, T  # noqa: E402
 
 ME = C.get("github_user") or ""
+DRAFTS = HOME / "pr_taslak.md"
 SILENT_DAYS = 7
 WAITING = T("Cevap bekliyor", "Awaiting reply")
 APPROVED = T("Onaylandı", "Approved")
@@ -48,9 +49,18 @@ def events(repo, number):
 
 
 def draft(people):
-    """Reminder text for a silent PR (maintainers are mostly English-speaking, so it stays English)."""
-    who = " ".join(f"@{p}" for p in dict.fromkeys(people)) or "there"
-    return f"Hi {who}, gentle ping on this one. Is there anything you'd like me to change? Happy to rebase or adjust if needed."
+    """Reminder text for a silent PR (maintainers are mostly English-speaking, so it stays English). Only the last
+    person who spoke is mentioned: pinging everyone who ever commented reads as spam."""
+    who = f" @{people[-1]}" if people else ""
+    return f"Hi{who}, gentle ping on this one. Is there anything you'd like me to change? Happy to rebase or adjust if needed."
+
+
+def write_drafts(blocks, now):
+    """Drafts go to <home>/pr_taslak.md so they can be copied later; nothing is posted."""
+    text = "\n".join(blocks) or T("Sessiz PR yok, taslak gerekmiyor.\n", "No silent PRs, no drafts needed.\n")
+    DRAFTS.write_text(T(f"# PR hatırlatma taslakları ({now:%Y-%m-%d %H:%M} UTC), gönderilmedi\n\n",
+                        f"# PR reminder drafts ({now:%Y-%m-%d %H:%M} UTC), not sent\n\n") + text, encoding="utf-8")
+    return DRAFTS
 
 
 def main():
@@ -58,7 +68,7 @@ def main():
         return  # PR tracking is off
     now = datetime.now(timezone.utc)
     prs = gh("search", "prs", "--author", ME, "--state", "open", "--json", "repository,number,title,url", "--limit", "100")
-    waiting, silent, errors = [], [], []
+    waiting, silent, errors, drafts = [], [], [], []
     for p in prs:
         repo = p["repository"]["nameWithOwner"]
         try:
@@ -76,8 +86,11 @@ def main():
         elif days > SILENT_DAYS:
             silent.append(f"{T('Sessiz: son söz senin', 'Silent: you had the last word')}, {line}")
             if "--taslak" in sys.argv:
-                silent[-1] += T("\n  Taslak (gönderilmedi): ", "\n  Draft (not sent): ") + \
-                    draft([w for _, w, _ in ev if w.lower() != ME.lower()])
+                metin = draft([w for _, w, _ in ev if w.lower() != ME.lower()])
+                silent[-1] += T("\n  Taslak (gönderilmedi): ", "\n  Draft (not sent): ") + metin
+                drafts.append(f"{repo}#{p['number']} ({days} {T('gün sessiz', 'days silent')}) {p['url']}\n{metin}\n")
+    if "--taslak" in sys.argv:
+        print(T("Taslaklar:", "Drafts:"), write_drafts(drafts, now))
     for line in waiting + silent:
         print(line)
     for e in errors:

@@ -33,7 +33,7 @@ DEFAULTS = {
         "workers": [],
         "max_parallel": 8,         # subtasks running at once (alt.py)
         "allowed_tools": ["Read", "Grep", "Glob", "WebSearch", "WebFetch", "Bash(python *)", "Bash(gh pr view *)", "Bash(gh pr list *)", "Bash(gh pr diff *)",
-                          "Bash(gh issue view *)", "Bash(gh issue list *)", "Bash(gh repo view *)", "Bash(gh api *)"],
+                          "Bash(gh issue view *)", "Bash(gh issue list *)", "Bash(gh repo view *)"],
     },
     # optional OpenAI-compatible endpoint for cheap one-shot work (filters, shortening, council seats).
     # key_env names the environment variable that holds the key; nothing is stored here.
@@ -71,8 +71,19 @@ DEFAULTS = {
         "discord": {"enabled": False, "token_env": "PENTARCH_DISCORD_TOKEN", "channel_id": "", "owner_id": "", "every": 15},
     },
     "panel_port": 47824,
-
-
+    "chat_daily_usd": 0,           # daily cap for Telegram chat spend; once reached no AGIR hand-off. 0 = no cap
+    # pre-send reply audit (denetim.py): stale dates add a warning line, unsourced numbers are only logged.
+    # summary_fields {name: regex} must all show up in a long reply whose source matches summary_trigger; {} = off
+    "audit": {"enabled": True, "summary_trigger": "", "summary_fields": {}},
+    # shadow mode: small jobs (shorten/triage) also go to a candidate endpoint in the background; both answers are
+    # logged to <home>/golge.jsonl so you can see whether a cheaper model would do. Nothing user-facing changes.
+    # Endpoint fields have the providers shape; empty base_url = the last entry of providers
+    "shadow": {"enabled": False, "base_url": "", "model": "", "key_env": ""},
+    # push-to-talk (Windows): hold the key, speak, release; the voice and a screenshot go to the chat as a message.
+    # hotkey_vk is a Windows virtual-key code (0x78 = F9); mic is the dshow device name ffmpeg sees ("" = off)
+    "push_to_talk": {"enabled": False, "hotkey_vk": 0x78, "mic": "", "min_hold": 0.4},
+    # live meeting assistant (`pentarch.py meeting`): goal is what you want out of the call (or <home>/gorusme.md)
+    "meeting": {"goal": "", "port": 8765, "mic": True},
     "lock_port": 47823,
 }
 

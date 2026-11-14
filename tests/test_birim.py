@@ -594,3 +594,222 @@ class Kariyer(unittest.TestCase):
         self.assertEqual([k for k, _ in out], ["ab-acme-1"])
         self.assertIn("$100K", out[0][1])
         self.assertIn("⚠", out[0][1])
+
+
+class RedactEk(unittest.TestCase):
+    def test_ev_yolu(self):
+        ev = Path.home()
+        self.assertEqual(agents.redact(f"open {ev}{os.sep}x.txt"), f"open ~{os.sep}x.txt")
+        self.assertEqual(agents.redact(f"open {ev.as_posix()}/x.txt"), "open ~/x.txt")
+        self.assertEqual(agents.redact(f"{ev}s{os.sep}x"), f"{ev}s{os.sep}x")  # another user's folder is left alone
+
+    def test_parola_ve_bearer(self):
+        self.assertEqual(agents.redact("password: hunter22"), "password: [secret]")
+        self.assertEqual(agents.redact("şifre=abc123"), "şifre=[secret]")
+        self.assertEqual(agents.redact("pass=xyz"), "pass=[secret]")
+        self.assertEqual(agents.redact("bypass=1 passport 12"), "bypass=1 passport 12")
+        self.assertEqual(agents.redact("Authorization: Bearer abcdef123456"), "Authorization: Bearer [secret]")
+
+
+class YolKaydi(unittest.TestCase):
+    def test_x_routed_via(self):
+        log = Path(tempfile.mkdtemp()) / "yol.jsonl"
+        r = cevap("ok")
+        r.__enter__.return_value.headers = {"X-Routed-Via": "upstream-x"}
+        with mock.patch.object(agents, "ROUTE_LOG", log), mock.patch("agents.urllib.request.urlopen", side_effect=[r, cevap("ok")]):
+            self.assertEqual(agents.istek(API, [{"role": "user", "content": "hi"}])[0], "ok")
+            agents.istek(API, [{"role": "user", "content": "hi"}])  # MagicMock headers: no via field
+        a, b = [json.loads(s) for s in log.read_text(encoding="utf-8").splitlines()]
+        self.assertEqual((a["url"], a["model"], a["via"]), ("http://a.test/v1", "m", "upstream-x"))
+        self.assertNotIn("via", b)
+
+
+class Denetim(unittest.TestCase):
+    def test_tarih_kontrol(self):
+        import denetim
+        from datetime import date
+        bugun = date(2026, 11, 9)
+        s = denetim.tarih_kontrol("in 2019, on 05.01.2026 and 31.02.2027, pay 12k", bugun)
+        self.assertEqual(len(s), 4)
+        self.assertEqual(sum(x.startswith(denetim.UYARI_BASI) for x in s), 3)  # the amount is a log note only
+        self.assertEqual(denetim.tarih_kontrol("see you in 2027 on 10.12.2026", bugun), [])
+
+    def test_okuma_dogrula(self):
+        import denetim
+        f = denetim.okuma_dogrula("round 3 had 40 entries", "round 4 had 40 entries")
+        self.assertEqual(len(f), 1)
+        self.assertIn("round 4", f[0])
+        self.assertEqual(denetim.okuma_dogrula("round 3 had 40 entries", "round 3: 40 entries"), [])
+
+    def test_cevap_denetle(self):
+        import denetim
+        log = []
+        out = denetim.cevap_denetle("It opened in 2019.", ["source"], log.append)
+        self.assertTrue(out.startswith("It opened in 2019.\n("))
+        self.assertIn("2019", out.splitlines()[1])
+        self.assertTrue(any(s.startswith("denetim tarih") for s in log))
+        self.assertEqual(denetim.cevap_denetle("Error: 2019", [], log.append), "Error: 2019")
+        with mock.patch.dict(denetim.C, {"audit": {"enabled": False}}):
+            self.assertEqual(denetim.cevap_denetle("It opened in 2019.", [], log.append), "It opened in 2019.")
+
+    def test_say(self):
+        import denetim
+        from datetime import datetime
+        t = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        log = Path(tempfile.mkdtemp()) / "run.log"
+        log.write_text(f"{t} denetim okuma: number 7 not in the source | number 9 not in the source\n"
+                       f"{t} denetim okuma: number 7 not in the source\n"
+                       f"{t} denetim tarih: year 2019 is far from today\n"
+                       "2020-01-01 10:00:00 denetim tarih: year 2001 old\n"
+                       f"{t} something else\n", encoding="utf-8")
+        out = denetim.say(7, log)
+        self.assertIn("3", out.splitlines()[0])
+        self.assertIn("okuma 2", out)
+        self.assertIn("tarih 1", out)
+        self.assertIn("7 (2x)", out)
+        self.assertNotIn("9 (", out)
+
+
+class Kisi(unittest.TestCase):
+    def test_yaz_goster(self):
+        import kisi
+        with mock.patch.object(kisi, "LEDGER", Path(tempfile.mkdtemp()) / "kisiler.jsonl"):
+            self.assertIn("'Jane'", kisi.goster("Jane"))
+            kisi.yaz("Jane Doe", "email", "out", "asked  about the role")
+            kisi.yaz("Bob", "dm", "in", "said thanks")
+            g = kisi.goster("JANE")
+            self.assertIn("giden: asked about the role", g)
+            self.assertNotIn("Bob", g)
+            self.assertIn("gelen: said thanks", kisi.goster("bob"))
+            with self.assertRaises(SystemExit):
+                kisi.yaz("Bob", "dm", "sideways", "x")
+
+
+class Yasak(unittest.TestCase):
+    KURAL = ("## Rejected\n- 2026-10-01: Acme Studio job (closed).\n"
+             "## Rules\n- Don't message Jane Doe again.\n- Keep replies short.\n")
+
+    def test_terimler_kontrol(self):
+        import yasak
+        t = yasak.terimler(self.KURAL)
+        self.assertIn("Acme Studio job", t)
+        self.assertIn("Jane Doe", t)
+        self.assertEqual([k for k, _ in yasak.kontrol("Hi jane doe, quick note", self.KURAL)], ["Jane Doe"])
+        self.assertEqual(yasak.kontrol("Keep replies short please", self.KURAL), [])
+        self.assertEqual(yasak.kontrol("nothing here", self.KURAL), [])
+
+
+class Yardimcilar(unittest.TestCase):
+    def test_satir_dogrula(self):
+        import satir_dogrula as s
+        lines = ["a", "foo bar", "c", "d", "e", "f"]
+        self.assertEqual(s.dogrula(lines, 2, "BAR")[0], "tam")
+        self.assertEqual(s.dogrula(lines, 3, "foo")[0], "yakin")
+        self.assertEqual(s.dogrula(lines, 6, "foo")[0], "yok")
+        self.assertEqual(s.dogrula(lines, 9, "foo"), (None, []))
+        self.assertIn(">2: foo bar", s.dogrula(lines, 2, "bar")[1])
+
+    def test_yarim(self):
+        import yarim
+        sayfa = ("# Memory\n## Open tasks and promises\n- 2026-11-01: send the report\n- 2026-11-02 report done\n"
+                 "## Lessons\n- not a task\n")
+        self.assertEqual(yarim.acik_isler(sayfa), (["2026-11-01: send the report"], ["2026-11-02 report done"]))
+        self.assertEqual(yarim.acik_isler("no sections"), ([], []))
+
+    def test_gece_plan(self):
+        import gece_plan
+        from datetime import datetime, timedelta
+        jobs = {"sabah": {"at": "07:00"}, "pazar": {"at": "03:00", "weekday": 6}, "kapali": {"at": "02:00"},
+                "nabiz": {"every": 30, "between": ("00:00", "06:00")}, "gunduz": {"every": 30, "between": ("09:00", "18:00")}}
+        t = datetime(2026, 11, 9, 22, 0)  # a Monday
+        out = dict(gece_plan.gece_isleri(jobs, {"kapali"}, t, t + timedelta(hours=10)))
+        self.assertEqual(set(out), {"sabah", "nabiz"})
+        self.assertEqual(out["sabah"], "07:00")
+        self.assertIn("12", out["nabiz"])
+
+    def test_mesaj_denetim_kisalik(self):
+        import kisalik
+        import mesaj_denetim
+        msgs = [("10:00", "telegram", "the build is broken because of a missing import"),
+                ("10:05", "telegram", "weather looks sunny"),
+                ("10:09", "telegram", "build is broken because missing import again")]
+        self.assertEqual(mesaj_denetim.tekrarlar(msgs), [(0, 2)])
+        n, med, en, uzun = kisalik.olc(msgs, 5)
+        self.assertEqual((n, med, en), (3, 7, 9))
+        self.assertEqual([w for w, _, _ in uzun], [9, 7])
+
+
+class SesDolgu(unittest.TestCase):
+    def test_dolgu_temizle(self):
+        import pentarch
+        self.assertEqual(pentarch.dolgu_temizle("ııı bunu, eee, yarın yap"), "bunu, yarın yap")
+        self.assertEqual(pentarch.dolgu_temizle("um, so uh we ship it"), "so we ship it")
+        self.assertEqual(pentarch.dolgu_temizle("bir şey ılık"), "bir şey ılık")
+        self.assertEqual(pentarch.dolgu_temizle("eee"), "eee")  # nothing left: the original stays
+
+
+class Durdur(unittest.TestCase):
+    def test_pause_command(self):
+        import pentarch
+        evet = ["durdur", "Durdur.", "durdur 3 saat", "durdur herşeyi dedim", "hepsini durdur lütfen",
+                "her şeyi durdur", "şimdi durdur ya", "devam et"]
+        hayir = ["durdur bu hatayı", "bunu durdur", f"{pentarch.NAME}, tablo yap", "başvuruyu durdurma"]
+        with mock.patch.object(pentarch, "iptal") as ip, \
+                mock.patch.object(pentarch, "set_pause", return_value="2026-11-09 12:00") as sp, \
+                mock.patch.object(pentarch, "clear_pause") as cp, \
+                mock.patch.object(pentarch, "paused", return_value=True):
+            for t in evet:
+                self.assertIsNotNone(pentarch.pause_command(t), t)
+            for t in hayir:
+                self.assertIsNone(pentarch.pause_command(t), t)
+            self.assertIn(mock.call(3.0), sp.call_args_list)
+            self.assertEqual(ip.call_count, 4)  # the filler forms cut the running job
+            self.assertEqual(cp.call_count, 1)
+            self.assertIn("12:00", pentarch.pause_command("durdur"))
+
+
+class Golge(unittest.TestCase):
+    def test_golge_ucu(self):
+        import pentarch
+        a, b = {"base_url": "http://a"}, {"base_url": "http://b"}
+        uc = {"enabled": True, "base_url": "http://s", "model": "x", "key_env": ""}
+        with mock.patch.object(pentarch.agents, "providers", return_value=[a, b]):
+            with mock.patch.dict(pentarch.C, {"shadow": {"enabled": False}}):
+                self.assertIsNone(pentarch.golge_ucu())
+            with mock.patch.dict(pentarch.C, {"shadow": uc}):
+                self.assertIs(pentarch.golge_ucu(), uc)
+            with mock.patch.dict(pentarch.C, {"shadow": {"enabled": True, "base_url": "", "model": ""}}):
+                self.assertIs(pentarch.golge_ucu(), b)
+                with mock.patch.object(pentarch.agents, "providers", return_value=[a]):
+                    self.assertIsNone(pentarch.golge_ucu())
+
+
+class PrTaslak(unittest.TestCase):
+    def test_draft_ve_dosya(self):
+        import pr_takip
+        from datetime import datetime
+        d = pr_takip.draft(["ann", "ben"])
+        self.assertIn("@ben", d)
+        self.assertNotIn("@ann", d)
+        self.assertTrue(pr_takip.draft([]).startswith("Hi,"))
+        with mock.patch.object(pr_takip, "DRAFTS", Path(tempfile.mkdtemp()) / "pr_taslak.md"):
+            p = pr_takip.write_drafts(["block one"], datetime(2026, 11, 9, 12, 0))
+            text = p.read_text(encoding="utf-8")
+        self.assertIn("2026-11-09 12:00", text)
+        self.assertTrue(text.rstrip().endswith("block one"))
+
+
+class DoktorSistem(unittest.TestCase):
+    def test_sistem_yorumla(self):
+        import doktor
+        g = 2 ** 30
+        r = doktor.sistem_yorumla({"ev": ["11-09 08:00 app.exe stopped"],
+                                   "disk": [{"ad": "C:", "bos": 5 * g, "boyut": 500 * g},
+                                            {"ad": "D:", "bos": 200 * g, "boyut": 500 * g}],
+                                   "ag": ["Ethernet | Generic Gigabit NIC", "Corp | WireGuard Tunnel"]})
+        self.assertEqual([ok for ok, _ in r], [None, False, True, None])
+        self.assertIn("app.exe", r[0][1])
+        self.assertIn("Corp", r[3][1])
+        r = doktor.sistem_yorumla({"ev": [], "disk": [], "ag": ["vpnhome | Generic NIC"]})
+        self.assertEqual(len(r), 2)
+        self.assertNotIn("vpnhome", r[1][1])  # the adapter name alone doesn't make it a VPN
