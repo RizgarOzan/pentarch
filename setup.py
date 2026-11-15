@@ -9,6 +9,7 @@ Nothing here leaves your computer; the Telegram token and API key go to <home>/s
 import getpass
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -231,8 +232,17 @@ def career_setup(old_cfg, lang):
     roles = csv(t("Hedef roller (virgülle)", "Target roles (comma separated)"), cur.get("target_roles") or ["junior software engineer"])
     cur_level = "entry" if cur.get("seniority") else "mid" if cur and int(cur.get("max_years", 2)) <= 5 else "any" if cur else "entry"
     level = ask(t("Seviye", "Level"), cur_level, tuple(LEVELS))
-    locs = csv(t("Yerler (remote, şehir, ülke)", "Places (remote, city, country)"), cur.get("locations") or ["remote"])
-    skills = csv(t("Becerilerin (virgülle)", "Your skills (comma separated)"), cur.get("skills") or [])
+    city = ask(t("Yaşadığın şehir, ülke", "City, country you live in"), (cur.get("applicant") or {}).get("city", ""))
+    home_city = city.split(",")[0].strip()
+    locs = csv(t("İş aradığın yerler (remote, şehir, ülke; taşınırsın diye 'relocation ok' ekle)",
+                 "Places to work (remote, city, country; add 'relocation ok' if you would move)"),
+               cur.get("locations") or ([home_city] if home_city else []) + ["remote"])
+    skills = csv(t("Becerilerin, ilanlarda yazıldığı gibi tek tek ve mülakatta savunabildiklerin (Unity, Unity 6 değil; virgülle)",
+                   "Your skills, one name each as postings write them, only ones you can defend in an interview (Unity, not Unity 6; comma separated)"),
+                 cur.get("skills") or [])
+    example = json.loads((tracker / "profile.example.json").read_text(encoding="utf-8"))
+    breakers = csv(t("İlanı direkt eleyen kelimeler (virgülle)", "Words that rule a posting out (comma separated)"),
+                   (cur.get("signals") or example["signals"]).get("deal_breakers") or [])
     cb = cur.get("boards") or {}
     print(t("  İzlenecek şirket panoları; slug, kariyer sayfasının adresindeki son parça (boards.greenhouse.io/<slug>, jobs.lever.co/<slug>, jobs.ashbyhq.com/<slug>). Boş olabilir.",
             "  Company boards to watch; the slug is the last part of the careers URL (boards.greenhouse.io/<slug>, jobs.lever.co/<slug>, jobs.ashbyhq.com/<slug>). May be empty."))
@@ -248,7 +258,10 @@ def career_setup(old_cfg, lang):
     if exclude is not None:  # the example's exclude list is for entry level
         prof["exclude"] = exclude
     prof.setdefault("cv", {})["language"] = lang
-    prof["applicant"] = applicant_setup(cur.get("applicant") or {})
+    prof["applicant"] = applicant_setup(cur.get("applicant") or {}, city, locs)
+    if str(prof["applicant"].get("needs_sponsorship", "")).lower().startswith(("y", "e")):  # yes / evet
+        breakers += [p for p in NO_SPONSOR if p not in breakers]
+    prof.setdefault("signals", {})["deal_breakers"] = breakers
     pf.write_text(json.dumps(prof, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(t(f"  Yazıldı: {pf}. Pentarch her sabah 08:30'da ilanları tarar ve panoyu yeniler (panelde pano düğmesi);\n"
             "  elle: python -I tracker/scan.py --config tracker/config.json",
@@ -259,28 +272,53 @@ def career_setup(old_cfg, lang):
 
 
 APPLICANT = (  # key, tr question, en question: what application forms ask again and again
-    ("about", "Kendini 2-3 cümleyle anlat (ne yapıyorsun, neyi iyi yapıyorsun, ne arıyorsun)",
-     "Tell me about yourself in 2-3 sentences (what you do, what you are good at, what you look for)"),
+    ("about", "Kendini ve deneyimini 2-4 cümleyle anlat (ne yapıyorsun, iş/staj, neyi iyi yapıyorsun, ne arıyorsun)",
+     "Tell me about yourself and your experience in 2-4 sentences (what you do, jobs/internships, what you are good at, what you look for)"),
     ("full_name", "Ad soyad (formlarda yazılacak hâli)", "Full name (as forms should show it)"),
     ("email", "Başvurularda kullanılacak e-posta", "Email for applications"),
     ("phone", "Telefon (ülke koduyla)", "Phone (with country code)"),
-    ("city", "Yaşadığın şehir, ülke", "City, country you live in"),
     ("links", "Bağlantılar: LinkedIn, GitHub, portfolyo (virgülle)", "Links: LinkedIn, GitHub, portfolio (comma separated)"),
     ("education", "Eğitim: okul, bölüm, mezuniyet yılı (sürüyorsa beklenen)", "Education: school, degree, graduation year (expected if ongoing)"),
-    ("experience", "Deneyim özeti: iş, staj, projeler (kısa)", "Experience summary: jobs, internships, projects (short)"),
+    ("highlights", "Projeler dışında en güçlü 1-3 sonucun (açık kaynak, ödül, iş), sayı ya da linkle; projeleri birazdan tek tek soracağım",
+     "Your 1-3 strongest results outside projects (open source, awards, jobs), with a number or a link; projects come next, one by one"),
     ("languages", "Konuştuğun diller ve seviyesi (virgülle)", "Languages you speak and level (comma separated)"),
-    ("work_authorization", "Çalışma izni: hangi ülkelerde izin gerekmeden çalışabilirsin?", "Work authorization: where can you work without a permit?"),
-    ("needs_sponsorship", "Başka ülkelerde vize sponsoru gerekir mi? (evet/hayır)", "Do you need visa sponsorship elsewhere? (yes/no)"),
-    ("relocate", "Taşınmaya açık mısın? (evet/hayır/nereye)", "Open to relocating? (yes/no/where)"),
+    ("work_authorization", "Vizesiz çalışabildiğin ülkeler (başka yerde sponsor gerekir sayılır; hiç gerekmiyorsa 'her yer')",
+     "Countries where you can work without a visa (elsewhere counts as needing sponsorship; 'anywhere' if you never need one)"),
     ("start_date", "En erken başlama tarihi ya da ihbar süresi", "Earliest start date or notice period"),
     ("salary", "Maaş beklentisi (tutar, para birimi; boş bırakılabilir)", "Salary expectation (amount, currency; may be empty)"),
     ("cv_path", "Hazır CV dosyanın yolu (yoksa boş)", "Path to your existing CV file (empty if none)"),
 )
 
 
-def applicant_setup(cur):
+NO_SPONSOR = ["no visa sponsorship", "no sponsorship", "unable to sponsor", "not able to sponsor", "cannot sponsor",
+              "do not sponsor", "does not sponsor", "will not sponsor"]  # skipped when you need a visa; no "without sponsorship", IMC writes it in a welcome line
+
+
+ANYWHERE = re.compile(r"\s*(?:her ?yer|anywhere|everywhere|worldwide|tüm dünya)\b", re.I)
+PROJECT = (("link", "link", "link"),
+           ("result", "tek ölçülebilir sonuç (sayı, test, kullanıcı ya da skor)", "one measurable result (a number, tests, users or a score)"),
+           ("role", "senin payın (tek başına mı, takımda ne yaptın)", "your part (solo, or what you did in the team)"))
+
+
+def projects_setup(old):
+    """2-5 projects, each with a link, one measurable result and the user's part: what CV bullets are built from."""
+    print(t("  Projeler: CV maddeleri bunlardan çıkar. En fazla 5; bitirmek için adı boş bırak ya da 'geç' yaz.",
+            "  Projects: CV bullets are built from these. Up to 5; leave the name empty or type 'skip' to stop."))
+    out = []
+    for i in range(5):
+        o = old[i] if i < len(old) else {}
+        name = ask("  " + t(f"Proje {i + 1} adı", f"Project {i + 1} name"), o.get("name", ""))
+        if name.strip().lower() in ("", "geç", "gec", "skip", "-"):
+            break
+        out.append({"name": name, **{k: ask("    " + t(tr, en), o.get(k, "")) for k, tr, en in PROJECT}})
+    return out
+
+
+def applicant_setup(cur, city="", locs=()):
     """"Tell me about yourself": what application forms ask, asked once and kept in tracker/profile.json (gitignored,
-    stays on this machine). The assistant fills forms from it and still asks before every submit (rules: outward step)."""
+    stays on this machine). The assistant fills forms from it and still asks before every submit (rules: outward step).
+    city, relocate and needs_sponsorship come from earlier answers instead of being asked again; older profiles that
+    kept experience, relocate or needs_sponsorship as their own answers still load, and those keys are still written."""
     print(t("\nKendini anlat: başvuru formlarının hep sorduğu bilgiler. Bir kez cevapla; asistan formları bunlarla doldurur,\n"
             "  göndermeden önce her seferinde sana sorar. Bilmediğini boş geç, sonra tracker/profile.json'dan düzeltirsin.",
             "\nAbout you: what application forms always ask. Answer once; the assistant fills forms from it and asks you\n"
@@ -293,6 +331,11 @@ def applicant_setup(cur):
         out[key] = ask("  " + t(tr_q, en_q), ", ".join(old) if isinstance(old, list) else str(old))
     for key in ("links", "languages"):
         out[key] = [x.strip() for x in out[key].split(",") if x.strip()]
+    out["projects"] = projects_setup(cur.get("projects") or [])
+    wa = out["work_authorization"].strip()
+    out.update(city=city or cur.get("city", ""), experience=cur.get("experience") or out["about"],
+               needs_sponsorship=("no" if ANYWHERE.match(wa) else "yes") if wa else cur.get("needs_sponsorship", ""),
+               relocate="yes" if any(l.lower().startswith("relocation") for l in locs) else cur.get("relocate") or "no")
     if out["cv_path"] and not Path(out["cv_path"]).expanduser().exists():
         print(t(f"  ! {out['cv_path']} bulunamadı; yolu sonra düzelt.", f"  ! {out['cv_path']} not found; fix the path later."))
     return out

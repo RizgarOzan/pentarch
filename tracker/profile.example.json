@@ -23,6 +23,7 @@
   },
   "exclude": ["senior", "sr", "lead", "head", "principal", "staff", "director", "manager", "chief"],
   "max_years": 2,
+  "max_age_days": 60,
   "signals": {
     "_": "literal phrases scan.py looks for in a posting's text; the lists under quality are for the assistant's judgement",
     "strong": ["mentorship", "mentoring", "onboarding", "graduate program", "visa sponsorship"],

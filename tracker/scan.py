@@ -10,10 +10,13 @@ profile.json keys it reads (all optional, see profile.example.json):
     seniority     words a title must contain ("intern", "junior", "entry level"; synonyms are built in)
     exclude       words that rule a title out ("senior", "lead", ...)
     target_roles  role words that raise the score when they appear in the title
-    locations     a posting's location must contain one; "remote" also accepts remote flags
+    locations     a posting's location must contain one; "remote" also accepts remote flags. A location that names no
+                  place ("Full-time", empty) is looked up in the title and the description instead, and kept if not found
     skills        counted in the description; the ones missing from the profile are listed as "missing"
     signals       {"strong": [phrases], "weak": [phrases], "deal_breakers": [phrases]} matched in the description
     max_years     "N+ years" above this in the description counts as a deal breaker (default 2)
+    max_age_days  postings older than this are dropped (default 60; 0 keeps every age)
+    applicant.education  when it names no computer science / software degree, a posting that requires one loses a point
     quality.min_score  1-5; postings under it go to "dropped"
 
 Score, 1-5: role fit, skills found, strong and weak signals, freshness. Deal breakers and location misses drop a
@@ -33,6 +36,16 @@ STOP = {"developer", "engineer", "programmer", "and", "or", "the", "a", "an", "o
 YEARS = re.compile(r"(\d+)\s*(?:\+|-|–|to)?\s*(?:\d+)?\s*\+?\s*(?:years|yrs|yıl)['’]?\s*(?:of\s+)?(?:[\w-]+[\s,]+){0,3}?"
                    r"(?:experience|exp\b|deneyim|background|working|track record|in\b|with\b)", re.I)  # "founded 10 years ago" is not a requirement
 REMOTE = re.compile(r"\bremote\b|anywhere|worldwide|distributed", re.I)
+# board location fields that hold a job type instead of a place (Peak's Lever board says "Full-time")
+NO_PLACE = re.compile(r"full[- ]?time|part[- ]?time|contract(?:or)?|permanent|temporary|internship|intern|freelance|"
+                      r"hybrid|on[- ]?site|in[- ]?office|n/?a|tbd|various|multiple locations?|[\s,;/|()-]", re.I)
+CS_FIELD = r"(?:computer science|computer engineering|software engineering|cs)"
+CS_DEGREE = re.compile(r"\b(?:degree|bachelor'?s?|master'?s?|ph\.?d|b\.?sc?|m\.?sc?|b\.?eng|m\.?eng|ba|bs|ms|studying|pursuing|"
+                       r"major(?:ing)?|student)\b[^.;]{0,40}?\b" + CS_FIELD + r"\b|\b" + CS_FIELD + r"\s+(?:degree|major|student|graduate)\b", re.I)
+CS_SOFT = re.compile(r"equivalent|related|similar|comparable|or (?:relevant |practical )?experience", re.I)
+CS_OPTIONAL = re.compile(r"prefer|nice to have|bonus|\bplus\b|ideally|desirable|advantage", re.I)
+CS_MINE = re.compile(r"computer science|computer engineering|software engineering|bilgisayar mühendisliği|bilgisayar bilimleri|"
+                     r"yazılım mühendisliği|\bcs\b|\bceng\b", re.I)  # "Computer Education", MIS, "bilişim" are not CS degrees
 
 
 def words(items):
@@ -106,6 +119,9 @@ class Scorer:
             self.max_years = int(p.get("max_years") or 2)
         except (TypeError, ValueError):
             raise SystemExit(f"profile max_years must be a number, got {p.get('max_years')!r}")
+        self.max_age = int(p.get("max_age_days", 60) or 0)
+        edu = str((p.get("applicant") or {}).get("education") or "")
+        self.no_cs = bool(edu.strip()) and not CS_MINE.search(edu)  # empty education: unknown, no penalty
         self.min_score = int((p.get("quality") or {}).get("min_score", 3))
         self.open = {a.get("company", "").lower(): a for a in applications if a.get("stage") != "closed" and a.get("company")}
         self.rejected = {a["company"].lower() for a in applications if a.get("company") and a.get("stage") == "closed"
@@ -118,7 +134,11 @@ class Scorer:
             return 0, "excluded word: " + self.exclude.search(t).group(0).lower(), {}
         if self.seniority and not self.seniority.search(t):
             return 0, "title lacks a seniority word", {}
-        if self.locations and not (self.locations.search(loc) or (self.want_remote and (j.get("remote") or REMOTE.search(loc)))):
+        where = None
+        if self.locations and not NO_PLACE.sub("", loc):  # no place named: look in the title, then the text, never drop
+            m = self.locations.search(t) or self.locations.search(text)
+            where = f"location from posting: {m.group(0)}" if m else "location unknown, check it"
+        elif self.locations and not (self.locations.search(loc) or (self.want_remote and (j.get("remote") or REMOTE.search(loc)))):
             return 0, f"location: {loc or '?'}", {}
         if self.breakers and self.breakers.search(text):
             return 0, "deal breaker: " + self.breakers.search(text).group(0), {}
@@ -133,6 +153,18 @@ class Scorer:
             pts += 1; why.append("role word: " + self.role_nouns.search(t).group(0).lower())
         elif self.role_nouns:
             return 0, "title: no target role", {}
+        age = (self.today - day(j.get("posted"))).days if day(j.get("posted")) else None
+        if self.max_age and age is not None and age > self.max_age:
+            return 0, f"posted {age} days ago (max_age_days {self.max_age})", {}
+        if where:
+            why.append(where)
+        if self.no_cs:
+            asks = [text[max(0, m.start() - 80):m.end() + 80] for m in CS_DEGREE.finditer(text)]
+            asks = [c for c in asks if not CS_OPTIONAL.search(c)]
+            if any(not CS_SOFT.search(c) for c in asks):
+                pts -= 1; why.append("needs a CS degree, yours is not")
+            elif asks:
+                why.append("CS degree or equivalent asked")
         have = [s for s, rx in self.skills.items() if rx.search(text) or rx.search(t)]
         if have:
             pts += min(2, len(have)); why.append("skills: " + ", ".join(have))
@@ -140,7 +172,6 @@ class Scorer:
             pts += 1; why.append("+" + self.strong.search(text).group(0))
         if self.weak and self.weak.search(text):
             pts -= 1; why.append("-" + self.weak.search(text).group(0))
-        age = (self.today - day(j.get("posted"))).days if day(j.get("posted")) else None
         if age is not None and age > 90:
             pts -= 1; why.append(f"posted {age} days ago")
         elif age is not None and age <= 14:
