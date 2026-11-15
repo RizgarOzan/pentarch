@@ -19,6 +19,7 @@ DEFAULTS = {
     "notes_dir": "~/notes",        # any folder of markdown notes (Obsidian vault, wiki...); the agent works here
     "extra_dirs": [],              # more folders the agent may read/write (your code folder, for example)
     "github_user": "",             # for PR tracking; empty turns it off
+    "plan": "max",                 # pro | max | api: "pro" makes scheduled runs lean and sparse (README, Using with Pro)
     "agent": {
         "cli": "claude",           # claude | gemini | codex | opencode (claude has every feature; see README)
         "fast_model": "sonnet",    # everyday chat

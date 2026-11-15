@@ -195,6 +195,7 @@ python -I app/denetim.py 7            # what the reply check flagged in the last
 | `agent.cli`, `fast_model`, `deep_model`, `light_model` | which agent and which models do the work |
 | `agent.workers`, `agent.max_parallel` | helper CLIs and how many subtasks run at once |
 | `agent.permission_mode` | `acceptEdits` (safer) or `bypassPermissions` (most routines need it) |
+| `plan` | `pro`, `max` or `api`. `pro` keeps scheduled work small so your Claude Pro limit lasts (see Using with Pro) |
 | `chat_api` | any OpenAI-compatible endpoint for cheap one-shot work. The key comes from the env var named in `key_env` or from `secrets/keys.env` |
 | `council` | the council's seats. Add one with `python -I app/koltuk.py add NAME --preset NAME` (presets: `openrouter`, `groq`, `nvidia`, `freellmapi`, `ollama`, `lmstudio`, or `--agent`), or just ask the bot. `"model": "a,b"` falls back to `b` when `a` is rate-limited |
 | `gateways` | e-mail and Discord doors; e-mail only reads senders in `allowed_from` |
@@ -218,6 +219,32 @@ The prompts are plain markdown in `~/.pentarch`, and they're yours to edit:
 | `memory.md` | what it has learned; tidied every night |
 | `HEARTBEAT.md` | the checklist the heartbeat routine walks through |
 | `wishlist.md` | things you'd like it to learn to do |
+
+## Using with Pro
+
+On a Pro or Max plan, Claude Code draws from the same usage limits as claude.ai and Claude Desktop: one window that resets every 5 hours and one weekly cap. You can see both under Settings > Usage, or with `/usage` in Claude Code. Max gives 5 or 20 times what Pro does. If `ANTHROPIC_API_KEY` is set in your environment, Claude Code bills the API instead of your plan. Pentarch's routines run in the background all day, so on Pro they can eat into the budget you wanted for your own chats.
+
+`setup.py` asks which plan you're on. With `"plan": "pro"`:
+
+- Scheduled runs start lean. They skip your user settings, CLAUDE.md, plugins and skills, and only load the built-in tools they use. Connector tools stay deferred behind ToolSearch. The read-only hook still applies.
+- The heartbeat and the other interval routines run half as often. The fixed-time ones (morning, evening, memory, board, update) keep their times.
+- The nightly wiki round runs on the light model, and discovery starts switched off. You can turn it on from the panel.
+- Daily caps drop to $2 for routines and $8 for tasks, plus one initiative a day. These are the API-equivalent figures from claude's own cost report, used as a gauge. You aren't billed for them.
+- The chat starts a fresh session sooner, at about 60k tokens of context, because every turn re-reads the whole context.
+- When claude reports that the limit is reached, Pentarch pauses routines and tasks until the reset time it reads from the error and sends you one message about it.
+
+Here is what I measured on 2026-11-15, running the real routine prompts through the same code path, with tokens per run including cache reads:
+
+| Routine | `max` | `pro` | Output |
+|---|---|---|---|
+| heartbeat | 224k | 41-44k | same (`-`, nothing to report) |
+| morning | 174k | 72k | same structure, a real item picked |
+| evening | 168k | 63k | same structure |
+| wiki round | 368k | 127k | same notes filed and the same question asked |
+
+An empty run went from 54-59k tokens to about 10k. Leaving ToolSearch out made it worse: every connector schema loaded and one empty turn cost 186k. I also tried the heartbeat on haiku and dropped it, because one of two runs sent a "nothing new" message where sonnet stays quiet.
+
+Sources: [Claude Code with Pro or Max](https://support.claude.com/en/articles/11145838-use-claude-code-with-your-pro-or-max-plan), [usage limits](https://support.claude.com/en/articles/11647753-how-do-usage-and-length-limits-work), [Max plan](https://support.claude.com/en/articles/11049741-what-is-the-max-plan), [pricing](https://claude.com/pricing), [model config](https://code.claude.com/docs/en/model-config), [costs](https://code.claude.com/docs/en/costs).
 
 ## Skills and agents
 
@@ -347,6 +374,32 @@ Ajan yoksa Pentarch klasöründe: `git pull --ff-only`, ardından `python -I set
 Ayarlar `~/.pentarch/pentarch.json` dosyasında. Yazmadığın her ayar [`app/config.py`](app/config.py) içindeki varsayılan değeri alır. Panelin Ayarlar sayfası da aynı dosyayı düzenler. Anahtarların listesi yukarıdaki "Configure" tablosunda. Komutların Türkçesi de çalışır: `iptal`, `durdur 2 saat`, `devam`, `konsey: soru`, `ogren`, `onayla N`, `sil N`, `/ekle not`, `/sor soru`, `/durum`, `internet serbest`.
 
 **Konsey koltukları:** `python -I app/koltuk.py add AD --preset AD` ile eklenir (`openrouter`, `groq`, `nvidia`, `freellmapi`, `ollama`, `lmstudio`, `custom` ya da `--agent`). Ayrıca `list`, `test AD` ve `remove AD` var. Bota "konseye koltuk ekle" demen de yeter. Anahtarı sohbete düz yazma. `koltuk.py key DEGISKEN` ile ver ya da bota `anahtar: DEGISKEN=değer` yaz; bot anahtarı kaydeder ve mesajı siler.
+
+### Pro ile kullanım
+
+Pro ya da Max planında Claude Code, claude.ai ve Claude Desktop ile aynı kullanım sınırını paylaşır. Bir sınır 5 saatte bir sıfırlanır, bir de haftalık sınır var. İkisini de Ayarlar > Kullanım'da ya da Claude Code'da `/usage` ile görürsün. Max, Pro'nun 5 ya da 20 katını verir. Ortamda `ANTHROPIC_API_KEY` tanımlıysa Claude Code plan yerine API'den ücret keser. Pentarch'ın rutinleri gün boyu arkada çalıştığı için Pro'da kendi sohbetlerine ayırdığın payı yiyebilir.
+
+`setup.py` hangi planda olduğunu soruyor. `"plan": "pro"` seçince şunlar değişir:
+
+- Zamanlı işler hafif açılır. Kullanıcı ayarlarını, CLAUDE.md'yi, eklentileri ve skill'leri yüklemez, sadece kullandığı yerleşik araçları alır. Bağlayıcı araçları ToolSearch arkasında bekler. Salt okunur kanca yine çalışır.
+- Kalp atışı ve aralıklı öteki işler yarı sıklıkta koşar. Saati belli olanlar (sabah, akşam, hafıza, pano, güncelleme) saatini korur.
+- Gece wiki turu hafif modelle koşar, keşif kapalı başlar. Panelden açabilirsin.
+- Günlük tavanlar rutinler için 2 dolara, görevler için 8 dolara iner, inisiyatif günde bire düşer. Bunlar claude'un kendi maliyet raporundaki API karşılığı rakamlar, ölçü olsun diye var. Senden bu parayı kimse almaz.
+- Sohbet her turda bütün bağlamı yeniden okuduğu için oturum daha erken, 60 bin token civarında yenilenir.
+- Claude sınırın dolduğunu söyleyince Pentarch rutinleri ve görevleri hatadaki sıfırlanma saatine kadar durdurur, sana da bir kez haber verir.
+
+2026-11-15'te gerçek rutin prompt'larını aynı kod yolundan geçirip ölçtüm. Rakamlar koşu başına token, önbellekten okunanlar dahil:
+
+| Rutin | `max` | `pro` | Sonuç |
+|---|---|---|---|
+| kalp | 224k | 41-44k | aynı (`-`, söylenecek bir şey yok) |
+| sabah | 174k | 72k | aynı yapı, gerçek bir fırsat seçti |
+| akşam | 168k | 63k | aynı yapı |
+| wiki | 368k | 127k | aynı notları dosyaladı, aynı soruyu sordu |
+
+Boş bir koşu 54-59 binden 10 bine indi. ToolSearch'ü çıkarınca iş kötüleşti, bütün bağlayıcı şemaları yüklendi ve boş bir tur 186 bin tuttu. Kalp atışını haiku ile de denedim, vazgeçtim. İki koşunun birinde sonnet'in sessiz kaldığı yerde "yeni bir şey yok" mesajı attı.
+
+Kaynaklar yukarıdaki "Using with Pro" bölümünün sonunda.
 
 ### Modelsiz kullanım
 

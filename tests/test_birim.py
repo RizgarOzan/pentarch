@@ -768,6 +768,59 @@ class Durdur(unittest.TestCase):
             self.assertIn("12:00", pentarch.pause_command("durdur"))
 
 
+class ProPlani(unittest.TestCase):
+    def _args(self, pro, kind, stdout='{"result": "-", "usage": {}}'):
+        import pentarch
+        ro = Path(tempfile.mkdtemp()) / "salt-okunur.json"
+        ro.write_text("{}", encoding="utf-8")
+        with mock.patch.object(pentarch, "PRO", pro), mock.patch.object(pentarch, "READONLY_SETTINGS", ro), \
+                mock.patch.object(pentarch.agents, "CLI", "claude"), \
+                mock.patch.object(pentarch.subprocess, "run", return_value=mock.Mock(stdout=stdout, stderr="")) as run:
+            reply = pentarch._run_claude("x", kind=kind, resume=False)
+        return run.call_args[0][0], reply
+
+    def test_yalin_otomatik(self):
+        import pentarch
+        args, _ = self._args(True, "otomatik")
+        self.assertEqual(args[args.index("--tools") + 1], pentarch.LEAN_TOOLS)
+        self.assertIn("ToolSearch", pentarch.LEAN_TOOLS)  # without it every connector schema loads in full
+        self.assertEqual(args[args.index("--setting-sources") + 1], "")
+        self.assertIn("--settings", args)  # the read-only hook stays
+        for pro, kind in ((False, "otomatik"), (True, "telegram"), (True, "görev")):
+            self.assertNotIn("--tools", self._args(pro, kind)[0], (pro, kind))
+
+    def test_seyrek_isler(self):
+        import pentarch
+        with mock.patch.object(pentarch, "net_limited", return_value=False):
+            with mock.patch.object(pentarch, "PRO", True):
+                self.assertEqual(pentarch.net_factor("kalp"), 2)
+                self.assertEqual(pentarch.net_factor("pano"), 1)  # model-free jobs keep their time
+            with mock.patch.object(pentarch, "PRO", False):
+                self.assertEqual(pentarch.net_factor("kalp"), 1)
+
+    def test_sinir_metni(self):
+        import time
+        import pentarch
+        h = pentarch.limit_hours(f"Claude AI usage limit reached|{int(time.time()) + 7200}")
+        self.assertAlmostEqual(h, 2, delta=0.05)
+        self.assertTrue(0 < pentarch.limit_hours("You've hit your limit · resets 3pm (Europe/Istanbul)") <= 24)
+        self.assertEqual(pentarch.limit_hours("5-hour limit reached"), 1.0)
+        self.assertIsNone(pentarch.limit_hours("API Error: 500 overloaded"))
+        with mock.patch.dict(pentarch.C, {"plan": "api"}):
+            self.assertIsNone(pentarch.limit_hours("Claude AI usage limit reached|1"))
+
+    def test_sinirda_durur(self):
+        import pentarch
+        out = json.dumps({"is_error": True, "result": "You've hit your limit · resets 3pm", "usage": {}})
+        with mock.patch.object(pentarch, "paused", return_value=None), \
+                mock.patch.object(pentarch, "set_pause", return_value="2026-11-15 15:00") as sp, \
+                mock.patch.object(pentarch, "send_auto") as sa:
+            _, reply = self._args(True, "otomatik", out)
+        self.assertTrue(reply.startswith("Hata:"))
+        sp.assert_called_once()
+        self.assertIn("15:00", sa.call_args[0][0])
+
+
 class Golge(unittest.TestCase):
     def test_golge_ucu(self):
         import pentarch

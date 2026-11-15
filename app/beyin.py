@@ -29,6 +29,8 @@ TOOLS = "Bash,Read,Edit,Write,Grep,Glob,WebFetch,WebSearch,Agent"
 MASAUSTU = HOME / "masaustu-mcp.json"
 # opus ilk turda 60k'yı aşıyordu; her mesaj cevaptan önce özet + yeni süreç bekliyordu (+9-19 sn, 2026-11-04)
 MAX_CTX = {"opus": 120_000, "sonnet": 120_000}  # model -> sınır; yoksa 60k
+if C.get("plan") == "pro":  # Pro: every chat turn re-reads the whole context against the shared limit, renew sooner
+    MAX_CTX = {}
 IDLE = 55 * 60  # abonelikte önbellek 1 saat yaşar; sonrası zaten soğuk
 SUMMARY_ASK = (f"[System] This session is closing and will hand over to a new one. In at most 120 words of plain text, "
                f"summarize everything needed to continue the conversation with {OWNER}: topic, open tasks, promises you "
