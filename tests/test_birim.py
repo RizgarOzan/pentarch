@@ -1146,3 +1146,26 @@ class CanliEk(unittest.TestCase):
         with mock.patch.object(kisi, "LEDGER", self.d / "kisiler.jsonl"):
             kisi.LEDGER.write_text("\n".join(json.dumps(r) for r in satirlar), encoding="utf-8")
             self.assertEqual([k for k, _, _ in kisi.cevap_bekleyen(24)], ["Ada (mail)"])
+
+
+class RulesUpgrade(unittest.TestCase):
+    """setup.py --upgrade tops up kurallar.md with rules added to the template since the install."""
+    def test_missing_rules_go_after_their_neighbour(self):
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+        import setup
+        with tempfile.TemporaryDirectory() as t:
+            home, repo = Path(t) / "home", Path(t) / "repo"
+            (repo / "templates" / "en").mkdir(parents=True)
+            home.mkdir()
+            (repo / "templates" / "en" / "kurallar.md").write_text(
+                "# {{NAME}}\n1. one\n2. two for {{OWNER}}\n  a. sub\n2b. new after two\n3. three\n4. needs {{WHO}}\n",
+                encoding="utf-8")
+            mine = "# Bot\n1. one, my wording\n2. two for Ada\n  a. sub\n3. three\n"
+            (home / "kurallar.md").write_text(mine, encoding="utf-8")
+            with mock.patch.object(setup, "HOME", home), mock.patch.object(setup, "REPO", repo):
+                added = setup.rules_upgrade({"lang": "en", "owner": "Ada", "name": "Bot"})
+                self.assertEqual(added, ["2b"])  # 4 keeps a setup-only placeholder, so it waits for --force
+                self.assertEqual((home / "kurallar.md").read_text(encoding="utf-8"),
+                                 "# Bot\n1. one, my wording\n2. two for Ada\n  a. sub\n2b. new after two\n3. three\n")
+                self.assertEqual((home / "kurallar.md.bak").read_text(encoding="utf-8"), mine)
+                self.assertEqual(setup.rules_upgrade({"lang": "en", "owner": "Ada", "name": "Bot"}), [])

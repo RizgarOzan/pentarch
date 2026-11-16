@@ -61,6 +61,10 @@ DEFAULTS = {
     "jobs_off": ["insa", "posta"], # routines off at first start (JOBS in pentarch.py); panel Settings turns them on
     # learning loop (ogren.py): after a chat turn a cheap model proposes notes/skill patches; the owner approves each
     "learning": {"enabled": False, "max_pending": 20},
+    # tiered routing for ledger jobs (sirket.py): cheap -> mid -> top with a deep-model review; off = one run as before
+    "routing": {"enabled": False},
+    # nightly self-improvement (gelisim.py): proposes fixes as Yes/No; code changes only ever become a .patch file
+    "self_improve": {"enabled": False},
     "memory": {"inject_max_chars": 8000},  # cap for the core memory a new session gets (profile + memory.md)
     # shell work backend (kum.py): local | docker. docker missing = command refused, never run on the host instead
     "sandbox": {"backend": "local", "image": "python:3.12-slim", "network": False},

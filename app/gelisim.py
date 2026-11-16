@@ -14,7 +14,7 @@ Nothing changes without the owner's yes. Each night:
    proposed the same way (`gelisim.py geri <id>`).
 State: <home>/gelisim/degisiklikler.json (changes) and gunluk.jsonl (one line per night). At most 3 model calls a night.
 
-Config (pentarch.json, read with a default, nothing added to config.py):
+Config (pentarch.json; the default is in config.py):
   "self_improve": {"enabled": false}
 
 Wiring in pentarch.py:

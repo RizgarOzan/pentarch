@@ -11,7 +11,7 @@ A cheap or mid result is reviewed by the deep model against the owner's request;
 the top tier with the failed attempt attached. If the reviewer itself fails, the result counts as fine (the job is
 not lost). Every job is one line in <home>/sirket/kademe.jsonl; ozet() summarises it.
 
-Config (pentarch.json, read with a default, nothing added to config.py):
+Config (pentarch.json; the default is in config.py):
   "routing": {"enabled": false}   off = kos() runs the job once on the runner's default model, as before.
 
 Wiring in pentarch.py:
