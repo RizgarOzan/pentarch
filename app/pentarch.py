@@ -86,6 +86,15 @@ VARSAYILAN = {"v2": True, "beyin_model": FAST, "beyin_efor": "low", "derin_mod":
               "derin_efor": "high", "sessiz": ["01:30", "08:30"], "kelime_siniri": 80,
               "otomatik_gunluk_usd": 10.0, "gorev_gunluk_usd": 30.0, "inisiyatif_gunluk": 3,
               "kapali_isler": list(C["jobs_off"])}  # jobs_off is only the starting list; the panel switches them
+# Claude Pro shares one 5-hour and one weekly limit with the owner's own chats, so scheduled work stays small:
+# lean runs (_run_claude), half as many interval runs (net_factor), lower caps. The caps are API-equivalent
+# dollars from claude's own cost report, a gauge of usage, not a bill.
+PRO = C.get("plan") == "pro"
+if PRO:
+    VARSAYILAN |= {"otomatik_gunluk_usd": 2.0, "gorev_gunluk_usd": 8.0, "inisiyatif_gunluk": 1}
+# Built-in tools for a lean automatic run. ToolSearch must stay: without it every connector tool schema loads in
+# full (measured 186k tokens for one empty turn); with it they stay deferred. Fixed load per call 54-59k -> 10k.
+LEAN_TOOLS = "Bash,Read,Grep,Glob,Edit,Write,ToolSearch,WebSearch,WebFetch"
 PROFIL_PAGE = HOME / "profile.md"
 # Messages asking for analysis/research/planning go to the deep brain; the rest of the chat stays on the fast one.
 # Everyday words ("idea", "look into") sent ordinary messages to the deep model too often, so the list is kept narrow.
@@ -332,6 +341,9 @@ is worth it, write only `-`."""},
 }
 
 LIGHT_JOBS = {"kalp", "posta", "sabah", "aksam", "hafiza", "retro", "haber", "kesif"}  # short system prompt; yoklama and notifications keep the full one
+if PRO:  # the wiki round runs scripts and files notes: same result on haiku (2026-11-15). The heartbeat stays on
+    LIGHT_JOBS |= {"wiki"}  # FAST: haiku wrote "nothing new" messages where sonnet stays quiet with `-`
+    JOBS["wiki"]["model"] = LIGHT_MODEL or FAST
 
 main_lock = threading.Lock()  # Telegram oturumu aynı anda tek koşu
 task_lock = threading.Lock()  # görevler de teker teker
@@ -504,6 +516,25 @@ def set_pause(hours=2.0):
     pause_noted.clear()
     note(f"koşular durduruldu, bitiş {until}")
     return until
+
+
+LIMIT_RE = re.compile(r"usage limit|limit reached|hit your (?:usage )?limit", re.I)
+
+
+def limit_hours(text):
+    """Hours until a Pro/Max limit resets, read from claude's limit error; None when the text isn't one."""
+    if C.get("plan") == "api" or not LIMIT_RE.search(text or ""):
+        return None
+    t = datetime.now()
+    if m := re.search(r"\|(\d{10})\b", text):  # "...limit reached|<epoch>"
+        h = (int(m[1]) - time.time()) / 3600
+    elif m := re.search(r"resets\s+(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*([ap]m)?", text, re.I):  # "resets 3pm"
+        hour = int(m[1]) % 12 + (12 if m[3].lower() == "pm" else 0) if m[3] else int(m[1])
+        r = t.replace(hour=hour % 24, minute=int(m[2] or 0), second=0, microsecond=0)
+        h = ((r if r > t else r + timedelta(days=1)) - t).total_seconds() / 3600
+    else:
+        h = 1.0  # no time in the message: look again in an hour
+    return min(max(h, 0.1), 24 * 7)
 
 
 def clear_pause():
@@ -786,6 +817,8 @@ def _run_claude(prompt, model=None, effort=None, resume=True, kind="telegram", l
         base += ["--fallback-model", FAST]  # the run doesn't fail when the deep model is overloaded
     if kind == "otomatik" and READONLY_SETTINGS.exists():
         base += ["--settings", str(READONLY_SETTINGS)]  # okuyan koşu dışa yazamaz (hook); iş çıkarsa `gorev` kaydeder
+        if PRO:  # no user settings, CLAUDE.md, plugins or skills; the --settings hook and connectors still load
+            base += ["--setting-sources", "", "--disable-slash-commands", "--tools", LEAN_TOOLS]
     elif kind in PLUGIN_SETTINGS and PLUGIN_SETTINGS[kind].exists():
         base += ["--settings", str(PLUGIN_SETTINGS[kind])]
     prompt += net_prompt()
@@ -807,6 +840,12 @@ def _run_claude(prompt, model=None, effort=None, resume=True, kind="telegram", l
             note(f"koşu {kind}: tek koşu bütçesi ({budget}$) doldu, durduruldu")
             return T(f"Tek koşu bütçesi ({budget}$) doldu, iş yarım kaldı; devamı gerekiyorsa daha küçük parçalar halinde yeniden ver.",
                      f"The per-run budget ({budget}$) ran out and the job is half done; if you need the rest, give it again in smaller pieces.")
+        if out.get("is_error") and (hours := limit_hours(out.get("result"))):
+            if not paused():  # scheduled jobs and tasks wait for the reset instead of failing into the limit again
+                until = set_pause(hours)
+                send_auto(T(f"Claude kullanım sınırı doldu; zamanlı işler ve görevler {until[11:]}'e kadar bekliyor.",
+                            f"The Claude usage limit is reached; scheduled jobs and tasks wait until {until[11:]}."))
+            return f"Hata: {out.get('result')}"
         if out.get("is_error") and "--resume" in args:
             note(f"oturum sürdürülemedi, yenisi açılıyor: {out.get('result')}")
             continue
@@ -1389,8 +1428,8 @@ def run_job(name, job, since, retry=False):
         reply, failed = repr(e), True
     if not failed:
         return
-    if retry:
-        note(f"zamanlı iş {name} yeniden denemede de düştü: {reply[:150]}")
+    if retry or paused():
+        note(f"zamanlı iş {name} {'yeniden denemede de ' if retry else ''}düştü: {reply[:150]}")
         return
     note(f"zamanlı iş {name} düştü, {JOB_RETRY_MIN} dk sonra bir kez yeniden: {reply[:150]}")
     t = threading.Timer(JOB_RETRY_MIN * 60, in_thread, (run_job, name, job, since, True))
@@ -2185,13 +2224,14 @@ def net_limited():
 
 
 def net_factor(name):
-    """Interval multiplier for scheduled jobs in quota mode; None = skip this job."""
+    """Interval multiplier for scheduled jobs (Pro plan, data quota mode); None = skip this job."""
+    pro = 2 if PRO and "prompt" in JOBS.get(name, {}) else 1  # Pro: model jobs run half as often
     if not net_limited():
-        return 1
+        return pro
     seviye = net_budget()[3]
     if seviye and name in NET_HEAVY:
         return None
-    return (2, 4, 8)[seviye]
+    return pro * (2, 4, 8)[seviye]
 
 
 def net_prompt():

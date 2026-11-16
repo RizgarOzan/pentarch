@@ -515,6 +515,14 @@ def main():
         if not bypass_ok:
             perm = "acceptEdits"
 
+    plan = old.get("plan", "max")
+    if cli == "claude":
+        print(t("Claude planın: pro = zamanlı işler yalın ve seyrek koşar, kendi sohbetlerine pay kalır (README, Pro ile kullanım);\n"
+                "               max = her şey tam; api = ANTHROPIC_API_KEY ile kullandıkça öde.",
+                "Your Claude plan: pro = scheduled runs are lean and sparse, leaving room for your own chats (README, Using with Pro);\n"
+                "                  max = everything full; api = pay as you go with ANTHROPIC_API_KEY."))
+        plan = ask(t("Plan", "Plan"), old.get("plan", "max" if old else "pro"), ("pro", "max", "api"))
+
     SECRETS.mkdir(parents=True, exist_ok=True)
     api = chat_api_setup(old.get("chat_api", {}))
     council_setup()
@@ -523,6 +531,10 @@ def main():
     mcp_servers = mcp_setup(old) if cli == "claude" else old.get("mcp_servers", {})
 
     off = set(old.get("jobs_off", ["insa", "posta"]))
+    if plan == "pro" and old.get("plan") != "pro":
+        off.add("kesif")
+        print(t("  Pro: haftalık keşif turu (kesif) kapatıldı; panelden açabilirsin.",
+                "  Pro: the weekly discovery round (kesif) is off; you can turn it on in the panel."))
     print(t("\nİki rutin ilk başta kapalı; istersen şimdi aç, sonra panelden de değiştirebilirsin (Ayarlar > Kapalı işler).",
             "\nTwo routines start off; turn them on now if you like, or later in the panel (Settings > Disabled routines)."))
     for job, tr_q, en_q in (("insa", "Gece kendini geliştirme turu (insa) açılsın mı?", "Turn on the nightly self-build round (insa)?"),
@@ -543,7 +555,7 @@ def main():
     cfg = {**old, "owner": owner or "Owner", "name": name or "Pentarch", "lang": lang, "notes_dir": notes,
            "agent": {**agent, "cli": cli, "fast_model": fast, "deep_model": deep, "light_model": light,
                      "permission_mode": perm, "bypass_confirmed": bypass_ok},
-           "chat_api": api, "jobs_off": sorted(off), "job_boards": job_boards, "mcp_servers": mcp_servers}
+           "plan": plan, "chat_api": api, "jobs_off": sorted(off), "job_boards": job_boards, "mcp_servers": mcp_servers}
 
     HOME.mkdir(parents=True, exist_ok=True)
     CONFIG.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
