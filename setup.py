@@ -268,6 +268,7 @@ APPLICANT = (  # key, tr question, en question: what application forms ask again
     ("links", "Bağlantılar: LinkedIn, GitHub, portfolyo (virgülle)", "Links: LinkedIn, GitHub, portfolio (comma separated)"),
     ("education", "Eğitim: okul, bölüm, mezuniyet yılı (sürüyorsa beklenen)", "Education: school, degree, graduation year (expected if ongoing)"),
     ("experience", "Deneyim özeti: iş, staj, projeler (kısa)", "Experience summary: jobs, internships, projects (short)"),
+    ("current_employer", "Şu an çalıştığın yer (biten staj sayılmaz; yoksa boş)", "Where you work now (a finished internship does not count; empty if none)"),
     ("languages", "Konuştuğun diller ve seviyesi (virgülle)", "Languages you speak and level (comma separated)"),
     ("work_authorization", "Çalışma izni: hangi ülkelerde izin gerekmeden çalışabilirsin?", "Work authorization: where can you work without a permit?"),
     ("needs_sponsorship", "Başka ülkelerde vize sponsoru gerekir mi? (evet/hayır)", "Do you need visa sponsorship elsewhere? (yes/no)"),
@@ -302,6 +303,7 @@ def _fill(text, notes):
     """Placeholders in the shipped skills and agents: tool paths, the notes folder and the home folder."""
     return (text.replace("skills/linkedin/li.py", f'"{REPO / "skills" / "linkedin" / "li.py"}"')
             .replace("skills/cv/cv.py", f'"{REPO / "skills" / "cv" / "cv.py"}"')
+            .replace("tracker/apply.py", f'"{REPO / "tracker" / "apply.py"}"')
             .replace("{{NOTES}}", str(Path(notes).expanduser())).replace("{{HOME}}", str(HOME)))
 
 

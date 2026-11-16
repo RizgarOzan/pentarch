@@ -18,7 +18,7 @@ HERE = pathlib.Path(__file__).parent
 DEFAULTS = {"title": "", "lang": "en", "data_dir": "data", "out_dir": "out", "backlog": "", "status_log": "",
             "github_user": "", "important_repos": [], "oss_goal": 0, "oss_deadline": "", "stale_days": 10, "new_days": 8, "followup_days": 14}
 PATH_KEYS = ("data_dir", "out_dir", "backlog", "status_log")
-STAGES = ("ready", "sent", "process", "decide", "watching", "closed")
+STAGES = ("drafted", "ready", "sent", "process", "decide", "watching", "closed")
 
 STR = {
     "en": dict(
@@ -37,6 +37,7 @@ STR = {
         n_stale="Not checked for {n}+ days: {xs}.",
         n_overdue="Overdue task ({n} days): {x}",
         n_followup="Sent {n}+ days ago, no answer yet: {xs}. Send a short follow-up or move it to closed.",
+        n_approve="Form filled and checked, waiting for your approval before it is sent: {xs}.",
         top_new="best",
         n_done="Finished? {xs}. If so, mark it done; if not, shift the dates.",
         n_gh="Could not get PR counts from gh.",
@@ -53,8 +54,8 @@ STR = {
         no_scan="No scan yet. It shows up here after the first run.",
         new_badge="new", deadline="Deadline", check_stale=" · check is stale", last_check="Last checked {d}",
         l_package="Package", l_cv="CV", l_posting="Posting",
-        st_ready="Ready", st_sent="Sent", st_process="In process", st_decide="Decide", st_watching="Watching", st_closed="Closed",
-        sd_ready="package ready, to send", sd_sent="waiting for a reply", sd_process="assessment, interview, offer",
+        st_drafted="Drafted", st_ready="Ready", st_sent="Sent", st_process="In process", st_decide="Decide", st_watching="Watching", st_closed="Closed",
+        sd_drafted="CV and letter drafted by the assistant, to review", sd_ready="package ready, to send", sd_sent="waiting for a reply", sd_process="assessment, interview, offer",
         sd_decide="requirements unclear", sd_watching="waiting for a posting or a package",
         pipeline="Application pipeline", open_closed="{a} open · {c} closed", search="Search", search_ph="Search company, role, city",
         closed_apps="Closed applications ({n})", none="Nothing here.",
@@ -88,6 +89,7 @@ STR = {
         n_stale="{n}+ gündür kontrol edilmeyen ilan: {xs}.",
         n_overdue="Gecikmiş iş ({n} gün): {x}",
         n_followup="{n}+ gün önce gönderildi, cevap yok: {xs}. Kısa bir hatırlatma yaz ya da kapat.",
+        n_approve="Form dolduruldu ve kontrol edildi, gönderim için onayını bekliyor: {xs}.",
         top_new="en iyi",
         n_done="Bitti mi? {xs}. Bittiyse işaretle; bitmediyse tarihleri kaydır.",
         n_gh="gh'den PR sayısı alınamadı.",
@@ -104,8 +106,8 @@ STR = {
         no_scan="Henüz tarama yok. Tarama görevi ilk kez çalışınca burada görünür.",
         new_badge="yeni", deadline="Son başvuru", check_stale=" · kontrol eski", last_check="Son kontrol {d}",
         l_package="Paket", l_cv="CV", l_posting="İlan",
-        st_ready="Hazır", st_sent="Gönderildi", st_process="Süreçte", st_decide="Karar ver", st_watching="İzleniyor", st_closed="Kapalı",
-        sd_ready="paket hazır, gönderilecek", sd_sent="cevap bekleniyor", sd_process="test, mülakat, teklif",
+        st_drafted="Taslak", st_ready="Hazır", st_sent="Gönderildi", st_process="Süreçte", st_decide="Karar ver", st_watching="İzleniyor", st_closed="Kapalı",
+        sd_drafted="CV ve ön yazıyı asistan taslakladı, gözden geçir", sd_ready="paket hazır, gönderilecek", sd_sent="cevap bekleniyor", sd_process="test, mülakat, teklif",
         sd_decide="şartlar belirsiz", sd_watching="ilan ya da paket bekleniyor",
         pipeline="Başvuru hattı", open_closed="{a} açık · {c} kapalı", search="Ara", search_ph="Şirket, rol, şehir ara",
         closed_apps="Kapalı başvurular ({n})", none="Yok.",
@@ -128,7 +130,7 @@ STR = {
 # Field defaults per file: every record gets these keys, so the data files only need what they use.
 FIELDS = {
     "applications.json": dict(id="", company="", role="", location="", deadline="", deadline_note="", stage="watching", status="",
-                              sent_on="", cv="", package="", posting="", priority=2, note="", checked="", added=""),
+                              sent_on="", cv="", package="", posting="", priority=2, note="", checked="", added="", awaiting=""),
     "learning.json": dict(id="", order=0, priority="", week="", start="", end="", name="", provider="", link="", scope="", done_when="", status=""),
     "events.json": dict(id="", name="", date="", date_end="", register_by="", status="", closed=False, link="", note=""),
     "certifications.json": dict(id="", order=0, name="", provider="", cost="", duration="", target="", status="", link=""),
@@ -268,6 +270,8 @@ def build(cfg=None, today=None):
     if bayat: notlar.append(S["n_stale"].format(n=CFG["stale_days"], xs=", ".join(dict.fromkeys(bayat))))
     sessiz = [b["company"] for b in acik if stage(b) == "sent" and days(b["sent_on"]) is not None and -days(b["sent_on"]) >= CFG["followup_days"]]
     if sessiz: notlar.append(S["n_followup"].format(n=CFG["followup_days"], xs=", ".join(dict.fromkeys(sessiz))))
+    onay = [b["company"] for b in acik if b.get("awaiting") and stage(b) != "sent"]
+    if onay: notlar.insert(0, S["n_approve"].format(xs=", ".join(dict.fromkeys(onay))))
     for m in man:
         k = days(m["due"])
         if k is not None and k < -3: notlar.append(S["n_overdue"].format(n=-k, x=m["task"]))

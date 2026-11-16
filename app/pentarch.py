@@ -184,6 +184,20 @@ def tracker_refresh():
     return "-"
 
 
+def apply_cmd(*args):
+    """Shell command for tracker/apply.py (the applications record and form check)."""
+    return " ".join([PY, "-I", f'"{TRACKER / "apply.py"}"', "--config", f'"{TRACKER / "config.json"}"', *args])
+
+
+def drafts_due():
+    """True when the morning scan left postings at min_score or better that have no application record yet."""
+    if not (TRACKER / "config.json").exists() or not (TRACKER / "profile.json").exists():
+        return False
+    p = subprocess.run([sys.executable, "-I", str(TRACKER / "apply.py"), "--config", str(TRACKER / "config.json"), "todo"],
+                       capture_output=True, text=True, timeout=60, creationflags=NO_WINDOW)
+    return p.returncode == 0 and bool(p.stdout.strip())
+
+
 def auto_update():
     """Nightly update (no model): doktor.update() pulls only when the clone is clean; the owner hears of it only
     when new code arrived. watch_self then restarts Pentarch once it is idle."""
@@ -255,6 +269,21 @@ over 25 lines. Skip this step if there are no skills. Reply with only `-`."""},
     "insa": {"at": "02:00", "run": lambda: add_task("şimdi", INSA) or "-"},
     # application board: scan + build before the morning brief, so the brief and the panel see today's openings
     "pano": {"at": "08:30", "if": lambda: (TRACKER / "config.json").exists(), "run": tracker_refresh},
+    # drafts for the best new postings; the apply skill fills the form later and only sends on the owner's yes
+    "taslak": {"at": "08:45", "model": FAST, "if": drafts_due, "prompt": f"""[Application drafts, {{ts}}] {LIGHT}
+`{apply_cmd("todo")}` lists today's new postings worth applying to, one JSON line each (id, company, role, link,
+score, reason). For each: open the link and save the posting text to {TRACKER / "out" / "packages"}/<id>/posting.txt.
+Follow {APP.parent / "skills" / "cv" / "SKILL.md"} to write cv.md and a cover letter cover.md next to it (the cover_letter
+block of {TRACKER / "profile.json"} sets length and tone). Facts come only from the applicant block and cv block of that
+file; a missing number or date stays as [number?]. Run `{PY} -I "{APP.parent / "skills" / "cv" / "cv.py"}" check cv.md --jd posting.txt`
+(inside that folder) and fix every FAIL, and `{apply_cmd("check", "cover.md")}` on the letter. Then record it:
+`{apply_cmd("add", "--id ID --company ... --role ... --posting LINK --score N --stage drafted",
+             "--cv packages/ID/cv.md --package packages/ID/cover.md --status \"<one line: what to review>\"")}`.
+Open no application form and submit nothing: sending is the apply skill's job and needs {OWNER}'s yes.
+If a posting is gone or the page won't open, record it with --stage watching and the reason. Then rebuild the board:
+`{PY} -I "{TRACKER / "build.py"}" --config "{TRACKER / "config.json"}"`.
+Tell {OWNER} which drafts are ready (company, role, score) and the gaps they must fill; they say "apply to X" when they
+want it sent. {ANSWER}"""},
     # nightly git pull from the repo the clone came from (off: panel Settings > Disabled routines, or setup.py)
     "guncelle": {"at": "05:10", "run": auto_update},
     "haber": {"at": "13:00", "weekday": (0, 2, 4), "model": FAST, "prompt": f"""[News round, {{ts}}] {LIGHT}

@@ -71,6 +71,7 @@ A normal day looks like this. At 08:30 it sends a morning brief: what's due, wha
 - Tracks your GitHub pull requests.
 - A small offline dashboard for applications and a learning plan, which runs without any model ([`tracker/`](tracker/README.md)).
 - LinkedIn and CV skills that draft posts, score your profile and check a CV against a posting. They never log in or post for you.
+- Each morning, a CV and cover letter drafted for the best new postings, waiting on the board. The `apply` skill fills the form, checks every value against your profile and sends only after you say yes to that one application.
 
 ### Extras, off by default
 - **Windows notifications** from apps you choose, with a cheap model filtering out the noise.
@@ -229,6 +230,7 @@ The prompts are plain markdown in `~/.pentarch`, and they're yours to edit:
 | `ogret` | learning mode: you guess first, it explains, you write a small piece |
 | `linkedin-post`, `linkedin-profile`, `linkedin-network`, `linkedin-analyze` | drafting posts, scoring the profile, outreach around your applications, and reading your own numbers |
 | `cv` | a one-page CV for a posting, checked against rules |
+| `apply` | filling an application form, checking it against your profile and sending it after your yes |
 
 Setup writes a pointer for each skill into `~/.pentarch/beceriler`, so memory search attaches the right one when a request matches. With Claude Code it also copies them into `~/.claude/skills` and `~/.claude/agents`, so they work in any Claude Code session. It never overwrites a skill or agent you already have under the same name.
 
@@ -307,7 +309,7 @@ Sıradan bir gün şöyle geçer. Sabah 08:30'da kısa bir özet gelir: bugün n
 - **Öneriler:** Bir rutin işine yarayacak bir şey bulursa Evet/Hayır butonlarıyla sorar.
 - **Konsey (`konsey: soru`):** Birkaç model aynı soruyu aynı anda alır. Cevap verirler, birbirlerinin cevabını okurlar, ikinci turda tartışıp oy verirler.
 - **`/konsey fikir` (Claude Code):** Dört danışman (Savunucu, Şüpheci, İşveren, Uygulayıcı) tek bir fikre ayrı ayrı bakar, bir hakim de BUILD, FIX FIRST ya da KILL kararı verir. Kararın yanında en büyük riski ve 10 dakikalık bir testi de yazar, kararı notlarına kaydeder.
-- **Kariyer:** Hackathon ve uzaktan junior ilanlarını takip eder, vize sponsorluğu vermeyen ilanları işaretler, GitHub PR'larını izler. Modelsiz çalışan bir başvuru panosu da var. LinkedIn ve CV becerileri taslak yazar, profilini puanlar ama hiçbir zaman senin yerine paylaşım yapmaz.
+- **Kariyer:** Hackathon ve uzaktan junior ilanlarını takip eder, vize sponsorluğu vermeyen ilanları işaretler, GitHub PR'larını izler. Modelsiz çalışan bir başvuru panosu da var. LinkedIn ve CV becerileri taslak yazar, profilini puanlar ama hiçbir zaman senin yerine paylaşım yapmaz. Her sabah en iyi yeni ilanlar için CV ve ön yazı taslağı hazırlanıp panoya düşer. `apply` becerisi formu doldurur, her değeri profilinle karşılaştırır ve sen o başvuruya evet demeden göndermez.
 - **İsteğe bağlı ekstralar:** Windows bildirim süzgeci, masaüstü kontrolü, Docker'da kum havuzu, kotalı internet modu. Bir de gölge modu var: kısaltma ve ayıklama işleri ikinci bir adreste (`shadow.base_url`) de çalışır, iki cevap yan yana kaydedilir. Böylece daha ucuz bir modelin işi görüp görmediğini anlarsın. Sana her zaman asıl cevap gelir.
 
 ### Kurulum

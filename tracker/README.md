@@ -68,7 +68,7 @@ Every file is optional; a missing file means an empty section. Dates are `YYYY-M
 | `company`, `role`, `location` | string | `""` | |
 | `deadline` | date | `""` | Drives the 14-day strip and the deadline notes |
 | `deadline_note` | string | `""` | Extra text, e.g. "rolling" |
-| `stage` | string | `"watching"` | One of `ready`, `sent`, `process`, `decide`, `watching`, `closed`. Picks the board column |
+| `stage` | string | `"watching"` | One of `drafted`, `ready`, `sent`, `process`, `decide`, `watching`, `closed`. Picks the board column; an empty `drafted` column is hidden |
 | `status` | string | `""` | Free text. The card shows the part before the first `:` or `(` |
 | `sent_on` | date | `""` | When it was sent (for `sent` / `process`) |
 | `cv`, `package` | string | `""` | URL, or a file path relative to `out_dir` (shown only if the file exists) |
@@ -77,6 +77,8 @@ Every file is optional; a missing file means an empty section. Dates are `YYYY-M
 | `note` | string | `""` | |
 | `checked` | date | `""` | Last time someone checked the posting |
 | `added` | date | `""` | For the "new" badge |
+| `awaiting` | timestamp | `""` | Set by `apply.py check` when a filled form passed; the board then asks for your approval |
+| `approval`, `approved_on` | string, timestamp | `""` | Your words and when you said them, set by `apply.py approve` |
 
 ### `learning.json` (list)
 
@@ -173,13 +175,34 @@ Postings at or above `quality.min_score` go to `new`, sorted by score. A company
 
 Run it from a scheduled task, or let the Pentarch agent run it before its own judgement: the score and reason land in the dashboard either way.
 
+## Applying
+
+`apply.py` keeps the application records and holds the line between a filled form and a sent one. Like the rest of the tracker it needs no model.
+
+```
+python -I tracker/apply.py todo                       # postings at min_score or better with no record yet, one JSON line each
+python -I tracker/apply.py add --company Acme --role "Junior Dev" --posting URL --stage drafted
+python -I tracker/apply.py list --stage drafted
+python -I tracker/apply.py check form.json --id ID    # form.json is {"label": "value"}; plain text works too
+python -I tracker/apply.py approve ID --quote "yes, send it"
+python -I tracker/apply.py sent ID
+```
+
+`check` compares what was typed into a form with the `applicant` block of `profile.json`: email, phone, name, graduation year, current employer, sponsorship, profile links and salary. It also catches leftover placeholders such as `[number?]` or `TODO`. Each wrong value prints a `FAIL` line and the exit code is 1.
+
+A record can only reach `sent` in one order: a passing `check`, then `approve` with your own words, then `sent`. `add` and `set` refuse the `sent` stage, and `sent` refuses when the approval is older than the last check. The code can't know whether you really said yes, so the quote is there to make that step visible in the record.
+
+When `current_employer` is empty, any value other than empty, "none" or "student" in a current-employer field fails. A finished internship written as your current job is the mistake this catches.
+
+The Pentarch app adds a `taslak` job at 08:45. When the morning scan leaves postings with no record, it writes a CV and a cover letter for up to two of them into `out/packages/<id>/`, checks them, and adds the record as `drafted`. It never opens an application form. Sending goes through the `apply` skill, which fills the form, runs `check`, shows you everything and waits for your yes.
+
 ## How the Pentarch agent uses it
 
 The agent never edits the HTML. It edits the JSON files in `data_dir`, then runs `build.py`:
 
 1. Read the file it needs, find the record by `id`, change only the fields that changed, and write the file back as valid JSON (UTF-8).
 2. Typical edits:
-   - an application was sent: `stage: "sent"`, `sent_on: <today>`, a new `status`
+   - an application was sent: only through `apply.py sent` (see [Applying](#applying)), never by editing the file
    - a posting was checked: `checked: <today>`
    - a learning week is finished: `status: "done"`
    - a task is done: `done: true`
