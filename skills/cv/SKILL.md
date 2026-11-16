@@ -20,8 +20,8 @@ python skills/cv/cv.py check cv.md --lang tr             # skips the English gra
 
 ## Steps
 
-1. Read the `cv` block of `profile.json` (`language`, `format`, `sections`, `max_pages`, `highlight`, `avoid`) and the posting. Ask for the posting if there is none: a CV not aimed at a posting is a worse CV.
-2. Ask for the facts you do not have: employers, dates, what changed and by how much. Never invent a number, an employer or a date. A bullet with no number stays a draft with `[number?]` in it until the user fills it.
+1. Read the `cv` block of `profile.json` (`language`, `format`, `sections`, `max_pages`, `highlight`, `avoid`), its `applicant` block (contact, links, education, experience, highlights, `projects`, languages) and `skills`, and the posting. Ask for the posting if there is none: a CV not aimed at a posting is a worse CV.
+2. Build the Projects section from `applicant.projects`: each entry has `name`, `link`, `result` (one measured outcome) and `role` (the user's own part). `result` is the Y of the bullet, `role` the Z; keep the number exactly as written. Ask for the facts you do not have: employers, dates, what changed and by how much. Never invent a number, an employer or a date. A bullet with no number stays a draft with `[number?]` in it until the user fills it.
 3. Start from `python skills/cv/cv.py template`. Keep the section order in `cv.sections`.
 4. Write every bullet in XYZ form: "Accomplished [X] as measured by [Y], by doing [Z]". Past-tense verb first, a number in the bullet, the method last. The first bullet of every role carries a number.
 5. Pull the posting's own words into the Skills section and the bullets, spelled as the posting spells them. Do not add a skill the user does not have.

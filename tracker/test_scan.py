@@ -48,9 +48,39 @@ class Judge(unittest.TestCase):
         self.assertEqual(s, 5)  # 1 + role 2 + skills 2 + strong 1 + fresh 1 = 7, capped at 5
         for part in ("role:", "skills: Python, C#, Unity", "+mentorship", "fresh"):
             self.assertIn(part, why)
-        s2, why2, _ = self.s.judge(job("2", "Intern Game Tester (QA)", text="Unpaid position.", posted="2026-06-01"))
+        s2, why2, _ = scan.Scorer(dict(PROFILE, max_age_days=365), [], TODAY).judge(job("2", "Intern Game Tester (QA)", text="Unpaid position.", posted="2026-06-01"))
         self.assertEqual(s2, 1)  # 1 + role 2 - weak 1 - old 1 → clamped to 1
         self.assertIn("role: Game Developer", why2); self.assertIn("-Unpaid", why2); self.assertIn("days ago", why2)
+
+    def test_location_that_names_no_place(self):
+        # Peak's Lever board puts "Full-time" in the location field: look in the title and text, never drop
+        s, why, _ = self.s.judge(job("1", "Junior Game Developer", loc="Full-time", text="Join our Berlin studio."))
+        self.assertGreater(s, 0); self.assertIn("location from posting: Berlin", why)
+        s, why, _ = self.s.judge(job("2", "Junior Game Developer", loc=""))
+        self.assertGreater(s, 0); self.assertIn("location unknown", why)
+        self.assertEqual(self.s.judge(job("3", "Junior Game Developer", loc="Austin, TX"))[0], 0)  # a real place still drops
+
+    def test_old_postings_drop(self):
+        s, why, _ = self.s.judge(job("1", "Junior Software Engineer", posted="2021-07-21"))
+        self.assertEqual(s, 0); self.assertIn("days ago (max_age_days 60)", why)
+        self.assertGreater(self.s.judge(job("2", "Junior Software Engineer", posted="2026-09-10"))[0], 0)  # 56 days
+        self.assertGreater(scan.Scorer(dict(PROFILE, max_age_days=0), [], TODAY).judge(job("3", "Junior Software Engineer", posted="2021-07-21"))[0], 0)
+
+    def test_cs_degree_requirement(self):
+        mis = scan.Scorer(dict(PROFILE, applicant={"education": "X University, Management Information Systems, 2027"}), [], TODAY)
+        hard, soft, pref = ("BS in Computer Science required.", "BS in Computer Science or equivalent experience.",
+                            "A degree in Computer Science is preferred.")
+        base = mis.judge(job("0", "Junior Software Engineer"))[0]
+        s, why, _ = mis.judge(job("1", "Junior Software Engineer", text=hard))
+        self.assertEqual(s, base - 1); self.assertIn("needs a CS degree", why)
+        s, why, _ = mis.judge(job("2", "Junior Software Engineer", text=soft))
+        self.assertEqual(s, base); self.assertIn("CS degree or equivalent", why)
+        self.assertNotIn("CS degree", mis.judge(job("3", "Junior Software Engineer", text=pref))[1])
+        edu = scan.Scorer(dict(PROFILE, applicant={"education": "Z University, B.S. Computer Education and Instructional Technology"}), [], TODAY)
+        self.assertIn("needs a CS degree", edu.judge(job("6", "Junior Software Engineer", text=hard))[1])
+        cs = scan.Scorer(dict(PROFILE, applicant={"education": "Y University, Computer Engineering"}), [], TODAY)
+        self.assertNotIn("CS degree", cs.judge(job("4", "Junior Software Engineer", text=hard))[1])
+        self.assertNotIn("CS degree", self.s.judge(job("5", "Junior Software Engineer", text=hard))[1])  # education unknown
 
     def test_role_words_must_match_the_title(self):
         s = scan.Scorer(dict(PROFILE, target_roles=["Product Designer"], seniority=[]), [], TODAY)
