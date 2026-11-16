@@ -96,6 +96,11 @@ class Form(unittest.TestCase):
                         "LinkedIn": "linkedin.com/in/someone", "Salary": "55000"})
         self.assertEqual(len(bad), 8, bad)
 
+    def test_old_profile_without_employer_key(self):
+        old = {k: v for k, v in AP.items() if k != "current_employer"}
+        self.assertEqual(apply.check_form({"Current employer": "Barko"}, old), [])
+        self.assertEqual(apply.check_form("I am currently working at Barko.", old), [])
+
     def test_placeholder_left(self):
         self.assertTrue(self.bad({"Why us?": "I cut build time by [number?] percent"}))
 

@@ -115,7 +115,7 @@ def check_form(form, ap):
             if ap.get("education") and y not in YEAR.findall(ap["education"]):
                 bad.append(("text", f"graduation year {y} is not in your education ({ap['education']})"))
         cur = re.search(r"(?:current(?:ly)?\s+(?:working|employed)\s+(?:at|with)|my current (?:employer|company) is)\s+([A-Z][\w&.-]*(?:\s+[A-Z][\w&.-]*)*)", form)
-        if cur and not (ap.get("current_employer") and words(cur.group(1)) & words(ap["current_employer"])):
+        if cur and "current_employer" in ap and not (ap["current_employer"] and words(cur.group(1)) & words(ap["current_employer"])):
             bad.append(("text", f"says you work at {cur.group(1)} now; your current employer is {ap.get('current_employer') or 'none'}"))
     else:
         items = [(str(k), "" if v is None else str(v)) for k, v in form.items()]
@@ -140,7 +140,8 @@ def check_form(form, ap):
             for y in YEAR.findall(value):
                 if y not in YEAR.findall(ap["education"]):
                     bad.append((label, f"graduation year {y} is not in your education ({ap['education']})"))
-        if re.search(r"current(ly)?\s*(company|employer)|present employer|şu anki (şirket|işveren)|mevcut işveren", L):
+        # an older profile without the key: unknown, so not judged (the apply skill asks instead)
+        if "current_employer" in ap and re.search(r"current(ly)?\s*(company|employer)|present employer|şu anki (şirket|işveren)|mevcut işveren", L):
             mine = ap.get("current_employer", "")
             if mine and not NONE.match(value) and not words(value) & words(mine):
                 bad.append((label, f"current employer {value!r}; yours is {mine!r}"))

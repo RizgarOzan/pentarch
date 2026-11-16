@@ -2,11 +2,13 @@
 
     python setup.py            interactive
     python setup.py --force    also overwrite the prompt/memory files already in the home folder
+    python setup.py --upgrade  no questions: install skills and agents that are new since the last setup (run by updates)
 
 Re-running it is safe: answers default to what is already configured and your memory files are kept.
 Nothing here leaves your computer; the Telegram token and API key go to <home>/secrets, never into the repo.
 """
 import getpass
+import hashlib
 import json
 import os
 import re
@@ -350,17 +352,41 @@ def _fill(text, notes):
             .replace("{{NOTES}}", str(Path(notes).expanduser())).replace("{{HOME}}", str(HOME)))
 
 
-def _copy_new(src, dst, notes):
-    """Copy one file unless the user already has a different one there. Returns False when it was left alone."""
-    new = _fill(src.read_text(encoding="utf-8"), notes)
-    if dst.exists() and dst.read_text(encoding="utf-8") != new:
+SHIPPED = HOME / "kurulan_beceriler.json"  # hash of every skill/agent file setup wrote, to tell an old copy from an edit
+
+
+def _sha(text):
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _old_version(src, cur, notes):
+    """Installs from before the hash record: is cur exactly what some earlier version of src would have installed?"""
+    git, rel = shutil.which("git"), src.relative_to(REPO).as_posix()
+    if not git:
         return False
+    revs = subprocess.run([git, "-C", str(REPO), "rev-list", "HEAD", "--", rel], capture_output=True, text=True).stdout.split()
+    for h in revs:
+        old = subprocess.run([git, "-C", str(REPO), "show", f"{h}:{rel}"], capture_output=True, encoding="utf-8", errors="replace").stdout
+        if _fill(old.replace("\r\n", "\n"), notes) == cur:
+            return True
+    return False
+
+
+def _copy_new(src, dst, notes, shipped):
+    """Copy one file unless the user has their own there: a file setup never wrote, or one they edited after.
+    A copy setup wrote and nobody touched is replaced, so a newer version of the skill arrives. False when left alone."""
+    new = _fill(src.read_text(encoding="utf-8"), notes)
+    if dst.exists():
+        cur = dst.read_text(encoding="utf-8")
+        if cur != new and _sha(cur) != shipped.get(str(dst)) and not (str(dst) not in shipped and _old_version(src, cur, notes)):
+            return False
     dst.parent.mkdir(parents=True, exist_ok=True)
     dst.write_text(new, encoding="utf-8")
+    shipped[str(dst)] = _sha(new)
     return True
 
 
-def skills_setup(cli, notes="~/notes"):
+def skills_setup(cli, notes="~/notes", ask_first=True):
     """Repo skills (skills/<name>/SKILL.md): a pointer in <home>/beceriler so memory search attaches them, and for
     Claude Code a copy under ~/.claude/skills so /<name> works in the chat too, plus the subagents in agents/
     (the konsey council and log-avcisi) under ~/.claude/agents. A skill or agent the user already has under the
@@ -376,12 +402,14 @@ def skills_setup(cli, notes="~/notes"):
         desc = next((l.split(":", 1)[1].strip() for l in head.splitlines() if l.startswith("description:")), d.name)
         (pointers / f"{d.name}.md").write_text(f"When: {desc}\nRead and follow {d / 'SKILL.md'}\n", encoding="utf-8")
     names = ", ".join(d.name for d in dirs)
-    if cli == "claude" and yes(t(f"Beceriler Claude Code'a da kopyalansın mı ({names})?", f"Copy the skills into Claude Code too ({names})?"), True):
+    if cli == "claude" and (not ask_first or yes(t(f"Beceriler Claude Code'a da kopyalansın mı ({names})?",
+                                                   f"Copy the skills into Claude Code too ({names})?"), True)):
         target = Path.home() / ".claude" / "skills"
         kept = []
+        shipped = json.loads(SHIPPED.read_text(encoding="utf-8")) if SHIPPED.exists() else {}
         for d in dirs:
             # SKILL.md decides: if the user has their own skill by this name, the whole folder is left alone
-            if not _copy_new(d / "SKILL.md", target / d.name / "SKILL.md", notes):
+            if not _copy_new(d / "SKILL.md", target / d.name / "SKILL.md", notes, shipped):
                 kept.append(f"skills/{d.name}")
                 continue
             for f in d.rglob("*"):
@@ -391,11 +419,13 @@ def skills_setup(cli, notes="~/notes"):
                     shutil.copy2(f, out)
         agents = REPO / "agents"
         for f in sorted(agents.glob("*.md")) if agents.is_dir() else []:
-            if not _copy_new(f, Path.home() / ".claude" / "agents" / f.name, notes):
+            if not _copy_new(f, Path.home() / ".claude" / "agents" / f.name, notes, shipped):
                 kept.append(f"agents/{f.name}")
+        SHIPPED.write_text(json.dumps(shipped, indent=1), encoding="utf-8")
         print(t(f"  Kopyalandı: {target} ve ~/.claude/agents", f"  Copied to: {target} and ~/.claude/agents"))
         if kept:
-            print(t("  Dokunulmadı (aynı adla senin kendi dosyan var): ", "  Left alone (you already have your own by that name): ")
+            print(t("  Dokunulmadı (aynı adla senin kendi ya da düzenlediğin dosyan var): ",
+                    "  Left alone (you have your own or an edited one by that name): ")
                   + ", ".join(kept))
     elif cli != "claude":
         print(t(f"  Beceriler {REPO / 'skills'} altında; {cli} için kendi beceri klasörüne kopyalayabilirsin.",
@@ -454,8 +484,20 @@ def wiki_backup(notes):
                 "  Backed up." if ok else "  Push failed; once git is logged in, the nightly round retries."))
 
 
+def upgrade():
+    """After a git pull: the same skill and agent install as setup, without questions. Files the user changed stay."""
+    global TR
+    if not CONFIG.exists():
+        sys.exit("No pentarch.json yet; run python setup.py first.")
+    cfg = json.loads(CONFIG.read_text(encoding="utf-8"))
+    TR = cfg.get("lang") == "tr"
+    skills_setup(cfg.get("agent", {}).get("cli", "claude"), cfg.get("notes_dir", "~/notes"), ask_first=False)
+
+
 def main():
     global TR
+    if "--upgrade" in sys.argv:
+        return upgrade()
     old = json.loads(CONFIG.read_text(encoding="utf-8")) if CONFIG.exists() else {}
     agent = old.get("agent", {})
     print(f"Pentarch setup. Home folder: {HOME}\n")

@@ -136,15 +136,26 @@ def doctor():
 def update(git=shutil.which("git") or "git"):
     if not (REPO / ".git").exists():
         return T(f"{REPO} bir git deposu değil; yeni sürümü elle indir.", f"{REPO} is not a git repo; download the new version by hand.")
-    durum = subprocess.run([git, "-C", str(REPO), "status", "--porcelain"], capture_output=True, text=True)
+    # untracked files don't block a fast-forward (git refuses by itself if one would be overwritten)
+    durum = subprocess.run([git, "-C", str(REPO), "status", "--porcelain", "--untracked-files=no"], capture_output=True, text=True)
     if durum.returncode or durum.stdout.strip():
         return T("Depoda kaydedilmemiş değişiklik var; güncellemedim (önce commit ya da stash).",
                  "The repo has local changes; not updated (commit or stash first).")
+    head = lambda: subprocess.run([git, "-C", str(REPO), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+    before = head()
     p = subprocess.run([git, "-C", str(REPO), "pull", "--ff-only"], capture_output=True, text=True)
     if p.returncode:
         return T("git pull olmadı: ", "git pull failed: ") + (p.stderr or p.stdout).strip()[-300:]
-    return (p.stdout.strip() or "ok") + T("\nÇalışan Pentarch kod değişince kendini yeniden başlatır; yeni ayar için setup.py.",
-                                         "\nA running Pentarch restarts itself when the code changes; run setup.py for new settings.")
+    if head() == before:
+        return T("Zaten güncel.", "Already up to date.")
+    log = subprocess.run([git, "-C", str(REPO), "log", "--no-merges", "--format=- %s", f"{before}..HEAD"],
+                         capture_output=True, text=True, encoding="utf-8").stdout.splitlines()
+    msg = T("Yeni sürüm geldi:\n", "New version pulled:\n") + "\n".join(log[:8] + (["- ..."] if len(log) > 8 else []))
+    changed = subprocess.run([git, "-C", str(REPO), "diff", "--name-only", before, "HEAD"], capture_output=True, text=True).stdout
+    if "requirements.txt" in changed.split():
+        msg += T("\nPython paketleri değişti: pip install -r requirements.txt", "\nPython packages changed: pip install -r requirements.txt")
+    return msg + T("\nÇalışan Pentarch boşta kalınca yeniden başlar ve yeni becerileri kendisi kurar. Yeni ayar soruları için: python -I setup.py",
+                   "\nA running Pentarch restarts once idle and installs the new skills itself. For new setup questions: python -I setup.py")
 
 
 def main():

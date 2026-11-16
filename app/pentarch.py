@@ -217,11 +217,27 @@ def auto_update():
     before = head()
     result = doktor.update(git)
     if before and head() != before:
-        send_auto(T("Pentarch güncellendi, boşta kalınca yeniden başlıyorum. Yeni ayar sorusu varsa: python -I setup.py",
-                    "Pentarch updated; I restart once idle. If there are new settings: python -I setup.py"))
+        send_auto(result)
     else:
         note(f"otomatik güncelleme: {result.splitlines()[0][:150] if result else '-'}")
     return "-"
+
+
+def kurulumu_tazele():
+    """First start on new code (after a pull, an old version's pull included): install the skills and agents it
+    brought with setup.py --upgrade, which asks nothing and leaves files the owner edited alone. Once per commit."""
+    git = shutil.which("git") or "git"
+    head = subprocess.run([git, "-C", str(APP.parent), "rev-parse", "HEAD"], capture_output=True, text=True,
+                          creationflags=NO_WINDOW).stdout.strip()
+    stamp = HOME / "kurulu_surum.txt"
+    if not head or (stamp.exists() and stamp.read_text(encoding="utf-8").strip() == head):
+        return
+    r = subprocess.run([sys.executable, "-I", str(APP.parent / "setup.py"), "--upgrade"], capture_output=True,
+                       text=True, encoding="utf-8", errors="replace", creationflags=NO_WINDOW)
+    if r.returncode:
+        note(f"setup.py --upgrade olmadı: {(r.stderr or r.stdout).strip()[-300:]}")
+    else:
+        stamp.write_text(head, encoding="utf-8")
 
 
 JOBS = {
@@ -2726,6 +2742,7 @@ def main():
         print(T(f"Telegram'a ulaşılamadı ({e}), yine de başlıyor", f"Telegram unreachable ({e}), starting anyway"), file=sys.stderr)
         me = {}
     note("başladı")
+    in_thread(kurulumu_tazele)
     print(T(f"başladı: @{me.get('username', '?')}, log {RUN_LOG}", f"started: @{me.get('username', '?')}, log at {RUN_LOG}"))
     atexit.register(note, "kapandı")
     sys.excepthook = lambda *e: note("çöktü: " + "".join(traceback.format_exception(*e))[-800:])
