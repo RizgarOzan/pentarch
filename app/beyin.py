@@ -31,6 +31,17 @@ MASAUSTU = HOME / "masaustu-mcp.json"
 MAX_CTX = {"opus": 120_000, "sonnet": 120_000}  # model -> sınır; yoksa 60k
 if C.get("plan") == "pro":  # Pro: every chat turn re-reads the whole context against the shared limit, renew sooner
     MAX_CTX = {}
+AYAR = HOME / "beyin-ayar.json"
+# --setting-sources "" also drops the user's own deny rules, so the brain carries its own. Written to a file because
+# claude.CMD goes through cmd.exe and a "|" or quote inside inline JSON would be read by the shell.
+try:  # rule paths: "~/x" is the home dir, "//c/x" is an absolute Windows path
+    _SIR = "~/" + config.SECRETS.relative_to(Path.home()).as_posix()
+except ValueError:
+    _p = config.SECRETS.as_posix()
+    _SIR = "//" + (_p[0].lower() + _p[2:] if _p[1:2] == ":" else _p.lstrip("/"))
+DENY = ["Read(**/.env)", "Read(**/.env.*)", "Read(~/.claude/.credentials.json)",
+        "Bash(git push --force *)", "Bash(git push -f *)", "Bash(git reset --hard *)", "Bash(git clean -fd *)",
+        "Bash(git filter-branch *)"] + [f"{t}({_SIR}/**)" for t in ("Read", "Edit", "Write")]
 IDLE = 55 * 60  # abonelikte önbellek 1 saat yaşar; sonrası zaten soğuk
 SUMMARY_ASK = (f"[System] This session is closing and will hand over to a new one. In at most 120 words of plain text, "
                f"summarize everything needed to continue the conversation with {OWNER}: topic, open tasks, promises you "
@@ -60,6 +71,11 @@ class Beyin:
                 "--model", self.model, "--effort", self.effort, "--permission-mode", C["agent"]["permission_mode"],
                 "--strict-mcp-config", "--setting-sources", "", "--tools", TOOLS,
                 "--append-system-prompt-file", str(RULES)]
+        try:
+            AYAR.write_text(json.dumps({"permissions": {"deny": DENY}}), encoding="utf-8")
+            args += ["--settings", str(AYAR)]
+        except OSError as e:
+            self.log(f"beyin-ayar.json yazılamadı: {e!r}")
         if C["agent"]["permission_mode"] != "bypassPermissions":
             args += ["--allowedTools", config.allowed_tools(C["agent"]["allowed_tools"])]
         if C["desktop_control"] and MASAUSTU.exists():

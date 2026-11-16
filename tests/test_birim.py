@@ -775,7 +775,7 @@ class ProPlani(unittest.TestCase):
         ro.write_text("{}", encoding="utf-8")
         with mock.patch.object(pentarch, "PRO", pro), mock.patch.object(pentarch, "READONLY_SETTINGS", ro), \
                 mock.patch.object(pentarch.agents, "CLI", "claude"), \
-                mock.patch.object(pentarch.subprocess, "run", return_value=mock.Mock(stdout=stdout, stderr="")) as run:
+                mock.patch.object(pentarch, "run_tree", return_value=mock.Mock(stdout=stdout, stderr="")) as run:
             reply = pentarch._run_claude("x", kind=kind, resume=False)
         return run.call_args[0][0], reply
 
@@ -866,3 +866,43 @@ class DoktorSistem(unittest.TestCase):
         r = doktor.sistem_yorumla({"ev": [], "disk": [], "ag": ["vpnhome | Generic NIC"]})
         self.assertEqual(len(r), 2)
         self.assertNotIn("vpnhome", r[1][1])  # the adapter name alone doesn't make it a VPN
+
+
+class UltronPorts(unittest.TestCase):
+    def test_reply_note(self):
+        import pentarch
+        with mock.patch.dict(pentarch.state, {"chat_id": 7}):
+            self.assertEqual(pentarch.reply_note({"text": "x"}), "")
+            self.assertEqual(pentarch.reply_note({"quote": {"text": "x"}}), "")
+            own = {"reply_to_message": {"from": {"id": 7}, "text": "buy milk"}}
+            self.assertIn('their own message: "buy milk"', pentarch.reply_note(own))
+            bot = {"reply_to_message": {"from": {"id": 1}, "text": "long answer"}, "quote": {"text": "answer"}}
+            self.assertIn('your message: "answer"', pentarch.reply_note(bot))
+
+    def test_lost(self):
+        import pentarch
+        self.assertFalse(pentarch.lost("Skor 72, 3 test geçmedi.", "Skor 72, 3 test geçmedi."))
+        self.assertTrue(pentarch.lost("Skor 72, 3 test geçmedi.", "Skor 72, testler geçmedi."))
+        self.assertTrue(pentarch.lost("Build failed at step 4", "Build at step 4 done"))
+
+    def test_kisalt_skips_lists(self):
+        import pentarch
+        text = "Names:\n" + "\n".join(f"- name{i} " + "word " * 40 for i in range(5))
+        with mock.patch.object(pentarch, "kucuk") as k:
+            pentarch.kisalt(text, 10)
+        k.assert_not_called()
+
+    def test_kisalt_gives_up_when_meaning_drops(self):
+        import pentarch
+        text = "Score 82, 3 errors left. " + "filler " * 60
+        out = {"result": "Score is fine. " + "x " * 5}
+        with mock.patch.object(pentarch, "kucuk", return_value=out) as k, \
+                mock.patch.object(pentarch, "golge"), mock.patch.object(pentarch, "spend"), \
+                mock.patch.object(pentarch, "note"):
+            self.assertEqual(pentarch.kisalt(text, 10), pentarch.duzlestir(text))
+        self.assertEqual(k.call_count, 2)
+
+    def test_brain_deny(self):
+        import beyin
+        self.assertIn("Bash(git push --force *)", beyin.DENY)
+        self.assertTrue(any(d.startswith(("Read(~/", "Read(//")) for d in beyin.DENY))
