@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from config import C, CONFIG_FILE, EXTRA_DIRS, NOTES, SECRETS, T  # noqa: E402
+from config import C, CONFIG_FILE, EXTRA_DIRS, HOME, NOTES, SECRETS, T  # noqa: E402
 
 REPO = Path(__file__).resolve().parent.parent
 
@@ -45,6 +45,39 @@ def port_bos(port):
         s.close()
 
 
+def boy(p):
+    """Folder size in bytes (files that vanish mid-walk are skipped)."""
+    n = 0
+    for kok, _, dosyalar in os.walk(p):
+        for f in dosyalar:
+            try:
+                n += os.path.getsize(os.path.join(kok, f))
+            except OSError:
+                pass
+    return n
+
+
+def bozuk_json(home=HOME):
+    """Names of the state files (*.json) in home that don't parse; one of them can silently stop a watcher."""
+    import json
+    out = []
+    for f in sorted(Path(home).glob("*.json")):
+        try:
+            json.loads(f.read_text(encoding="utf-8-sig"))
+        except (OSError, ValueError):
+            out.append(f.name)
+    return out
+
+
+def paket_var(ad):
+    """Is a Python package importable? -I leaves the user site off sys.path, so it is added first."""
+    import importlib.util
+    import site
+    if (u := site.getusersitepackages()) not in sys.path:
+        sys.path.append(u)
+    return importlib.util.find_spec(ad) is not None
+
+
 def kontroller():
     """[(ok, line)]; ok is True, False, or None for a plain note."""
     r = [(CONFIG_FILE.exists(), f"config: {CONFIG_FILE}" + ("" if CONFIG_FILE.exists() else T(" yok (setup.py yazar)", " missing (setup.py writes it)"))),
@@ -63,6 +96,13 @@ def kontroller():
         r.append((bool(os.environ.get(ad)) or None, f"{ad} ({yer}): " + (T("tanımlı", "set") if os.environ.get(ad) else T("tanımsız", "not set"))))
     for ad in ("panel_port", "lock_port"):
         r.append((None, f"{ad} {C[ad]}: " + (T("boş", "free") if port_bos(C[ad]) else T("kullanımda (Pentarch çalışıyor olabilir)", "in use (Pentarch may be running)"))))
+    for paket, ne in (("faster_whisper", T("yerel ses çevirisi", "local voice transcription")),
+                      ("edge_tts", T("sesli cevap", "voice replies"))):
+        r.append((paket_var(paket) or None, f"{paket}: " + (T("kurulu", "installed") if paket_var(paket) else T(f"yok ({ne} çalışmaz)", f"missing ({ne} won't work)"))))
+    bozuk = bozuk_json()
+    r.append((not bozuk, T("durum dosyaları: ", "state files: ") + (T("bozuk: ", "broken: ") + ", ".join(bozuk) if bozuk else T("okunuyor", "all parse"))))
+    if HOME.exists():
+        r.append((None, f"{HOME}: {boy(HOME) / 2**20:.0f} MB"))
     return r
 
 

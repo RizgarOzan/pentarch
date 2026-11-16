@@ -53,7 +53,9 @@ DEFAULTS = {
     "desktop_control": False,      # Windows-MCP desktop control for the chat brain
     "voice_replies": True,         # answer voice with voice (edge-tts, needs internet)
     "tts_voice": "",               # edge-tts voice name; empty picks one for lang
-    "whisper": {"model": "small", "language": ""},  # faster-whisper; empty language = auto-detect
+    # faster-whisper; empty language = auto-detect. groq_key_env names an env var with a Groq key: voice then goes to
+    # Groq's hosted whisper first (audio leaves the machine) and falls back to local whisper. Empty = local only.
+    "whisper": {"model": "small", "language": "", "groq_key_env": ""},
     "health_urls": [],             # extra sites to watch on the panel (internet and agent login are always checked)
     "net_quota_gb": 0,             # monthly data cap; 0 = no metered-connection mode
     "jobs_off": ["insa", "posta"], # routines off at first start (JOBS in pentarch.py); panel Settings turns them on

@@ -384,7 +384,7 @@ function pano() {
   koy("sekmeler", Object.entries(T.tabs).map(([k, s]) =>
     `<button type="button" data-sekme="${k}" aria-pressed="${k === sekme}" class="${k === "hata" && liste.hata?.length ? "hata" : ""}"><b>${(liste[k] || []).length}</b>${s}</button>`).join(""));
   const L = liste[sekme] || [];
-  koy("aktif", L.length ? L.map(r => `<div class="row"><span class="k">${esc(kisaZaman(r.zaman))}</span>${esc(String(r.is).replace(/\s*\(.*$/s, "").slice(0, 140))}</div>`).join("")
+  koy("aktif", L.length ? L.map(r => `<div class="row"><span class="k">${esc(kisaZaman(r.zaman))}</span>${esc(String(r.is).replace(/\s*\(.*$/s, "").slice(0, 140))}${r.adim ? ` · <span class="k">${esc(r.adim)}</span>` : ""}</div>`).join("")
     : `<div class="bos">${sekme === "hata" ? T.noErr : T.none}</div>`);
 }
 $("sekmeler").addEventListener("click", e => { const b = e.target.closest("[data-sekme]"); if (b) { sekme = b.dataset.sekme; pano(); } });

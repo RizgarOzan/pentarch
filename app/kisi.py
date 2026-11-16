@@ -64,6 +64,23 @@ def liste():
         or T("defter boş", "ledger is empty")
 
 
+def cevap_bekleyen(esik_saat=24):
+    """People whose last entry on a channel is something sent and at least esik_saat hours old:
+    [(person (channel), hours, gist)], oldest first."""
+    son = {}
+    for r in kayitlar():
+        son[(_k(r["kisi"]), r["kanal"].casefold())] = r
+    out = []
+    for r in son.values():
+        try:
+            saat = (datetime.now() - datetime.strptime(r["zaman"], "%Y-%m-%d %H:%M")).total_seconds() / 3600
+        except (KeyError, ValueError):
+            continue
+        if r.get("yon") == "giden" and saat >= esik_saat:
+            out.append((f"{r['kisi']} ({r['kanal']})", int(saat), r.get("ozet", "")))
+    return sorted(out, key=lambda x: -x[1])
+
+
 if __name__ == "__main__":
     sys.stdout.reconfigure(encoding="utf-8")
     a = sys.argv[1:]

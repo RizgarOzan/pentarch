@@ -378,6 +378,7 @@ class ForwardTest(unittest.TestCase):
         self.assertIn("https://t.me/news/5", n); self.assertIn("https://x.io/a", n)
         self.assertEqual(pentarch.forward_note({"text": "hi"}), "")
 
+
 if __name__ == "__main__":
     unittest.main()
 
@@ -902,7 +903,246 @@ class UltronPorts(unittest.TestCase):
             self.assertEqual(pentarch.kisalt(text, 10), pentarch.duzlestir(text))
         self.assertEqual(k.call_count, 2)
 
+    def test_groq_voice(self):
+        import pentarch
+        f = Path(tempfile.mkdtemp()) / "v.oga"
+        f.write_bytes(b"OggS")
+        r = mock.MagicMock()
+        r.__enter__.return_value.read.return_value = json.dumps({"text": " ııı hello there "}).encode()
+        local = mock.MagicMock(returncode=0, stdout="local".encode())
+        with mock.patch.dict(pentarch.C["whisper"], {"groq_key_env": "GROQ_TEST_KEY"}), \
+                mock.patch.dict(os.environ, {"GROQ_TEST_KEY": "k"}), mock.patch.object(pentarch, "note"), \
+                mock.patch.object(pentarch.subprocess, "run", return_value=local) as run:
+            with mock.patch("urllib.request.urlopen", return_value=r) as u:
+                self.assertEqual(pentarch.transcribe(f), "hello there")
+            self.assertIn(b'filename="ses.ogg"', u.call_args[0][0].data)
+            run.assert_not_called()
+            with mock.patch("urllib.request.urlopen", side_effect=TimeoutError()) as u:
+                self.assertEqual(pentarch.transcribe(f), "local")  # two tries, then local whisper
+            self.assertEqual(u.call_count, 2)
+        with mock.patch.dict(pentarch.C["whisper"], {"groq_key_env": ""}), \
+                mock.patch.object(pentarch.subprocess, "run", return_value=local), \
+                mock.patch("urllib.request.urlopen") as u:
+            self.assertEqual(pentarch.transcribe(f), "local")  # no key: audio never leaves the machine
+        u.assert_not_called()
+
     def test_brain_deny(self):
         import beyin
         self.assertIn("Bash(git push --force *)", beyin.DENY)
         self.assertTrue(any(d.startswith(("Read(~/", "Read(//")) for d in beyin.DENY))
+
+
+class IsDefteri(unittest.TestCase):
+    """Background jobs, the promise gate and the side brain (ported from the author's assistant, 2026-11-16)."""
+
+    def setUp(self):
+        import pentarch
+        self.p = pentarch
+        d = Path(tempfile.mkdtemp())
+        self.patches = [mock.patch.object(pentarch, "ISLER", d / "isler.json"), mock.patch.object(pentarch, "note")]
+        for m in self.patches:
+            m.start()
+
+    def tearDown(self):
+        for m in self.patches:
+            m.stop()
+
+    def fake_brain(self, *results):
+        p = self.p
+
+        class Sahte:
+            lock = mock.MagicMock()
+            model, effort = p.ayar("beyin_model"), p.ayar("beyin_efor")
+            ofset = taban = turns = ctx = 0
+            kayip = False
+            def taze(self): return False
+        B = Sahte()
+        B.ask = mock.MagicMock(side_effect=[{"result": r, "session_id": "s", "total_cost_usd": 0, "arac_sayisi": a}
+                                            for r, a in results])
+        return B
+
+    def run_v2(self, B, prompt="Owner:\nbak"):
+        p = self.p
+        with mock.patch.dict(p.BEYINLER, {"hizli": B}, clear=True), mock.patch.object(p, "derin_mi", return_value=False), \
+                mock.patch.object(p, "spend", return_value=(0, 0)), mock.patch.object(p, "konusma_arasi", return_value=""), \
+                mock.patch.object(p, "reddedilenler", return_value=""), mock.patch.object(p, "net_prompt", return_value=""):
+            return p.ask_v2(prompt)
+
+    def test_gate_fires_on_empty_promise(self):
+        B = self.fake_brain(("Kontrol ediyorum, birazdan dönerim.", 0), ("Henüz bakmadım; bakmamı ister misin?", 0))
+        self.assertEqual(self.run_v2(B), "Henüz bakmadım; bakmamı ister misin?")
+        self.assertIn("ediyorum", B.ask.call_args_list[1][0][0])
+
+    def test_gate_quiet_with_tool_or_plain_reply(self):
+        self.assertEqual(self.run_v2(self.fake_brain(("Kontrol ediyorum, dosya temiz.", 2))), "Kontrol ediyorum, dosya temiz.")
+        self.assertEqual(self.run_v2(self.fake_brain(("I'm checking it now.", None))), "I'm checking it now.")
+        self.assertEqual(self.run_v2(self.fake_brain(("Dün baktım, sorun yok.", 0))), "Dün baktım, sorun yok.")
+        self.assertEqual(self.p.bos_soz("I'm looking into it.", 0), "I'm looking into")
+        self.assertEqual(self.p.bos_soz("Rapor hazırlanıyor.", 0), "hazırlanıyor")
+
+    def test_agir_splits_note_and_job(self):
+        r = self.run_v2(self.fake_brain(("Bakıyorum, bitince haber veririm.\nAGIR: mail kutusunu tara", 0)))
+        self.assertIsInstance(r, self.p.Agir)
+        self.assertEqual((r.soz, r.tarif), ("Bakıyorum, bitince haber veririm.", "mail kutusunu tara"))
+        r = self.run_v2(self.fake_brain(("AGIR: sadece iş", 0)))
+        self.assertEqual((r.soz, r.tarif), ("", "sadece iş"))
+
+    def test_ledger_ek_iptal_kurtar(self):
+        p = self.p
+        a, b = p.is_ekle("istek 1", "iş 1"), p.is_ekle("istek 2", "iş 2")
+        self.assertEqual((a, b), (1, 2))
+        p.is_guncelle(b, durum="running")
+        proc = object()
+        with mock.patch.dict(p.is_surecleri, {b: proc}), mock.patch.object(p, "kill_tree") as kill, \
+                mock.patch.object(p.agents, "CLI", "gemini"):  # under claude the addition goes to the live hook file
+            out = p.is_komutlari("EK #1: ekle bunu\nEK #2: koşana ek\nIPTAL #2\nEK #9: yok")
+            kill.assert_called_once_with(proc)
+        self.assertIn("#9", out)
+        self.assertNotIn("EK #1", out)
+        self.assertIn("ekle bunu", p.is_bul(a)["tarif"])
+        self.assertEqual(p.is_bul(b)["ek"], "koşana ek")
+        self.assertIn(b, p.is_iptal)
+        p.is_iptal.discard(b)
+        self.assertEqual(p.is_komutlari("IPTAL #1"), p.T("Tamam.", "Done."))
+        self.assertEqual(p.is_bul(a)["durum"], "cancelled")
+        self.assertIn("#2 running", p.isler_ozeti())
+        with mock.patch.object(p, "add_task") as add:
+            p.isleri_kurtar()
+        self.assertIn("iş 2", add.call_args[0][1])
+        self.assertEqual(p.acik_isler(), [])
+
+    def test_agir_kos_delivers_and_marks(self):
+        p = self.p
+        no = p.is_ekle("istek", "iş")
+        p.is_guncelle(no, ek="sonradan")
+        with mock.patch.object(p, "run_claude", return_value="bitti") as rc, mock.patch.object(p, "teslim") as t:
+            p.agir_kos(no, ["istek"], "Telegram")
+        self.assertIn(f"Job #{no}", rc.call_args[0][0])
+        self.assertIn("sonradan", t.call_args[0][0])
+        self.assertEqual(p.is_bul(no)["durum"], "done")
+
+    def test_side_brain_routing(self):
+        p = self.p
+        with mock.patch.object(p, "ayar", return_value=True), mock.patch.object(p, "bekleyen_degis"), \
+                mock.patch.object(p, "ask") as ask:
+            self.assertFalse(p.yonlendir(["selam"]))  # main thought idle: normal queue
+            with p.main_lock:
+                self.assertFalse(p.yonlendir(["/new"]))
+                self.assertTrue(p.yonlendir(["selam"]))
+                for _ in range(50):
+                    if not p.yan_lock.locked():
+                        break
+                    import time
+                    time.sleep(0.02)
+            ask.assert_called_once_with(["selam"], "Telegram", yan=True)
+        self.assertEqual(p.bekleyen_cikar(["a", "b", "a"], ["a"]), ["b", "a"])
+
+
+class CanliEk(unittest.TestCase):
+    """Live additions, task NEXT lines, runaway limits and the other small guards (2026-11-16)."""
+
+    def setUp(self):
+        import pentarch
+        self.p = pentarch
+        self.d = Path(tempfile.mkdtemp())
+        self.patches = [mock.patch.object(pentarch, "note"), mock.patch.object(pentarch, "TASKS", self.d / "gorevler.json"),
+                        mock.patch.object(pentarch, "REMINDERS", self.d / "hatirlatmalar.json"),
+                        mock.patch.object(pentarch, "DEVAM", self.d / "devam.json")]
+        for m in self.patches:
+            m.start()
+
+    def tearDown(self):
+        for m in self.patches:
+            m.stop()
+
+    def gorevler(self):
+        return json.loads(self.p.TASKS.read_text(encoding="utf-8")) if self.p.TASKS.exists() else []
+
+    def test_kilitte_tekrar(self):
+        n = []
+
+        def fn():
+            n.append(1)
+            if len(n) < 3:
+                raise PermissionError
+            return "ok"
+        with mock.patch.object(self.p.time, "sleep"):
+            self.assertEqual(self.p.kilitte_tekrar(fn), "ok")
+            self.assertRaises(PermissionError, self.p.kilitte_tekrar, mock.Mock(side_effect=PermissionError), 2)
+
+    def test_sade_hata(self):
+        self.assertEqual(self.p.sade_hata("fine"), "fine")
+        self.assertNotIn("Hata:", self.p.sade_hata("Hata: exit 1, stack trace"))
+        self.assertIn(self.p.T("kota", "quota"), self.p.sade_hata("Hata: usage limit reached"))
+
+    def test_kelime_hedefi(self):
+        with mock.patch.object(self.p, "ayar", return_value=80):
+            self.assertEqual(self.p.kelime_hedefi(["list them all"]), 150)
+            self.assertEqual(self.p.kelime_hedefi(["selam"]), 80)
+
+    def test_model_guncelle(self):
+        self.assertEqual(self.p.model_guncelle("run claude-opus-4-5 then claude-sonnet-4"), "run opus then sonnet")
+
+    def test_gorev_satirlari_queues_next(self):
+        with mock.patch.object(self.p, "ayar", side_effect=lambda k: {"devam_zincir": 2, "devam_gunluk": 5}[k]):
+            r = self.p.gorev_satirlari({"is": "x"}, "done\nVERIFIED: tests pass\nNEXT: write the docs page")
+            self.assertEqual(r, "done")
+            self.assertEqual([(g["is"], g["zincir"]) for g in self.gorevler()], [("write the docs page", 1)])
+            r = self.p.gorev_satirlari({"is": "x", "zincir": 2}, "done\nNEXT: another step")  # chain cap
+            self.assertEqual(r, "done" + self.p.T("\n(Doğrulama yazılmadı.)", "\n(No verification written.)"))
+            self.p.gorev_satirlari({"is": "x"}, "done\nVERIFIED: ok\nNEXT: send the email to the client")  # outward
+        self.assertEqual(len(self.gorevler()), 1)
+
+    def test_soz_kaydet(self):
+        with mock.patch.object(self.p, "add_task") as add:
+            self.p.soz_kaydet("I'll look tomorrow and tell you.", "check the logs")
+            self.p.soz_kaydet("Done, here it is.", "check the logs")
+        self.assertEqual(add.call_count, 1)
+        self.assertTrue(add.call_args[0][0].endswith("09:00"))
+
+    def test_is_ek_and_hook(self):
+        self.p.is_ek_yaz(7, "also add tests")
+        self.assertEqual(self.p.is_ek_al(7), "also add tests")
+        self.assertEqual(self.p.is_ek_al(7), "")
+        komut = self.p.is_hook_ayari()["hooks"]["PostToolUse"][0]["hooks"][0]["command"]
+        self.assertIn("is_ek.py", komut)
+        self.p.is_ek_yaz(8, "use the other file")
+        import subprocess
+        hook = Path(__file__).resolve().parent.parent / "app" / "is_ek.py"
+        env = {**os.environ, "PENTARCH_HOME": str(self.p.HOME), "PENTARCH_IS": "8", "PENTARCH_IS_ANAHTAR": "k1"}
+        out = subprocess.run([sys.executable, "-I", str(hook)], input=json.dumps(
+            {"tool_name": "Read", "tool_input": {"file_path": "/x/notes.md"}}), capture_output=True, text=True,
+            encoding="utf-8", env=env, timeout=30).stdout
+        ek = json.loads(out)["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("[Pentarch-ek k1]", ek)
+        self.assertIn("use the other file", ek)
+        self.assertIn("notes.md", self.p.is_adim(8))
+        self.assertFalse((self.p.HOME / "isler" / "8.ek").exists())
+
+    def test_beyin_limits(self):
+        import beyin
+        b = beyin.Beyin(log=lambda *a: None)
+        b.proc = mock.Mock()
+        b._kill = mock.Mock()
+        agent = {"type": "tool_use", "name": "Agent"}
+        b.events.put({"type": "assistant", "message": {"content": [agent] * (beyin.ALT_AJAN_SINIRI + 1)}})
+        self.assertRaises(RuntimeError, b._send, "hi", 5)
+        b._kill.assert_called_once()
+        b.events.put({"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Read"}] * 3}})
+        b.events.put({"type": "result", "result": "ok"})
+        self.assertEqual(b._send("hi", 5)["arac_sayisi"], 3)
+
+    def test_doktor_and_unanswered(self):
+        import doktor
+        import kisi
+        (self.d / "iyi.json").write_text("{}", encoding="utf-8")
+        (self.d / "bozuk.json").write_text("{", encoding="utf-8")
+        self.assertEqual(doktor.bozuk_json(self.d), ["bozuk.json"])
+        self.assertTrue(self.p.DOKTOR_ISTEGI.fullmatch("Doctor"))
+        eski = "2020-01-01 10:00"
+        satirlar = [{"zaman": eski, "kisi": "Ada", "kanal": "mail", "yon": "giden", "ozet": "asked for the file"},
+                    {"zaman": eski, "kisi": "Bo", "kanal": "mail", "yon": "giden", "ozet": "q"},
+                    {"zaman": eski, "kisi": "bo", "kanal": "Mail", "yon": "gelen", "ozet": "answered"}]
+        with mock.patch.object(kisi, "LEDGER", self.d / "kisiler.jsonl"):
+            kisi.LEDGER.write_text("\n".join(json.dumps(r) for r in satirlar), encoding="utf-8")
+            self.assertEqual([k for k, _, _ in kisi.cevap_bekleyen(24)], ["Ada (mail)"])
