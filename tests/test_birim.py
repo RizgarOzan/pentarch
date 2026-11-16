@@ -869,7 +869,7 @@ class DoktorSistem(unittest.TestCase):
         self.assertNotIn("vpnhome", r[1][1])  # the adapter name alone doesn't make it a VPN
 
 
-class UltronPorts(unittest.TestCase):
+class MessageHelpers(unittest.TestCase):
     def test_reply_note(self):
         import pentarch
         with mock.patch.dict(pentarch.state, {"chat_id": 7}):

@@ -817,7 +817,7 @@ _NEG = re.compile(r"geçme|başarısız|\bhata|eksik|sorun|olmadı|yapılmadı|b
 
 def lost(old, new):
     """What shortening threw away: numbers other than times/dates/durations, or a negative verdict (failed, missing,
-    error) dropped or invented. Empty list: the meaning survived (on Ultron a small model cut a score and the defects)."""
+    error) dropped or invented. Empty list: the meaning survived (a small model once cut a score and the defects)."""
     def nums(t):
         return {m.group(0).replace(" ", "").rstrip("$") for m in _NUM.finditer(t)
                 if not _UNIT.match(t[m.end():]) and not re.match(r"\d{4}-\d\d", t[m.start():])}
@@ -1890,7 +1890,7 @@ def heart_fingerprint():
         parts.append(p.stat().st_mtime if p.exists() else 0)
     cutoff = f"{t - timedelta(hours=2):%Y-%m-%d %H:%M}"
     # network drops (getUpdates, URLError) mostly recover on the first retry; counting them changed the fingerprint
-    # almost every tick, so the beat ran 65 times against 11 skips in a week on Ultron (2026-11-16)
+    # almost every tick, so the beat ran 65 times against 11 skips in a week of real use (2026-11-16)
     parts.append(len([l for l in tail(RUN_LOG, 300) if l[:16] >= cutoff and re.search(r"hata|HATA|çöktü|durdu|tavan", l)
                       and not re.search(r"getUpdates|URLError|TimeoutError|ConnectionError", l)]))
     return hashlib.sha1(json.dumps(parts, ensure_ascii=False, default=str).encode()).hexdigest()[:16]
@@ -3138,7 +3138,7 @@ def watch_self():
     files = [Path(__file__)] + [APP / f for f in ("tg.py", "beyin.py", "hafiza.py", "agents.py", "config.py", "sorumluluk.py")]
     files = [f for f in files if f.exists()]
     stamp = [f.stat().st_mtime for f in files]
-    first = last_note = 0.0  # a stuck reload went unnoticed for 19 hours on Ultron; every 30 min the log says why
+    first = last_note = 0.0  # a stuck reload once went unnoticed for 19 hours; every 30 min the log says why
 
     def waiting(why):
         nonlocal last_note
