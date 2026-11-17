@@ -1169,3 +1169,75 @@ class RulesUpgrade(unittest.TestCase):
                                  "# Bot\n1. one, my wording\n2. two for Ada\n  a. sub\n2b. new after two\n3. three\n")
                 self.assertEqual((home / "kurallar.md.bak").read_text(encoding="utf-8"), mine)
                 self.assertEqual(setup.rules_upgrade({"lang": "en", "owner": "Ada", "name": "Bot"}), [])
+
+
+class KeyGuide(unittest.TestCase):
+    """anahtar.ask: guide + page offer, format check, test call; fake keys only, network and browser mocked."""
+
+    def setUp(self):
+        import anahtar
+        self.a = anahtar
+        self.t = lambda tr, en: en
+        self.out = io.StringIO()
+        self.web = mock.patch.object(anahtar.webbrowser, "open", return_value=True).start()
+        mock.patch("sys.stdout", self.out).start()
+        self.addCleanup(mock.patch.stopall)
+
+    def run_ask(self, name, keys, answers, urlopen=None):
+        keys, answers = iter(keys), iter(answers)
+        with mock.patch.object(self.a.urllib.request, "urlopen", side_effect=urlopen or AssertionError("no call")) as u:
+            got = self.a.ask(name, self.t, lambda q, d=False: next(answers), lambda q: next(keys))
+        return got, u
+
+    def http(self, code):
+        return urllib.error.HTTPError("u", code, "x", {}, None)
+
+    def test_every_guide_has_pages_and_steps(self):
+        for name, g in self.a.GUIDES.items():
+            self.assertTrue(g["signup"].startswith("https://"), name)
+            self.assertTrue(not g["keys"] or g["keys"].startswith("https://"), name)
+            self.assertTrue(g["steps"] and all(len(s) == 2 for s in g["steps"]), name)
+
+    def test_formats(self):
+        ok = {"openrouter": "sk-or-v1-" + "a1" * 32, "anthropic": "sk-ant-api03-" + "x" * 30,
+              "telegram": "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11", "groq": "gsk_" + "Q" * 40}
+        for name, key in ok.items():
+            self.assertTrue(self.a.looks_right(name, key), name)
+        self.assertFalse(self.a.looks_right("openrouter", "sk-or-v1-short"))
+        self.assertFalse(self.a.looks_right("telegram", "not a token"))
+        self.assertFalse(self.a.looks_right("anthropic", "sk-ant- with spaces"))
+
+    def test_good_key_opens_page_and_is_returned(self):
+        key = "123456:" + "A" * 35
+        got, u = self.run_ask("telegram", [key], [True], [cevap("")])
+        self.assertEqual(got, key)
+        self.web.assert_called_once_with("https://t.me/BotFather")
+        self.assertIn("/bot" + key + "/getMe", u.call_args[0][0].full_url)
+        self.assertIn("The key works", self.out.getvalue())
+
+    def test_refused_key_retries_then_takes_the_new_one(self):
+        bad, good = "sk-or-v1-" + "0" * 64, "sk-or-v1-" + "1" * 64
+        got, u = self.run_ask("openrouter", [bad, good], [False, True], [self.http(401), cevap("")])
+        self.assertEqual(got, good)
+        self.web.assert_not_called()
+        self.assertEqual(u.call_args[0][0].get_header("Authorization"), "Bearer " + good)
+        self.assertIn("refused", self.out.getvalue())
+
+    def test_wrong_format_asks_again_without_a_call(self):
+        good = "sk-ant-api03-" + "k" * 40
+        got, u = self.run_ask("anthropic", ["oops", good], [False, True], [cevap("")])
+        self.assertEqual(got, good)
+        self.assertEqual(u.call_count, 1)
+        self.assertEqual(u.call_args[0][0].get_header("X-api-key"), good)
+
+    def test_empty_skips_and_offline_still_saves(self):
+        self.assertEqual(self.run_ask("groq", [""], [False])[0], "")
+        key = "gsk_" + "z" * 50
+        self.assertEqual(self.run_ask("groq", [key], [False], OSError("offline"))[0], key)
+        self.assertIn("Couldn't test", self.out.getvalue())
+
+    def test_no_test_call_for_nvidia_and_no_prompt_for_local(self):
+        key = "nvapi-" + "n" * 60
+        self.assertEqual(self.run_ask("nvidia", [key], [False])[0], key)
+        self.assertEqual(self.run_ask("ollama", [], [True])[0], "")
+        self.web.assert_called_once_with("https://ollama.com/download")

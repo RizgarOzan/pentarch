@@ -107,9 +107,22 @@ Setup walks you through it in English or Turkish and checks each piece as you go
 
 1. **You and the assistant:** your name, its name, the language, your notes folder.
 2. **The agent:** it lists the CLIs it finds on your PATH and the models each one offers, then sends a one-word test so a missing login shows up during setup.
-3. **Telegram:** make a bot with @BotFather (`/newbot`) and paste the token. Setup asks Telegram who the bot is, then shows a short pairing code.
-4. **An optional API** for cheap one-shot work: OpenRouter, Groq, NVIDIA, Ollama, LM Studio or your own URL. It tells you where to get a free key (OpenRouter, Groq and NVIDIA need no card), lists the models it answers with, and keeps the key in `~/.pentarch/secrets/keys.env`.
+3. **Telegram:** make a bot with @BotFather (`/newbot`) and paste the token. Setup checks the token with Telegram, then shows a short pairing code.
+4. **An optional API** for cheap one-shot work: OpenRouter, Groq, NVIDIA, Ollama, LM Studio or your own URL. It walks you through getting the key (see below), lists the models it answers with, and keeps the key in `~/.pentarch/secrets/keys.env`.
 5. **Extras:** career filters, the LinkedIn/CV skills, Claude Code skills and agents, and whether the `insa` (nightly self-build) and `posta` (mail check) routines start on. Both start off.
+
+**Getting the keys.** For every key it asks for, setup says what the service is, whether you need it and whether it has a free tier, prints the sign-up and key pages, offers to open the page in your browser, and lists the steps. When you paste the key it checks the format, then makes one free call to see the service takes it. If it doesn't, it says why and lets you paste again. Press Enter on an empty prompt to skip an optional key; run setup again later to add it.
+
+| Service | What for | Needed? | Free tier | Sign up | Key page |
+|---|---|---|---|---|---|
+| Telegram | the bot you chat with | yes, to chat over Telegram | free | [telegram.org/apps](https://telegram.org/apps) | [@BotFather](https://t.me/BotFather), send `/newbot` |
+| OpenRouter | cheap jobs, council seats | optional | `:free` models, 20 a minute and 50 a day | [openrouter.ai](https://openrouter.ai/) | [openrouter.ai/keys](https://openrouter.ai/keys) |
+| Groq | cheap jobs, voice notes | optional | free plan | [console.groq.com](https://console.groq.com/) | [console.groq.com/keys](https://console.groq.com/keys) |
+| NVIDIA | cheap jobs, council seats | optional | trial credits | [build.nvidia.com](https://build.nvidia.com/) | [API keys](https://build.nvidia.com/settings/api-keys) |
+| Anthropic | Claude on pay as you go (`plan = api`) | only for `plan = api` | none, you add credit | [platform.claude.com](https://platform.claude.com/) | [settings/keys](https://platform.claude.com/settings/keys) |
+| Ollama, LM Studio | models on your own computer | optional | free, no key | [ollama.com/download](https://ollama.com/download), [lmstudio.ai](https://lmstudio.ai/) | none |
+
+The same guide runs when you add a council seat with `python -I app/koltuk.py add`. NVIDIA's key isn't test-called, because its model list is public and a chat call would spend credit.
 
 Settings, memory and keys go to `~/.pentarch`. Only the job tracker's own files (`tracker/config.json`, `profile.json`, `data/`, all gitignored) stay in the clone. Setup adds a startup shortcut that uses the Python you ran it with, so run it from the venv. It offers to install `requirements.txt`; about 300 MB of that is the optional local voice stack.
 
@@ -359,7 +372,20 @@ python -m venv .venv
 python setup.py
 ```
 
-Kurulum sırayla şunları sorar: adın, asistanın adı, dil (Türkçe ya da İngilizce; seçince kurulumun kendisi de o dile geçer), not klasörü, ajan ve modeller, Telegram bot token'ı (@BotFather'da `/newbot`). Her adımı o anda dener. Ajana tek kelimelik bir mesaj atar, böylece eksik bir giriş hemen ortaya çıkar. Telegram'a botun kim olduğunu sorar. İsteğe bağlı bir API seçersen model listesini çeker. API için OpenRouter, Groq, NVIDIA, Ollama, LM Studio ya da kendi adresini seçebilirsin. Anahtarı nereden alacağını da söyler; OpenRouter, Groq ve NVIDIA kart istemez. Anahtar `~/.pentarch/secrets/keys.env` dosyasına yazılır. `insa` (gece kendini geliştirme) ve `posta` (posta kontrolü) rutinleri kapalı başlar.
+Kurulum sırayla şunları sorar: adın, asistanın adı, dil (Türkçe ya da İngilizce; seçince kurulumun kendisi de o dile geçer), not klasörü, ajan ve modeller, Telegram bot token'ı (@BotFather'da `/newbot`). Her adımı o anda dener. Ajana tek kelimelik bir mesaj atar, böylece eksik bir giriş hemen ortaya çıkar. Token'ı Telegram'a sorup dener. İsteğe bağlı bir API seçersen model listesini çeker. API için OpenRouter, Groq, NVIDIA, Ollama, LM Studio ya da kendi adresini seçebilirsin. Anahtarı almayı adım adım anlatır (aşağıda). Anahtar `~/.pentarch/secrets/keys.env` dosyasına yazılır. `insa` (gece kendini geliştirme) ve `posta` (posta kontrolü) rutinleri kapalı başlar.
+
+**Anahtarları almak:** Kurulum sorduğu her anahtar için servisin ne olduğunu, gerekip gerekmediğini ve ücretsiz katmanı olup olmadığını söyler. Kayıt ve anahtar sayfasını yazar, sayfayı tarayıcıda açmayı önerir, adımları sıralar. Anahtarı yapıştırınca önce biçimine bakar, sonra servise ücretsiz bir istek atıp kabul edip etmediğini dener. Kabul etmezse nedenini söyler, yeniden yapıştırmanı ister. İsteğe bağlı bir anahtarı boş bırakıp Enter'a basarsan atlanır; sonra kurulumu yeniden çalıştırıp ekleyebilirsin.
+
+| Servis | Ne için | Gerekli mi | Ücretsiz | Kayıt | Anahtar sayfası |
+|---|---|---|---|---|---|
+| Telegram | konuştuğun bot | evet, Telegram'dan konuşmak için | ücretsiz | [telegram.org/apps](https://telegram.org/apps) | [@BotFather](https://t.me/BotFather), `/newbot` gönder |
+| OpenRouter | ucuz işler, konsey koltukları | isteğe bağlı | `:free` modeller, dakikada 20, günde 50 istek | [openrouter.ai](https://openrouter.ai/) | [openrouter.ai/keys](https://openrouter.ai/keys) |
+| Groq | ucuz işler, sesli notlar | isteğe bağlı | ücretsiz plan | [console.groq.com](https://console.groq.com/) | [console.groq.com/keys](https://console.groq.com/keys) |
+| NVIDIA | ucuz işler, konsey koltukları | isteğe bağlı | deneme kredisi | [build.nvidia.com](https://build.nvidia.com/) | [API anahtarları](https://build.nvidia.com/settings/api-keys) |
+| Anthropic | Claude'u kullandıkça öde (`plan = api`) | yalnızca `plan = api` için | yok, önce kredi yüklenir | [platform.claude.com](https://platform.claude.com/) | [settings/keys](https://platform.claude.com/settings/keys) |
+| Ollama, LM Studio | modelleri kendi bilgisayarında çalıştırmak | isteğe bağlı | ücretsiz, anahtar yok | [ollama.com/download](https://ollama.com/download), [lmstudio.ai](https://lmstudio.ai/) | yok |
+
+`python -I app/koltuk.py add` ile konsey koltuğu eklerken de aynı rehber çalışır. NVIDIA anahtarı denenmez, çünkü model listesi herkese açık ve bir sohbet isteği kredi harcar.
 
 Ayarlar, hafıza ve anahtarlar `~/.pentarch` içine gider. Repoda yalnızca başvuru panosunun kendi dosyaları kalır, onlar da gitignore'da. Kurulum, kendisini hangi Python ile çalıştırdıysan onu kullanan bir başlangıç kısayolu ekler; bu yüzden venv içinden çalıştır. `requirements.txt`'i kurmayı da önerir. Bunun yaklaşık 300 MB'ı isteğe bağlı yerel ses paketi.
 

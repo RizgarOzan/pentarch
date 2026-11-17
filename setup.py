@@ -15,7 +15,6 @@ import re
 import shutil
 import subprocess
 import sys
-import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -69,23 +68,7 @@ def get_json(url, key=None, timeout=10):
 sys.path.insert(0, str(APP))
 import koltuk  # noqa: E402  (presets and the council-seat helpers; config.py resolves the same HOME)
 PRESETS = koltuk.PRESETS  # name -> (base_url, key env, suggested model, where to get the key)
-KEY_STEPS = {  # free tiers, no card needed; (tr, en) per step
-    "openrouter": (("Google ya da GitHub ile giriş yap.", "Sign in with Google or GitHub."),
-                   ("Keys > Create key; adı önemsiz, limit boş kalabilir.", "Keys > Create key; any name, leave the limit empty."),
-                   ("Ücretsiz modellerin adı ':free' ile biter. 404 alırsan Settings > Privacy'den ücretsiz model kullanımını aç.",
-                    "Free models end in ':free'. If you get 404, enable free-model use under Settings > Privacy.")),
-    "groq": (("E-posta ya da GitHub ile giriş yap.", "Sign in with email or GitHub."),
-             ("API Keys > Create API Key, anahtarı hemen kopyala (bir daha gösterilmez).",
-              "API Keys > Create API Key and copy it now (it is shown once)."),
-             ("Ücretsiz katman dakikada ~30 istek; günlük işler için yeter.", "The free tier allows ~30 requests a minute, enough for daily jobs.")),
-    "nvidia": (("Giriş yap, bir model sayfası aç.", "Sign in and open any model page."),
-               ("'Get API Key' düğmesi anahtarı verir; nvapi- ile başlar.", "'Get API Key' gives the key; it starts with nvapi-."),
-               ("Ücretsiz kredi hesapla gelir, kart istemez.", "Free credits come with the account, no card.")),
-    "ollama": (("ollama.com'dan kur, sonra: ollama pull gemma3", "Install from ollama.com, then: ollama pull gemma3"),
-               ("Çalışırken http://localhost:11434 cevap verir; anahtar gerekmez.", "While it runs, http://localhost:11434 answers; no key needed.")),
-    "lmstudio": (("lmstudio.ai'dan kur, bir model indir, Developer > Start Server.", "Install from lmstudio.ai, download a model, Developer > Start Server."),
-                 ("Sunucu http://localhost:1234 üstünde; anahtar gerekmez.", "The server is on http://localhost:1234; no key needed.")),
-}
+import anahtar  # noqa: E402  (step-by-step key guide: pages, format check, free test call)
 
 
 def read_env(path):
@@ -101,20 +84,21 @@ def chat_api_setup(api):
     pick = ask(t("Servis", "Service"), cur, (*PRESETS, "custom", "none"))
     if pick == "none":
         return {"base_url": "", "model": "", "key_env": key_env}
-    base, preset_env, model, key_url = PRESETS.get(pick, (api.get("base_url", ""), key_env, api.get("model", ""), ""))
+    base, preset_env, model, _ = PRESETS.get(pick, (api.get("base_url", ""), key_env, api.get("model", ""), ""))
     need_key = bool(preset_env)
     if pick == "custom":
         base = ask("base_url (…/v1)", base)
     env_file = SECRETS / "keys.env"
     saved = read_env(env_file)
     key = os.environ.get(key_env) or saved.get(key_env, "")
+    if pick in anahtar.GUIDES and not need_key:
+        anahtar.show(pick, t, yes)
     if need_key and (not key or yes(t("Kayıtlı API anahtarı değiştirilsin mi?", "Replace the saved API key?"))):
-        if key_url:
-            print(t(f"  Anahtarı buradan al: {key_url}", f"  Get a key here: {key_url}"))
-            for i, step in enumerate(KEY_STEPS.get(pick, ()), 1):
-                print(f"    {i}. {t(*step)}")
-        new = secret(t(f"API anahtarı (gizli, secrets/keys.env içine {key_env} olarak yazılır; boş geçer): ",
-                       f"API key (hidden, saved to secrets/keys.env as {key_env}; empty skips): ")).strip()
+        if pick in anahtar.GUIDES:
+            new = anahtar.ask(pick, t, yes, secret)
+        else:
+            new = secret(t(f"API anahtarı (gizli, secrets/keys.env içine {key_env} olarak yazılır; boş geçer): ",
+                           f"API key (hidden, saved to secrets/keys.env as {key_env}; empty skips): ")).strip()
         if new:
             key = saved[key_env] = new
             env_file.write_text("".join(f"{k}={v}\n" for k, v in saved.items()), encoding="utf-8")
@@ -159,25 +143,10 @@ def telegram_setup():
     tok = SECRETS / "telegram.txt"
     if tok.exists() and not yes(t("Kayıtlı Telegram token'ı değiştirilsin mi?", "Replace the saved Telegram token?")):
         return
-    print(t("\nTelegram: @BotFather'a yaz, /newbot gönder, verdiği token'ı kopyala.",
-            "\nTelegram: talk to @BotFather, send /newbot, copy the token it gives."))
-    while True:
-        tk = secret(t("Bot token (gizli): ", "Bot token (hidden): ")).strip()
-        if not tk:
-            print(t("  Atlandı; sonra secrets/telegram.txt içine yazabilirsin.", "  Skipped; you can put it in secrets/telegram.txt later."))
-            return
-        try:
-            bot = get_json(f"https://api.telegram.org/bot{tk}/getMe")["result"]
-            print(t(f"  Token çalışıyor: @{bot['username']}", f"  Token works: @{bot['username']}"))
-            break
-        except urllib.error.HTTPError:
-            print(t("  ! Telegram bu token'ı kabul etmedi.", "  ! Telegram did not accept that token."))
-            if not yes(t("Yeniden denensin mi?", "Try again?"), True):
-                return
-        except Exception as e:  # offline or blocked: keep the token, it may still be right
-            print(t(f"  ! Telegram'a ulaşılamadı ({type(e).__name__}); token denenmeden kaydediliyor.",
-                    f"  ! Could not reach Telegram ({type(e).__name__}); saving the token unchecked."))
-            break
+    tk = anahtar.ask("telegram", t, yes, secret, "Bot token")
+    if not tk:
+        print(t("  Token'ı sonra secrets/telegram.txt içine de yazabilirsin.", "  You can also put the token in secrets/telegram.txt later."))
+        return
     tok.write_text(tk + "\n", encoding="utf-8")
     tok.chmod(0o600)
     pair = SECRETS / "telegram-pair.txt"
@@ -614,6 +583,10 @@ def main():
                 "Your Claude plan: pro = scheduled runs are lean and sparse, leaving room for your own chats (README, Using with Pro);\n"
                 "                  max = everything full; api = pay as you go with ANTHROPIC_API_KEY."))
         plan = ask(t("Plan", "Plan"), old.get("plan", "max" if old else "pro"), ("pro", "max", "api"))
+        if plan == "api" and not koltuk.has_key("ANTHROPIC_API_KEY"):
+            k = anahtar.ask("anthropic", t, yes, secret, "ANTHROPIC_API_KEY")
+            if k:
+                koltuk.save_key("ANTHROPIC_API_KEY", k)
 
     SECRETS.mkdir(parents=True, exist_ok=True)
     api = chat_api_setup(old.get("chat_api", {}))
