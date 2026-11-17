@@ -83,13 +83,25 @@ def download(file_id, dest):
     return dest
 
 
-def log(who, text):
-    """Appends one line to the conversation log; jobs and new sessions read context from it."""
+def log(who, text, kayit=None):
+    """Appends one line to the conversation log; jobs and new sessions read context from it.
+    kayit (sent messages only): yazan, kisaltan, n0 (words before shortening), kaynak; it goes to mesaj_model.jsonl
+    so you can see which model wrote what went out and how much shortening cut."""
     LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
     import agents  # late: tg.py also runs on its own from the shell
     line = agents.redact(text).replace("\n", " / ")
+    t = f"{datetime.now():%Y-%m-%d %H:%M}"
     with LOG_FILE.open("a", encoding="utf-8") as f:
-        f.write(f"{datetime.now():%Y-%m-%d %H:%M} | {who}: {line}\n")
+        f.write(f"{t} | {who}: {line}\n")
+    if kayit is not None:
+        n = len(text.split())
+        try:
+            with (HOME / "mesaj_model.jsonl").open("a", encoding="utf-8") as f:
+                f.write(json.dumps({"t": t, "yazan": kayit.get("yazan") or "unknown", "kisaltan": kayit.get("kisaltan"),
+                                    "n": [kayit.get("n0") or n, n], "kaynak": kayit.get("kaynak") or "unknown",
+                                    "bas": line[:60]}, ensure_ascii=False) + "\n")
+        except OSError:
+            pass
 
 
 def save_state(state):

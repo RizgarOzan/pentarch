@@ -492,6 +492,56 @@ def upgrade():
     cfg = json.loads(CONFIG.read_text(encoding="utf-8"))
     TR = cfg.get("lang") == "tr"
     skills_setup(cfg.get("agent", {}).get("cli", "claude"), cfg.get("notes_dir", "~/notes"), ask_first=False)
+    added = rules_upgrade(cfg)
+    if added:
+        print(t(f"kurallar.md'ye yeni kurallar eklendi: {', '.join(added)}", f"New rules added to kurallar.md: {', '.join(added)}"))
+
+
+RULE = re.compile(r"^(\d+[a-z]?)\. ")
+
+
+def rules_upgrade(cfg):
+    """Numbered rules the template has and <home>/kurallar.md lacks go in after the rule before them. Rules already
+    there stay as the user left them. Returns the numbers added; a backup goes to kurallar.md.bak first."""
+    dst, src = HOME / "kurallar.md", REPO / "templates" / cfg.get("lang", "en") / "kurallar.md"
+    if not dst.exists() or not src.exists():
+        return []
+    fill = {"{{APP}}": APP.as_posix(), "{{HOME}}": HOME.as_posix(),
+            "{{NOTES}}": Path(cfg.get("notes_dir", "~/notes")).expanduser().as_posix(),
+            "{{OWNER}}": cfg.get("owner", ""), "{{NAME}}": cfg.get("name", "")}
+    blocks, cur = [], None  # template rules with their indented continuation lines
+    for line in src.read_text(encoding="utf-8").splitlines():
+        if m := RULE.match(line):
+            cur = [m.group(1), [line]]
+            blocks.append(cur)
+        elif cur and line.startswith("  ") and line.strip():
+            cur[1].append(line)
+        else:
+            cur = None
+    old = dst.read_text(encoding="utf-8")
+    lines = old.splitlines()
+    have = {m.group(1) for line in lines if (m := RULE.match(line))}
+    added, prev = [], None
+    for no, body in blocks:
+        if no not in have:
+            text = "\n".join(body)
+            for k, v in fill.items():
+                text = text.replace(k, v)
+            if "{{" not in text:  # a placeholder only setup can fill: leave that rule for setup.py --force
+                at = len(lines)
+                if prev:
+                    at = next(i for i, line in enumerate(lines) if (m := RULE.match(line)) and m.group(1) == prev) + 1
+                    while at < len(lines) and lines[at].startswith("  ") and lines[at].strip():
+                        at += 1
+                lines[at:at] = text.split("\n")
+                have.add(no)
+                added.append(no)
+        if no in have:
+            prev = no
+    if added:
+        (HOME / "kurallar.md.bak").write_text(old, encoding="utf-8")
+        dst.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return added
 
 
 def main():

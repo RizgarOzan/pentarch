@@ -53,12 +53,18 @@ DEFAULTS = {
     "desktop_control": False,      # Windows-MCP desktop control for the chat brain
     "voice_replies": True,         # answer voice with voice (edge-tts, needs internet)
     "tts_voice": "",               # edge-tts voice name; empty picks one for lang
-    "whisper": {"model": "small", "language": ""},  # faster-whisper; empty language = auto-detect
+    # faster-whisper; empty language = auto-detect. groq_key_env names an env var with a Groq key: voice then goes to
+    # Groq's hosted whisper first (audio leaves the machine) and falls back to local whisper. Empty = local only.
+    "whisper": {"model": "small", "language": "", "groq_key_env": ""},
     "health_urls": [],             # extra sites to watch on the panel (internet and agent login are always checked)
     "net_quota_gb": 0,             # monthly data cap; 0 = no metered-connection mode
     "jobs_off": ["insa", "posta"], # routines off at first start (JOBS in pentarch.py); panel Settings turns them on
     # learning loop (ogren.py): after a chat turn a cheap model proposes notes/skill patches; the owner approves each
     "learning": {"enabled": False, "max_pending": 20},
+    # tiered routing for ledger jobs (sirket.py): cheap -> mid -> top with a deep-model review; off = one run as before
+    "routing": {"enabled": False},
+    # nightly self-improvement (gelisim.py): proposes fixes as Yes/No; code changes only ever become a .patch file
+    "self_improve": {"enabled": False},
     "memory": {"inject_max_chars": 8000},  # cap for the core memory a new session gets (profile + memory.md)
     # shell work backend (kum.py): local | docker. docker missing = command refused, never run on the host instead
     "sandbox": {"backend": "local", "image": "python:3.12-slim", "network": False},

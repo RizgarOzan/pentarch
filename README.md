@@ -44,7 +44,7 @@ A normal day looks like this. At 08:30 it sends a morning brief: what's due, wha
 ### Talk to it
 - **Telegram chat** with text, photos, voice notes and buttons. With Claude Code the chat stays in one long-lived session all day, so replies are quick and the prompt cache stays warm. Hard questions move to a deeper model on their own.
 - **Other doors (optional).** E-mail (IMAP in, SMTP out) and a Discord bot go through the same handling as Telegram. Off until you turn them on.
-- **Voice.** Voice notes become text on your machine (faster-whisper). It can answer with voice too (edge-tts, or Piper offline). Filler words are dropped from the transcript.
+- **Voice.** Voice notes become text on your machine (faster-whisper). It can answer with voice too (edge-tts, or Piper offline). Filler words are dropped from the transcript. If you set `whisper.groq_key_env` to the name of an env var holding a Groq key, voice goes to Groq's hosted whisper first (faster, but the audio leaves your machine) and falls back to local whisper.
 - **Push-to-talk (Windows, off by default).** Hold F9, speak, let go, and the recording goes in like a voice note. Needs ffmpeg and your microphone's name in `push_to_talk.mic`.
 - **Meeting assistant.** `python -I app/pentarch.py meeting "title"` opens a local page that transcribes the other side of a call (Meet, Zoom...), suggests questions toward the `meeting.goal` you set, drafts an answer when you're asked something, and saves the transcript and a summary to your notes. Audio never touches the disk. It needs `pip install soundcard numpy faster-whisper`.
 - **Panel.** A local page at `http://127.0.0.1:47824` with the chat, health, spending, reminders, the job board, proposals waiting for a yes, and every setting. It works in a phone-sized window too.
@@ -60,10 +60,12 @@ A normal day looks like this. At 08:30 it sends a morning brief: what's due, wha
 - **Responsibilities.** A standing goal the assistant owns, like "keep my applications list current" or "watch this repo until CI is green". It wakes on a timer or when a command's output changes, keeps its own notes file, picks its next wake-up, and stays quiet while it works. It only writes to you when the goal is done, when a decision is yours, or for urgent news. Each responsibility has its own rules: allowed, ask first, never.
   `python -I app/pentarch.py responsibility add <name> "goal" her=240`
 - **Proposals.** When a routine finds work that would help, it suggests it with Yes/No buttons. Nothing outward (sending, pushing, deleting) happens without your yes.
+- **Notes to running jobs.** Write a follow-up while a long job runs and it is added to that job. Under Claude Code the job reads it after its next tool call; other CLIs get it when they finish. A finished task can also queue its own next step when that step needs no decision from you and sends nothing outward.
 
 ### Think it over
 - **Council (`council: question`).** Several models get the same question at once. They answer, read each other's answers, argue a second round and vote. Seats can be any agent CLI or any OpenAI-compatible API, and each seat can take a different angle (tester, HR, security…).
 - **Konsey (`/konsey idea`, Claude Code).** Four advisors (Advocate, Skeptic, Employer, Builder) each review one idea on their own, and a judge returns BUILD, FIX FIRST or KILL with the biggest risk and a 10-minute test. Verdicts are logged in your notes. See [skills](skills/README.md).
+- **Debate (`debate: topic`).** Every council seat writes ideas, they critique each other twice, vote and score, and the deep model picks one. Takes 10-40 minutes.
 - **Helpers.** With Claude as the lead you can add Gemini or Codex as helpers. When a job splits, up to 8 subtasks run side by side on the helpers and Claude checks each answer before using it. [Details below](#claude-leads-helpers-widen).
 
 ### Career
@@ -78,6 +80,8 @@ A normal day looks like this. At 08:30 it sends a morning brief: what's due, wha
 - **Desktop control** (screenshot, click, type) for the agent, with no extra packages.
 - **Sandbox.** Shell work can run in a throwaway Docker container that sees only the current folder and has no network.
 - **Data quota mode.** On a metered connection it spreads the monthly cap over the days left and holds heavy jobs back.
+- **Tiered routing (`routing.enabled`).** Ledger jobs start on a cheap model and move up to a stronger one only when a review says the answer isn't good enough. `python -I app/pentarch.py routing` shows the last week.
+- **Nightly self-improvement (`self_improve.enabled`).** At 03:50 it looks over the day's errors and proposes fixes as Yes/No. Code changes are only ever written as a `.patch` file for you to apply.
 - **Shadow mode.** The shorten and triage jobs also run on a second endpoint (`shadow.base_url`) and both answers are logged, so you can see whether a cheaper model would do. You only ever get the main answer.
 
 ## Install
@@ -119,7 +123,7 @@ Then send your bot `/start <code>` with the code setup showed you. It is also in
 
 **Checking and updating.** `python -I app/pentarch.py doctor` checks the config, the notes folder, the agent CLI, ffmpeg, the Telegram token, every key the config names (by name only; it never prints a value) and the two ports, and marks each line OK or `!!`. It also checks the internet, and on Windows it looks for app crashes in the last day, nearly full drives and VPN adapters. `python -I app/pentarch.py update` runs `git pull --ff-only`, but only when the clone has no local changes; a running Pentarch restarts itself when the code changes.
 
-**Auto-update.** The `guncelle` routine does that same update every night at 05:10 and sends you the list of what changed when a new version came in. After the restart Pentarch installs any new or changed skills by itself (`python -I setup.py --upgrade`); a skill you edited yourself is left alone. Files you added to the folder don't block the update. If tracked files have local changes it skips the pull and only logs it, so your edits are never overwritten. To turn it off, answer "no" to the auto-update question in `python -I setup.py`, or add `guncelle` under Settings > Disabled routines in the panel.
+**Auto-update.** The `guncelle` routine does that same update every night at 05:10 and sends you the list of what changed when a new version came in. After the restart Pentarch installs any new or changed skills by itself (`python -I setup.py --upgrade`); a skill you edited yourself is left alone. New numbered rules from the template are added to your `kurallar.md` (the old file is kept as `kurallar.md.bak`); your own rules stay as they are. Files you added to the folder don't block the update. If tracked files have local changes it skips the pull and only logs it, so your edits are never overwritten. To turn it off, answer "no" to the auto-update question in `python -I setup.py`, or add `guncelle` under Settings > Disabled routines in the panel.
 
 **Updating an older install.** Installs from before auto-update existed need one manual update; after that the nightly routine takes over. If you use an AI coding agent (Claude Code, Codex, Cursor and so on), open it in your Pentarch folder and paste this:
 
@@ -326,7 +330,7 @@ Sıradan bir gün şöyle geçer. Sabah 08:30'da kısa bir özet gelir: bugün n
 ### Neler yapıyor
 
 - **Sohbet:** Telegram'dan yazı, fotoğraf, sesli mesaj ve butonlar. Claude Code ile sohbet bütün gün tek oturumda kalır, cevaplar hızlı gelir. Zor sorular kendiliğinden daha güçlü modele geçer. İstersen e-posta ve Discord'dan da konuşabilirsin; ikisi de varsayılan olarak kapalı.
-- **Ses:** Sesli notlar bilgisayarında yazıya dökülür (faster-whisper), "ıı" gibi dolgu sesleri ayıklanır. İstersen sesli de cevap verir. Windows'ta bas-konuş da var (varsayılan kapalı): F9'u basılı tutup konuşursun, bırakınca kayıt sesli not gibi gider. ffmpeg ve `push_to_talk.mic` ister.
+- **Ses:** Sesli notlar bilgisayarında yazıya dökülür (faster-whisper), "ıı" gibi dolgu sesleri ayıklanır. `whisper.groq_key_env` alanına Groq anahtarının bulunduğu ortam değişkeninin adını yazarsan ses önce Groq'a gider (daha hızlı ama ses bilgisayarından çıkar), olmazsa yerel whisper'a döner. İstersen sesli de cevap verir. Windows'ta bas-konuş da var (varsayılan kapalı): F9'u basılı tutup konuşursun, bırakınca kayıt sesli not gibi gider. ffmpeg ve `push_to_talk.mic` ister.
 - **Görüşme asistanı:** `python -I app/pentarch.py meeting "başlık"` yerel bir sayfa açar. Meet ya da Zoom'daki karşı tarafı yazıya döker, `meeting.goal` hedefine göre soru önerir, sana bir şey sorulunca cevap taslağı çıkarır. Sonunda dökümü ve özeti notlarına kaydeder. Ses diske hiç yazılmaz. `pip install soundcard numpy faster-whisper` ister.
 - **Panel:** `http://127.0.0.1:47824` adresinde yerel bir sayfa var: sohbet, sağlık durumu, harcama, hatırlatmalar, iş panosu, onay bekleyen öneriler ve bütün ayarlar. Telefon boyutunda da düzgün görünür.
 - **Hafıza:** Profilin, her gece toparlanan bir hafıza sayfası, kurallar dosyası, notlarında ve eski sohbetlerde hızlı arama. İstersen (`learning.enabled`) her sohbetten sonra ucuz bir model hafızaya not eklemeyi önerebilir. Sen `onayla N` demeden hiçbir şey yazılmaz.
@@ -334,10 +338,14 @@ Sıradan bir gün şöyle geçer. Sabah 08:30'da kısa bir özet gelir: bugün n
 - **Hatırlatma ve görev:** "Yarın 10'da hatırlat" ya da "bunu bu gece yap" dersin, vaktinde çalışır. Görevler günlük bütçe sınırıyla kendi oturumlarında koşar.
 - **Sorumluluklar:** Asistanın kendi üstüne aldığı kalıcı bir hedef. Mesela "başvuru listemi güncel tut" ya da "CI yeşile dönene kadar bu repoyu izle". Ya belli aralıklarla ya da bir komutun çıktısı değişince uyanır, kendi notunu tutar, iş sürerken seni rahatsız etmez. Sana yalnızca iş bitince, karar senin olduğunda ya da acil bir şey çıktığında yazar.
 - **Öneriler:** Bir rutin işine yarayacak bir şey bulursa Evet/Hayır butonlarıyla sorar.
+- **Süren işe not:** Uzun bir iş sürerken bir şey eklemek istersen yaz, o işe gider. Claude Code'da iş bir sonraki araç çağrısından sonra notu okur; diğer CLI'larda iş bitince iletilir. Biten bir görev, senden karar gerektirmeyen ve dışarıya bir şey göndermeyen bir sonraki adımı kendisi sıraya koyabilir.
 - **Konsey (`konsey: soru`):** Birkaç model aynı soruyu aynı anda alır. Cevap verirler, birbirlerinin cevabını okurlar, ikinci turda tartışıp oy verirler.
+- **Tartışma (`tartışma: konu`):** Konseydeki her model fikir yazar, fikirler iki tur eleştirilir, oylanıp puanlanır, sonunda derin model birini seçer. 10-40 dakika sürer.
 - **`/konsey fikir` (Claude Code):** Dört danışman (Savunucu, Şüpheci, İşveren, Uygulayıcı) tek bir fikre ayrı ayrı bakar, bir hakim de BUILD, FIX FIRST ya da KILL kararı verir. Kararın yanında en büyük riski ve 10 dakikalık bir testi de yazar, kararı notlarına kaydeder.
 - **Kariyer:** Hackathon ve uzaktan junior ilanlarını takip eder, vize sponsorluğu vermeyen ilanları işaretler, GitHub PR'larını izler. Modelsiz çalışan bir başvuru panosu da var. LinkedIn ve CV becerileri taslak yazar, profilini puanlar ama hiçbir zaman senin yerine paylaşım yapmaz. Her sabah en iyi yeni ilanlar için CV ve ön yazı taslağı hazırlanıp panoya düşer. `apply` becerisi formu doldurur, her değeri profilinle karşılaştırır ve sen o başvuruya evet demeden göndermez.
 - **İsteğe bağlı ekstralar:** Windows bildirim süzgeci, masaüstü kontrolü, Docker'da kum havuzu, kotalı internet modu. Bir de gölge modu var: kısaltma ve ayıklama işleri ikinci bir adreste (`shadow.base_url`) de çalışır, iki cevap yan yana kaydedilir. Böylece daha ucuz bir modelin işi görüp görmediğini anlarsın. Sana her zaman asıl cevap gelir.
+- **Kademeli yönlendirme (`routing.enabled`):** Defterdeki işler önce ucuz modelde başlar, bir kontrol cevabı yetersiz bulursa daha güçlü modele geçer. `python -I app/pentarch.py routing` son haftayı gösterir.
+- **Gece kendini geliştirme (`self_improve.enabled`):** 03:50'de günün hatalarına bakar, düzeltmeleri Evet/Hayır diye önerir. Kod değişikliklerini yalnızca `.patch` dosyası olarak yazar, uygulamak sana kalır.
 
 ### Kurulum
 
@@ -359,7 +367,7 @@ Ayarlar, hafıza ve anahtarlar `~/.pentarch` içine gider. Repoda yalnızca baş
 
 **Kontrol ve güncelleme:** `python -I app/pentarch.py doktor` ayar dosyasına, not klasörüne, ajan CLI'ına, ffmpeg'e, Telegram token'ına, ayarlarda adı geçen anahtarlara ve iki porta bakar, her satırı OK ya da `!!` diye işaretler. İnternete de bakar. Windows'ta son bir günde çöken uygulamaları, dolmak üzere olan diskleri ve VPN bağdaştırıcılarını da gösterir. Anahtarların yalnızca tanımlı olup olmadığını söyler, değerini hiçbir zaman yazmaz. `python -I app/pentarch.py guncelle` komutu `git pull --ff-only` çalıştırır ama yalnızca repoda kaydedilmemiş bir değişiklik yoksa. Çalışan Pentarch kod değişince kendini yeniden başlatır.
 
-**Otomatik güncelleme:** `guncelle` rutini aynı güncellemeyi her gece 05:10'da kendisi yapar, yeni sürüm geldiyse neyin değiştiğini sana yazar. Yeniden başladıktan sonra yeni ya da değişen becerileri kendisi kurar (`python -I setup.py --upgrade`); senin düzenlediğin bir beceriye dokunmaz. Klasöre kendi eklediğin dosyalar güncellemeyi durdurmaz. Repodaki dosyalarda senin değişikliğin varsa çekmez, sadece not düşer; yani yaptığın değişiklikler ezilmez. Kapatmak için `python -I setup.py` içindeki otomatik güncelleme sorusuna "hayır" de ya da panelde Ayarlar > Kapalı işler'e `guncelle` ekle.
+**Otomatik güncelleme:** `guncelle` rutini aynı güncellemeyi her gece 05:10'da kendisi yapar, yeni sürüm geldiyse neyin değiştiğini sana yazar. Yeniden başladıktan sonra yeni ya da değişen becerileri kendisi kurar (`python -I setup.py --upgrade`); senin düzenlediğin bir beceriye dokunmaz. Şablona yeni numaralı kurallar eklendiyse onları `kurallar.md`'ye ekler (eski hâli `kurallar.md.bak` olarak kalır); senin yazdığın kurallar olduğu gibi durur. Klasöre kendi eklediğin dosyalar güncellemeyi durdurmaz. Repodaki dosyalarda senin değişikliğin varsa çekmez, sadece not düşer; yani yaptığın değişiklikler ezilmez. Kapatmak için `python -I setup.py` içindeki otomatik güncelleme sorusuna "hayır" de ya da panelde Ayarlar > Kapalı işler'e `guncelle` ekle.
 
 **Eski kurulumu güncellemek:** Otomatik güncelleme gelmeden önce kurduysan bir kereye mahsus elle güncellemen gerekiyor, sonrasını gece rutini halleder. Bir yapay zekâ kod ajanı kullanıyorsan (Claude Code, Codex, Cursor vb.) Pentarch klasöründe açıp şunu yapıştır:
 
