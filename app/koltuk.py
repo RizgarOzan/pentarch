@@ -24,6 +24,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from config import C, CONFIG_FILE, SECRETS, T  # noqa: E402
+import anahtar  # noqa: E402
 
 # preset -> (base_url, default key env, default model, where to get a key); "" key env = no key needed
 PRESETS = {
@@ -57,11 +58,18 @@ def save_key(env, value):
     os.environ[env] = keys[env]
 
 
-def ask_key(env, key_url=""):
+def ask_key(env, key_url="", preset=""):
+    if preset in anahtar.GUIDES and sys.stdin.isatty():  # someone at the keyboard: walk them through it
+        return anahtar.ask(preset, T, _yes, getpass.getpass, env)
     if key_url:
         print(T(f"  Anahtarı buradan al: {key_url}", f"  Get a key here: {key_url}"))
     q = T(f"{env} (gizli, secrets/keys.env içine yazılır; boş geçer): ", f"{env} (hidden, saved to secrets/keys.env; empty skips): ")
     return (getpass.getpass(q) if sys.stdin.isatty() else sys.stdin.readline()).strip()
+
+
+def _yes(q, default=False):
+    a = input(f"{q} [{T('E/h', 'Y/n') if default else T('e/H', 'y/N')}]: ").strip().lower()
+    return default if not a else a in ("y", "yes", "e", "evet")
 
 
 def has_key(env):
@@ -103,7 +111,7 @@ def add(name, preset=None, model="", base_url="", key_env=None, role="", agent=F
         env = key_env if key_env is not None else env
         seat = {"name": name, "kind": "openai", "base_url": base, "model": model or default_model, "key_env": env}
         if env and not has_key(env):
-            new = ask_key(env, key_url)
+            new = ask_key(env, key_url, preset)
             if new:
                 save_key(env, new)
         if check:

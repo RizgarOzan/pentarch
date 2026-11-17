@@ -86,7 +86,7 @@ A normal day looks like this. At 08:30 it sends a morning brief: what's due, wha
 
 ## Install
 
-You need Windows 10/11 (or an Android phone, see below), Python 3.10+, a Telegram account, and one agent CLI that's installed and logged in.
+You need Windows 10/11 (or an Android phone, see below), Python 3.10+, [Node.js](https://nodejs.org/) (npm installs the agent CLI), [git](https://git-scm.com/downloads) and a Telegram account. If the agent CLI isn't installed or logged in yet, setup offers to do both.
 
 | Agent CLI | What you get |
 |---|---|
@@ -96,30 +96,48 @@ You need Windows 10/11 (or an Android phone, see below), Python 3.10+, a Telegra
 | OpenCode | the chat in one session per day; runs on your own key, including OpenRouter's free models |
 
 ```bash
-git clone https://github.com/<you>/pentarch.git
+git clone https://github.com/RizgarOzan/pentarch.git
 cd pentarch
 python -m venv .venv
 .venv\Scripts\activate
 python setup.py
 ```
 
-Setup walks you through it in English or Turkish and checks each piece as you go:
+Setup talks you through it in English or Turkish, shows "Step 3/6" as it goes, and checks each piece. It first says whether Python, git and npm are there and where to get whatever is missing.
 
-1. **You and the assistant:** your name, its name, the language, your notes folder.
-2. **The agent:** it lists the CLIs it finds on your PATH and the models each one offers, then sends a one-word test so a missing login shows up during setup.
-3. **Telegram:** make a bot with @BotFather (`/newbot`) and paste the token. Setup asks Telegram who the bot is, then shows a short pairing code.
-4. **An optional API** for cheap one-shot work: OpenRouter, Groq, NVIDIA, Ollama, LM Studio or your own URL. It tells you where to get a free key (OpenRouter, Groq and NVIDIA need no card), lists the models it answers with, and keeps the key in `~/.pentarch/secrets/keys.env`.
-5. **Extras:** career filters, the LinkedIn/CV skills, Claude Code skills and agents, and whether the `insa` (nightly self-build) and `posta` (mail check) routines start on. Both start off.
+**Quick setup** is the default. It asks only:
+
+1. **The basics:** your name and the assistant's name.
+2. **The agent**, the program the assistant runs to think. Not sure? Claude if you pay for Claude, otherwise Gemini (free with a Google account). If it isn't installed, setup offers to run the `npm i -g` line for you. Then it sends a one-word test; if the login is missing it tells you what to type, can open a login window, and tests again when you're done. With Claude it also asks your plan.
+3. **Free keys:** OpenRouter, Groq and NVIDIA, one at a time. Say yes and it opens that service's key page in your browser (NVIDIA's is on build.nvidia.com) and walks you through it; say no and it moves on. They're optional: the assistant hands them cheap jobs and they sit on the council.
+4. **Telegram:** make a bot with @BotFather (`/newbot`) and paste the token.
+5. **Installing:** everything else takes its default.
+6. **Pairing and start:** it opens a `t.me` link to your bot. Press Start in Telegram, setup sees it and the bot says hello. Then it offers to start the assistant in the background.
+
+**Detailed setup** (answer "no" to the first question) also asks for the notes folder, the three models, the permission mode, another API (Ollama, LM Studio or your own URL), council seats, career filters, MCP servers, the routines and the shortcuts. `insa` (nightly self-build) and `posta` (mail check) start off either way. You can run setup again any time; it keeps what you already set. If you stop halfway, start over: it doesn't resume, but once a run has finished its answers come back as the defaults.
+
+**Getting the keys.** For every key it asks for, setup says what the service is, whether you need it and whether it has a free tier, prints the sign-up and key pages, offers to open the page in your browser, and lists the steps. When you paste the key it checks the format, then makes one free call to see the service takes it. If it doesn't, it says why and lets you paste again. Press Enter on an empty prompt to skip an optional key; run setup again later to add it.
+
+| Service | What for | Needed? | Free tier | Sign up | Key page |
+|---|---|---|---|---|---|
+| Telegram | the bot you chat with | yes, to chat over Telegram | free | [telegram.org/apps](https://telegram.org/apps) | [@BotFather](https://t.me/BotFather), send `/newbot` |
+| OpenRouter | cheap jobs, council seats | optional | `:free` models, 20 a minute and 50 a day | [openrouter.ai](https://openrouter.ai/) | [openrouter.ai/keys](https://openrouter.ai/keys) |
+| Groq | cheap jobs, voice notes | optional | free plan | [console.groq.com](https://console.groq.com/) | [console.groq.com/keys](https://console.groq.com/keys) |
+| NVIDIA | cheap jobs, council seats | optional | trial credits | [build.nvidia.com](https://build.nvidia.com/) | [API keys](https://build.nvidia.com/settings/api-keys) |
+| Anthropic | Claude on pay as you go (`plan = api`) | only for `plan = api` | none, you add credit | [platform.claude.com](https://platform.claude.com/) | [settings/keys](https://platform.claude.com/settings/keys) |
+| Ollama, LM Studio | models on your own computer | optional | free, no key | [ollama.com/download](https://ollama.com/download), [lmstudio.ai](https://lmstudio.ai/) | none |
+
+The same guide runs when you add a council seat with `python -I app/koltuk.py add`. NVIDIA's key isn't test-called, because its model list is public and a chat call would spend credit.
 
 Settings, memory and keys go to `~/.pentarch`. Only the job tracker's own files (`tracker/config.json`, `profile.json`, `data/`, all gitignored) stay in the clone. Setup adds a startup shortcut that uses the Python you ran it with, so run it from the venv. It offers to install `requirements.txt`; about 300 MB of that is the optional local voice stack.
 
-**First run.** Start it once by hand:
+**First run.** If you didn't let setup start it, start it once by hand:
 
 ```bash
 python -I app/pentarch.py
 ```
 
-Then send your bot `/start <code>` with the code setup showed you. It is also in `~/.pentarch/secrets/telegram-pair.txt`, and the console reminds you while there is no owner. The chat that sends the right code becomes the owner; everyone else is ignored.
+If you skipped the pairing, send your bot `/start <code>` with the code setup showed you. It is also in `~/.pentarch/secrets/telegram-pair.txt`, and the console reminds you while there is no owner. The chat that sends the right code becomes the owner; everyone else is ignored.
 
 **Checking and updating.** `python -I app/pentarch.py doctor` checks the config, the notes folder, the agent CLI, ffmpeg, the Telegram token, every key the config names (by name only; it never prints a value) and the two ports, and marks each line OK or `!!`. It also checks the internet, and on Windows it looks for app crashes in the last day, nearly full drives and VPN adapters. `python -I app/pentarch.py update` runs `git pull --ff-only`, but only when the clone has no local changes; a running Pentarch restarts itself when the code changes.
 
@@ -142,7 +160,7 @@ pkg install python nodejs git ripgrep
 termux-setup-storage
 npm i -g @google/gemini-cli --ignore-scripts
 gemini
-git clone https://github.com/<you>/pentarch.git && cd pentarch && python setup.py
+git clone https://github.com/RizgarOzan/pentarch.git && cd pentarch && python setup.py
 ```
 
 - `--ignore-scripts` skips a native build that fails on Termux. If Gemini's search later says `spawn rg ENOENT`, link Termux's ripgrep over the bundled one.
@@ -349,21 +367,45 @@ Sıradan bir gün şöyle geçer. Sabah 08:30'da kısa bir özet gelir: bugün n
 
 ### Kurulum
 
-Gerekenler: Windows 10/11 (ya da bir Android telefon), Python 3.10+, bir Telegram hesabı ve kurulu, giriş yapılmış bir ajan CLI'ı. Bütün özellikleri yalnızca Claude Code ile alırsın. Gemini CLI, Codex ve OpenCode'da sohbet günde tek oturumda kalır ama bütçe ve güvenlik kancaları olmaz.
+Gerekenler: Windows 10/11 (ya da bir Android telefon), Python 3.10+, [Node.js](https://nodejs.org/) (ajan CLI'ını npm kurar), [git](https://git-scm.com/downloads) ve bir Telegram hesabı. Ajan CLI'ı kurulu değilse ya da giriş yapılmamışsa kurulum ikisini de yapmayı önerir. Bütün özellikleri yalnızca Claude Code ile alırsın. Gemini CLI, Codex ve OpenCode'da sohbet günde tek oturumda kalır ama bütçe ve güvenlik kancaları olmaz.
 
 ```bash
-git clone https://github.com/<sen>/pentarch.git
+git clone https://github.com/RizgarOzan/pentarch.git
 cd pentarch
 python -m venv .venv
 .venv\Scripts\activate
 python setup.py
 ```
 
-Kurulum sırayla şunları sorar: adın, asistanın adı, dil (Türkçe ya da İngilizce; seçince kurulumun kendisi de o dile geçer), not klasörü, ajan ve modeller, Telegram bot token'ı (@BotFather'da `/newbot`). Her adımı o anda dener. Ajana tek kelimelik bir mesaj atar, böylece eksik bir giriş hemen ortaya çıkar. Telegram'a botun kim olduğunu sorar. İsteğe bağlı bir API seçersen model listesini çeker. API için OpenRouter, Groq, NVIDIA, Ollama, LM Studio ya da kendi adresini seçebilirsin. Anahtarı nereden alacağını da söyler; OpenRouter, Groq ve NVIDIA kart istemez. Anahtar `~/.pentarch/secrets/keys.env` dosyasına yazılır. `insa` (gece kendini geliştirme) ve `posta` (posta kontrolü) rutinleri kapalı başlar.
+Kurulum Türkçe ya da İngilizce konuşur, nerede olduğunu "Adım 3/6" diye gösterir ve her parçayı o anda dener. Önce Python, git ve npm var mı diye bakar; eksik olanın nereden indirileceğini yazar.
+
+**Hızlı kurulum** varsayılan. Yalnızca şunları sorar:
+
+1. **Temel bilgiler:** senin adın ve asistanın adı.
+2. **Ajan**, yani asistanın düşünmek için çalıştırdığı program. Emin değilsen: Claude aboneliğin varsa Claude, yoksa Gemini (Google hesabıyla ücretsiz). Kurulu değilse `npm i -g` satırını senin yerine çalıştırmayı önerir. Sonra tek kelimelik bir deneme mesajı atar; giriş yoksa ne yazacağını söyler, giriş için pencere açabilir, bitirince yeniden dener. Claude seçersen planını da sorar.
+3. **Ücretsiz anahtarlar:** OpenRouter, Groq ve NVIDIA, sırayla. Evet dersen o servisin anahtar sayfasını tarayıcıda açar (NVIDIA'nınki build.nvidia.com'da) ve adım adım anlatır; hayır dersen geçer. Hepsi isteğe bağlı: asistan ucuz işleri bunlara verir, konseye koltuk olurlar.
+4. **Telegram:** @BotFather'da `/newbot` ile bot yap, token'ı yapıştır.
+5. **Kurulum:** geri kalan her şey varsayılanını alır.
+6. **Eşleşme ve başlatma:** botuna giden bir `t.me` bağlantısı açar. Telegram'da Start'a basınca kurulum bunu görür, bot sana selam yazar. Sonra asistanı arka planda başlatmayı önerir.
+
+**Ayrıntılı kurulum** (ilk soruya "hayır") not klasörünü, üç modeli, izin modunu, ek bir API'yi (Ollama, LM Studio ya da kendi adresin), konsey koltuklarını, kariyer filtrelerini, MCP sunucularını, rutinleri ve kısayolları da sorar. `insa` (gece kendini geliştirme) ve `posta` (posta kontrolü) iki durumda da kapalı başlar. Kurulumu istediğin zaman yeniden çalıştırabilirsin, verdiğin cevapları korur. Yarıda bırakırsan baştan başla: kaldığı yerden devam etmez, ama bir kez biten kurulumun cevapları varsayılan olarak geri gelir.
+
+**Anahtarları almak:** Kurulum sorduğu her anahtar için servisin ne olduğunu, gerekip gerekmediğini ve ücretsiz katmanı olup olmadığını söyler. Kayıt ve anahtar sayfasını yazar, sayfayı tarayıcıda açmayı önerir, adımları sıralar. Anahtarı yapıştırınca önce biçimine bakar, sonra servise ücretsiz bir istek atıp kabul edip etmediğini dener. Kabul etmezse nedenini söyler, yeniden yapıştırmanı ister. İsteğe bağlı bir anahtarı boş bırakıp Enter'a basarsan atlanır; sonra kurulumu yeniden çalıştırıp ekleyebilirsin.
+
+| Servis | Ne için | Gerekli mi | Ücretsiz | Kayıt | Anahtar sayfası |
+|---|---|---|---|---|---|
+| Telegram | konuştuğun bot | evet, Telegram'dan konuşmak için | ücretsiz | [telegram.org/apps](https://telegram.org/apps) | [@BotFather](https://t.me/BotFather), `/newbot` gönder |
+| OpenRouter | ucuz işler, konsey koltukları | isteğe bağlı | `:free` modeller, dakikada 20, günde 50 istek | [openrouter.ai](https://openrouter.ai/) | [openrouter.ai/keys](https://openrouter.ai/keys) |
+| Groq | ucuz işler, sesli notlar | isteğe bağlı | ücretsiz plan | [console.groq.com](https://console.groq.com/) | [console.groq.com/keys](https://console.groq.com/keys) |
+| NVIDIA | ucuz işler, konsey koltukları | isteğe bağlı | deneme kredisi | [build.nvidia.com](https://build.nvidia.com/) | [API anahtarları](https://build.nvidia.com/settings/api-keys) |
+| Anthropic | Claude'u kullandıkça öde (`plan = api`) | yalnızca `plan = api` için | yok, önce kredi yüklenir | [platform.claude.com](https://platform.claude.com/) | [settings/keys](https://platform.claude.com/settings/keys) |
+| Ollama, LM Studio | modelleri kendi bilgisayarında çalıştırmak | isteğe bağlı | ücretsiz, anahtar yok | [ollama.com/download](https://ollama.com/download), [lmstudio.ai](https://lmstudio.ai/) | yok |
+
+`python -I app/koltuk.py add` ile konsey koltuğu eklerken de aynı rehber çalışır. NVIDIA anahtarı denenmez, çünkü model listesi herkese açık ve bir sohbet isteği kredi harcar.
 
 Ayarlar, hafıza ve anahtarlar `~/.pentarch` içine gider. Repoda yalnızca başvuru panosunun kendi dosyaları kalır, onlar da gitignore'da. Kurulum, kendisini hangi Python ile çalıştırdıysan onu kullanan bir başlangıç kısayolu ekler; bu yüzden venv içinden çalıştır. `requirements.txt`'i kurmayı da önerir. Bunun yaklaşık 300 MB'ı isteğe bağlı yerel ses paketi.
 
-**İlk çalıştırma:** `python -I app/pentarch.py` ile bir kez elle başlat, sonra botuna `/start <kod>` yaz. Kod, kurulumun gösterdiği kod; `~/.pentarch/secrets/telegram-pair.txt` dosyasında da duruyor. Doğru kodu gönderen sohbet sahip olur, başkalarından gelen mesajlar yok sayılır.
+**İlk çalıştırma:** Kurulum başlatmadıysa `python -I app/pentarch.py` ile bir kez elle başlat. Eşleşmeyi atladıysan botuna `/start <kod>` yaz. Kod, kurulumun gösterdiği kod; `~/.pentarch/secrets/telegram-pair.txt` dosyasında da duruyor. Doğru kodu gönderen sohbet sahip olur, başkalarından gelen mesajlar yok sayılır.
 
 **Kontrol ve güncelleme:** `python -I app/pentarch.py doktor` ayar dosyasına, not klasörüne, ajan CLI'ına, ffmpeg'e, Telegram token'ına, ayarlarda adı geçen anahtarlara ve iki porta bakar, her satırı OK ya da `!!` diye işaretler. İnternete de bakar. Windows'ta son bir günde çöken uygulamaları, dolmak üzere olan diskleri ve VPN bağdaştırıcılarını da gösterir. Anahtarların yalnızca tanımlı olup olmadığını söyler, değerini hiçbir zaman yazmaz. `python -I app/pentarch.py guncelle` komutu `git pull --ff-only` çalıştırır ama yalnızca repoda kaydedilmemiş bir değişiklik yoksa. Çalışan Pentarch kod değişince kendini yeniden başlatır.
 

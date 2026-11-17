@@ -15,8 +15,9 @@ import re
 import shutil
 import subprocess
 import sys
-import urllib.error
+import time
 import urllib.request
+import webbrowser
 from pathlib import Path
 
 TERMUX = "TERMUX_VERSION" in os.environ  # Android phone without a computer (Termux app)
@@ -55,6 +56,19 @@ def yes(q, default=False):
     return default if not a else a in ("y", "yes", "e", "evet")
 
 
+QUICK = False  # quick setup: the questions below that go through opt() take their default
+STEP = [0, 6]
+
+
+def opt(q, default=False):
+    return default if QUICK else yes(q, default)
+
+
+def step(tr, en):
+    STEP[0] += 1
+    print(f"\n== {t('Adım', 'Step')} {STEP[0]}/{STEP[1]}: {t(tr, en)} ==")
+
+
 def secret(q):
     """Hidden input; falls back to plain input when stdin is piped (getpass reads the console on Windows)."""
     return getpass.getpass(q) if sys.stdin.isatty() else input(q)
@@ -69,23 +83,7 @@ def get_json(url, key=None, timeout=10):
 sys.path.insert(0, str(APP))
 import koltuk  # noqa: E402  (presets and the council-seat helpers; config.py resolves the same HOME)
 PRESETS = koltuk.PRESETS  # name -> (base_url, key env, suggested model, where to get the key)
-KEY_STEPS = {  # free tiers, no card needed; (tr, en) per step
-    "openrouter": (("Google ya da GitHub ile giriş yap.", "Sign in with Google or GitHub."),
-                   ("Keys > Create key; adı önemsiz, limit boş kalabilir.", "Keys > Create key; any name, leave the limit empty."),
-                   ("Ücretsiz modellerin adı ':free' ile biter. 404 alırsan Settings > Privacy'den ücretsiz model kullanımını aç.",
-                    "Free models end in ':free'. If you get 404, enable free-model use under Settings > Privacy.")),
-    "groq": (("E-posta ya da GitHub ile giriş yap.", "Sign in with email or GitHub."),
-             ("API Keys > Create API Key, anahtarı hemen kopyala (bir daha gösterilmez).",
-              "API Keys > Create API Key and copy it now (it is shown once)."),
-             ("Ücretsiz katman dakikada ~30 istek; günlük işler için yeter.", "The free tier allows ~30 requests a minute, enough for daily jobs.")),
-    "nvidia": (("Giriş yap, bir model sayfası aç.", "Sign in and open any model page."),
-               ("'Get API Key' düğmesi anahtarı verir; nvapi- ile başlar.", "'Get API Key' gives the key; it starts with nvapi-."),
-               ("Ücretsiz kredi hesapla gelir, kart istemez.", "Free credits come with the account, no card.")),
-    "ollama": (("ollama.com'dan kur, sonra: ollama pull gemma3", "Install from ollama.com, then: ollama pull gemma3"),
-               ("Çalışırken http://localhost:11434 cevap verir; anahtar gerekmez.", "While it runs, http://localhost:11434 answers; no key needed.")),
-    "lmstudio": (("lmstudio.ai'dan kur, bir model indir, Developer > Start Server.", "Install from lmstudio.ai, download a model, Developer > Start Server."),
-                 ("Sunucu http://localhost:1234 üstünde; anahtar gerekmez.", "The server is on http://localhost:1234; no key needed.")),
-}
+import anahtar  # noqa: E402  (step-by-step key guide: pages, format check, free test call)
 
 
 def read_env(path):
@@ -101,20 +99,21 @@ def chat_api_setup(api):
     pick = ask(t("Servis", "Service"), cur, (*PRESETS, "custom", "none"))
     if pick == "none":
         return {"base_url": "", "model": "", "key_env": key_env}
-    base, preset_env, model, key_url = PRESETS.get(pick, (api.get("base_url", ""), key_env, api.get("model", ""), ""))
+    base, preset_env, model, _ = PRESETS.get(pick, (api.get("base_url", ""), key_env, api.get("model", ""), ""))
     need_key = bool(preset_env)
     if pick == "custom":
         base = ask("base_url (…/v1)", base)
     env_file = SECRETS / "keys.env"
     saved = read_env(env_file)
     key = os.environ.get(key_env) or saved.get(key_env, "")
+    if pick in anahtar.GUIDES and not need_key:
+        anahtar.show(pick, t, yes)
     if need_key and (not key or yes(t("Kayıtlı API anahtarı değiştirilsin mi?", "Replace the saved API key?"))):
-        if key_url:
-            print(t(f"  Anahtarı buradan al: {key_url}", f"  Get a key here: {key_url}"))
-            for i, step in enumerate(KEY_STEPS.get(pick, ()), 1):
-                print(f"    {i}. {t(*step)}")
-        new = secret(t(f"API anahtarı (gizli, secrets/keys.env içine {key_env} olarak yazılır; boş geçer): ",
-                       f"API key (hidden, saved to secrets/keys.env as {key_env}; empty skips): ")).strip()
+        if pick in anahtar.GUIDES:
+            new = anahtar.ask(pick, t, yes, secret)
+        else:
+            new = secret(t(f"API anahtarı (gizli, secrets/keys.env içine {key_env} olarak yazılır; boş geçer): ",
+                           f"API key (hidden, saved to secrets/keys.env as {key_env}; empty skips): ")).strip()
         if new:
             key = saved[key_env] = new
             env_file.write_text("".join(f"{k}={v}\n" for k, v in saved.items()), encoding="utf-8")
@@ -159,25 +158,10 @@ def telegram_setup():
     tok = SECRETS / "telegram.txt"
     if tok.exists() and not yes(t("Kayıtlı Telegram token'ı değiştirilsin mi?", "Replace the saved Telegram token?")):
         return
-    print(t("\nTelegram: @BotFather'a yaz, /newbot gönder, verdiği token'ı kopyala.",
-            "\nTelegram: talk to @BotFather, send /newbot, copy the token it gives."))
-    while True:
-        tk = secret(t("Bot token (gizli): ", "Bot token (hidden): ")).strip()
-        if not tk:
-            print(t("  Atlandı; sonra secrets/telegram.txt içine yazabilirsin.", "  Skipped; you can put it in secrets/telegram.txt later."))
-            return
-        try:
-            bot = get_json(f"https://api.telegram.org/bot{tk}/getMe")["result"]
-            print(t(f"  Token çalışıyor: @{bot['username']}", f"  Token works: @{bot['username']}"))
-            break
-        except urllib.error.HTTPError:
-            print(t("  ! Telegram bu token'ı kabul etmedi.", "  ! Telegram did not accept that token."))
-            if not yes(t("Yeniden denensin mi?", "Try again?"), True):
-                return
-        except Exception as e:  # offline or blocked: keep the token, it may still be right
-            print(t(f"  ! Telegram'a ulaşılamadı ({type(e).__name__}); token denenmeden kaydediliyor.",
-                    f"  ! Could not reach Telegram ({type(e).__name__}); saving the token unchecked."))
-            break
+    tk = anahtar.ask("telegram", t, yes, secret, "Bot token")
+    if not tk:
+        print(t("  Token'ı sonra secrets/telegram.txt içine de yazabilirsin.", "  You can also put the token in secrets/telegram.txt later."))
+        return
     tok.write_text(tk + "\n", encoding="utf-8")
     tok.chmod(0o600)
     pair = SECRETS / "telegram-pair.txt"
@@ -204,9 +188,134 @@ def agent_test(cli):
     if ok:
         print(t(f"  {cli} cevap verdi: {last[0][:60]}", f"  {cli} answered: {last[0][:60]}"))
     else:
-        login = {"claude": "claude", "gemini": "gemini", "codex": "codex login", "opencode": "opencode auth login"}[cli]
-        print(t(f"  ! {cli} cevap vermedi: {last[0][:160]}\n    Giriş yapmak için bir terminalde çalıştır: {login}",
-                f"  ! {cli} did not answer: {last[0][:160]}\n    To log in, run in a terminal: {login}"))
+        print(t(f"  ! {cli} cevap vermedi: {last[0][:160]}", f"  ! {cli} did not answer: {last[0][:160]}"))
+    return bool(ok)
+
+
+NPM_PKG = {"claude": "@anthropic-ai/claude-code", "gemini": "@google/gemini-cli", "codex": "@openai/codex", "opencode": "opencode-ai"}
+LOGIN = {  # cli -> (command, what to do in it)
+    "claude": ("claude", ("Tarayıcı açılır (açılmazsa pencerede /login yaz); Claude hesabınla gir.",
+                          "A browser opens (if not, type /login in the window); sign in with your Claude account.")),
+    "gemini": ("gemini", ("'Login with Google'ı seç, tarayıcıda Google hesabınla gir.",
+                          "Pick 'Login with Google' and sign in with your Google account in the browser.")),
+    "codex": ("codex login", ("Tarayıcıda ChatGPT hesabınla gir.", "Sign in with your ChatGPT account in the browser.")),
+    "opencode": ("opencode auth login", ("Listeden bir servis seç, anahtarını yapıştır (ücretsiz OpenRouter anahtarı da olur).",
+                                         "Pick a provider from the list and paste its key (a free OpenRouter key works).")),
+}
+
+
+def preflight():
+    """Says what is missing before the questions start, and where to get it."""
+    missing = [(n, url, why) for n, url, why in (
+        ("git", "https://git-scm.com/downloads", t("otomatik güncelleme için", "for auto-update")),
+        ("npm", "https://nodejs.org/", t("ajan CLI'ını kurmak için; Node.js ile gelir", "to install the agent CLI; comes with Node.js")))
+        if not shutil.which(n)]
+    for n, url, why in missing:
+        where = f"pkg install {'nodejs' if n == 'npm' else n}" if TERMUX else url
+        print(t(f"  ! {n} yok ({why}): {where}", f"  ! {n} is missing ({why}): {where}"))
+    if not missing:
+        print(t("  Python, git ve npm hazır.", "  Python, git and npm are ready."))
+
+
+def cli_setup(cli):
+    """Installs the agent CLI with npm if asked, walks through the login and tests it. True once it answers."""
+    if not shutil.which(cli):
+        cmd = f"npm i -g {NPM_PKG[cli]}"
+        if not shutil.which("npm"):
+            print(t(f"  ! {cli} kurulu değil ve npm yok. Önce Node.js'i kur (https://nodejs.org/), sonra: {cmd}",
+                    f"  ! {cli} is not installed and npm is missing. Install Node.js first (https://nodejs.org/), then: {cmd}"))
+            return False
+        if not yes(t(f"{cli} kurulu değil. Şimdi kurulsun mu ({cmd})?", f"{cli} is not installed. Install it now ({cmd})?"), True):
+            return False
+        subprocess.run([shutil.which("npm"), *cmd.split()[1:]])
+        if not shutil.which(cli):
+            print(t("  ! Kurulum bitti ama komut bulunamadı; yeni bir terminal açıp setup'ı yeniden çalıştır.",
+                    "  ! The install finished but the command isn't found; open a new terminal and run setup again."))
+            return False
+    if not yes(t(f"{cli} kısa bir mesajla denensin mi (giriş yapılmış mı diye)?",
+                 f"Send {cli} a short test message (checks that it is logged in)?"), True):
+        return False
+    while not agent_test(cli):
+        login, how = LOGIN[cli]
+        print(t(f"  Giriş yapman gerekiyor: bir terminalde `{login}` çalıştır. {how[0]}",
+                f"  You need to log in: run `{login}` in a terminal. {how[1]}"))
+        if os.name == "nt" and yes(t("  Giriş için yeni bir pencere açılsın mı?", "  Open a new window for the login?"), True):
+            subprocess.Popen(f'start "{cli} login" cmd /k {login}', shell=True)
+        if not yes(t("  Girişi bitirince yeniden denensin mi? (hayır = sonra)", "  Test again once you are logged in? (no = later)"), True):
+            return False
+    return True
+
+
+def free_keys_setup(api):
+    """Free keys for cheap jobs and council seats; each one opens its page and walks through it. Returns chat_api."""
+    print(t("  Hepsi isteğe bağlı ve ücretsiz. Asistan bunlarsız da çalışır; ucuz işleri bunlara verir, konseye koltuk olurlar.",
+            "  All optional and free. The assistant works without them; it hands cheap jobs to them and they sit on the council."))
+    for name in ("openrouter", "groq", "nvidia"):
+        base, env, model, _ = PRESETS[name]
+        if koltuk.has_key(env):
+            print(t(f"  {name}: anahtar zaten kayıtlı.", f"  {name}: key already saved."))
+            continue
+        print(f"\n{name}: {t(*anahtar.GUIDES[name]['free'])}")
+        if not yes(t(f"  Ücretsiz {name} anahtarı alınsın mı (sayfası açılır)?", f"  Get a free {name} key (opens its page)?"), True):
+            continue
+        key = anahtar.ask(name, t, yes, secret)
+        if not key:
+            continue
+        koltuk.save_key(env, key)
+        koltuk.add(name, name, check=False)
+        if not api.get("base_url"):
+            api = {"base_url": base, "model": model, "key_env": env}
+    return api
+
+
+def pair_and_start(cli, name):
+    """Waits for the owner's /start <code> in Telegram, then offers to start the assistant in the background."""
+    import tg
+    state = tg.load_state()
+    if tg.TOKEN_FILE.exists() and state.get("chat_id") is None:
+        try:
+            bot = tg.api("getMe")["username"]
+        except Exception as e:
+            bot = None
+            print(t(f"  ! Telegram'a ulaşılamadı ({e}); eşleşme asistan çalışınca da olur.",
+                    f"  ! Could not reach Telegram ({e}); pairing also works once the assistant runs."))
+        if bot:
+            code = tg.pair_code()
+            link = f"https://t.me/{bot}?start={code}"
+            print(t(f"  Botunu kendine bağla: {link} adresini aç, Telegram'da Start'a bas (ya da bota /start {code} yaz).",
+                    f"  Claim your bot: open {link} and press Start in Telegram (or send the bot /start {code})."))
+            if yes(t("  Bağlantı şimdi açılsın mı?", "  Open the link now?"), True):
+                webbrowser.open(link)
+            print(t("  Bekliyorum, en çok 3 dakika (Ctrl+C ile geç)...", "  Waiting up to 3 minutes (Ctrl+C skips)..."))
+            end = time.time() + 180
+            try:
+                while time.time() < end and state.get("chat_id") is None:
+                    for upd in tg.api("getUpdates", http_timeout=40, offset=state["offset"], timeout=20):
+                        state["offset"] = upd["update_id"] + 1
+                        msg = upd.get("message") or {}
+                        if msg.get("chat", {}).get("type") == "private" and msg.get("text", "").strip() == f"/start {code}":
+                            state["chat_id"] = msg["chat"]["id"]
+                    tg.save_state(state)
+            except KeyboardInterrupt:
+                print()
+            except Exception as e:
+                print(t(f"  ! Telegram okunamadı ({e}).", f"  ! Could not read Telegram ({e})."))
+            if state.get("chat_id") is not None:
+                tg.api("sendMessage", chat_id=state["chat_id"], text=t(f"Eşleştik. Ben {name}, buradan yazabilirsin.",
+                                                                       f"Paired. I'm {name}; you can write to me here."))
+                print(t("  Eşleşme tamam; bota bir selam mesajı gönderildi.", "  Paired; the bot sent you a hello."))
+            else:
+                print(t(f"  Eşleşme olmadı. Asistan çalışırken bota /start {code} yazman yeter.",
+                        f"  Not paired yet. Send the bot /start {code} while the assistant runs."))
+    if not shutil.which(cli):
+        return False
+    if not yes(t(f"{name} şimdi arka planda başlatılsın mı?", f"Start {name} in the background now?"), True):
+        return False
+    flags = {"creationflags": 0x00000008 | 0x00000200} if os.name == "nt" else {"start_new_session": True}  # detached
+    subprocess.Popen([sys.executable, "-I", str(APP / "pentarch.py"), "--quiet"], stdin=subprocess.DEVNULL,
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **flags)
+    print(t(f"  Başladı. Telegram'dan yazınca {name} cevap verir.", f"  Started. Write to {name} in Telegram and it answers."))
+    return True
 
 
 LEVELS = {  # answer -> (seniority words scan.py needs in a title, max years a posting may ask for, job_boards titles filter, title words to drop)
@@ -463,7 +572,7 @@ def wiki_backup(notes):
     """Optional: the notes folder becomes a git repo pushed to a private repo the owner made; the nightly round pushes."""
     if not shutil.which("git") or (notes / ".git").exists():
         return
-    if not yes(t("\n  Wiki'nin geçmişi GitHub'daki özel (private) bir repoya yedeklensin mi?",
+    if not opt(t("\n  Wiki'nin geçmişi GitHub'daki özel (private) bir repoya yedeklensin mi?",
                  "\n  Back up the wiki's history to a private GitHub repo?")):
         return
     url = ask(t("  Repo adresi (önce github.com/new'de private repo aç; boş = sadece yerel geçmiş)",
@@ -544,53 +653,7 @@ def rules_upgrade(cfg):
     return added
 
 
-def main():
-    global TR
-    if "--upgrade" in sys.argv:
-        return upgrade()
-    old = json.loads(CONFIG.read_text(encoding="utf-8")) if CONFIG.exists() else {}
-    agent = old.get("agent", {})
-    print(f"Pentarch setup. Home folder: {HOME}\n")
-
-    lang = ask("Language / Dil", old.get("lang", "en"), ("en", "tr"))
-    TR = lang == "tr"
-    owner = ask(t("Senin adın", "Your name"), old.get("owner", ""))
-    name = ask(t("Asistanın adı", "Assistant name"), old.get("name", "Pentarch"))
-    notes = ask(t("Not klasörü (markdown)", "Notes folder (markdown)"), old.get("notes_dir", "~/storage/shared/Documents/wiki" if TERMUX else "~/notes"))
-
-    HOME.mkdir(parents=True, exist_ok=True)  # agent_test runs inside it
-    found = [c for c in CLIS if shutil.which(c)]
-    print(t("Bulunan ajan CLI'ları: ", "Agent CLIs found: ") + (", ".join(found) or "-"))
-    if not found:
-        print(t("""  Hiçbiri PATH'te yok. Modelsiz de çalışan parçalar: başvuru panosu ve ilan taraması (tracker/README.md).
-  Asistanın tamamı için birini kur ve giriş yap:
-    claude   npm i -g @anthropic-ai/claude-code   (ücretli plan ya da API anahtarı)
-    gemini   npm i -g @google/gemini-cli          (Google hesabıyla ücretsiz kota)
-    codex    npm i -g @openai/codex               (ChatGPT hesabı)
-    opencode npm i -g opencode-ai                  (kendi anahtarınla; OpenRouter ücretsiz modelleri de olur)""",
-                """  None on PATH. The parts that work without a model: the application board and the job scan (tracker/README.md).
-  For the full assistant, install one and log in:
-    claude   npm i -g @anthropic-ai/claude-code   (paid plan or API key)
-    gemini   npm i -g @google/gemini-cli          (free quota with a Google account)
-    codex    npm i -g @openai/codex               (ChatGPT account)
-    opencode npm i -g opencode-ai                  (your own key; OpenRouter free models work too)"""))
-        if not yes(t("Yine de kuruluma devam edilsin mi?", "Continue the setup anyway?"), True):
-            sys.exit(t("Tamam. CLI'ı kurunca python setup.py ile devam et.", "OK. Run python setup.py again once a CLI is installed."))
-    cli = ask(t("Ajan CLI", "Agent CLI"), agent.get("cli", found[0] if found else "claude"), CLIS)
-    if not shutil.which(cli):
-        print(t(f"  ! {cli} henüz PATH'te yok; Pentarch'ı başlatmadan önce kur ve giriş yap.",
-                f"  ! {cli} is not on PATH yet; install it and log in before starting Pentarch."))
-    elif yes(t(f"{cli} şimdi kısa bir mesajla denensin mi (giriş yapılmış mı diye)?",
-               f"Send {cli} a short test message now (checks that it is logged in)?"), True):
-        agent_test(cli)
-    same = agent.get("cli") == cli
-    models = {"claude": ("sonnet", "opus", "haiku")}.get(cli, ("", "", ""))
-    if cli != "claude":
-        print(t("  Model adlarını boş bırakırsan CLI'ın kendi varsayılanı kullanılır.",
-                "  Leave the model names empty to use the CLI's own default."))
-    fast = ask(t("Günlük model", "Everyday model"), agent.get("fast_model", models[0]) if same else models[0])
-    deep = ask(t("Derin model", "Deep model"), agent.get("deep_model", models[1]) if same else models[1])
-    light = ask(t("Hafif model", "Light model"), agent.get("light_model", models[2]) if same else models[2])
+def permission_setup(agent):
     print(t("İzin modu: acceptEdits = dosya düzenler, kabuk allowed_tools ile sınırlı (daha güvenli);\n"
             "           bypassPermissions = her şey serbest (zamanlanmış işlerin çoğu bunu ister).",
             "Permission mode: acceptEdits = edits files, shell limited to allowed_tools (safer);\n"
@@ -606,6 +669,63 @@ def main():
                         "").lower() in ("onaylıyorum", "i confirm")
         if not bypass_ok:
             perm = "acceptEdits"
+    return perm, bypass_ok
+
+
+def main():
+    global TR
+    if "--upgrade" in sys.argv:
+        return upgrade()
+    old = json.loads(CONFIG.read_text(encoding="utf-8")) if CONFIG.exists() else {}
+    agent = old.get("agent", {})
+    print(f"Pentarch setup. Home folder: {HOME}")
+    print("Enter = the default in [brackets] / Enter = [köşeli parantezdeki] varsayılan\n")
+
+    global QUICK
+    lang = ask("Language / Dil", old.get("lang", "en"), ("en", "tr"))
+    TR = lang == "tr"
+    print(t("Hızlı kurulum yalnızca gerekenleri sorar (ad, ajan, ücretsiz anahtarlar, Telegram); gerisi varsayılan olur.\n"
+            "Ayrıntılı kurulum modelleri, izinleri, konseyi, kariyer takibini ve MCP'yi de sorar. Sonra istediğin an yeniden çalıştırabilirsin.",
+            "Quick setup asks only what's needed (names, agent, free keys, Telegram); the rest takes defaults.\n"
+            "Detailed setup also asks about models, permissions, the council, career tracking and MCP. You can re-run it any time."))
+    QUICK = yes(t("Hızlı kurulum?", "Quick setup?"), True)
+    STEP[1] = 6 if QUICK else 8
+    step("Temel bilgiler", "The basics")
+    preflight()
+    owner = ask(t("Senin adın", "Your name"), old.get("owner", ""))
+    name = ask(t("Asistanın adı", "Assistant name"), old.get("name", "Pentarch"))
+    notes = old.get("notes_dir", "~/storage/shared/Documents/wiki" if TERMUX else "~/notes")
+    if not QUICK:
+        notes = ask(t("Not klasörü (asistanın wiki'si, markdown)", "Notes folder (the assistant's wiki, markdown)"), notes)
+
+    step("Ajan (asistanın beyni)", "Agent (the assistant's brain)")
+    HOME.mkdir(parents=True, exist_ok=True)  # agent_test runs inside it
+    found = [c for c in CLIS if shutil.which(c)]
+    print(t("Ajan CLI, asistanın düşünmek için çalıştırdığı program. Emin değilsen: Claude aboneliğin varsa claude,\n"
+            "yoksa gemini (Google hesabıyla ücretsiz kota). codex = ChatGPT hesabı, opencode = kendi anahtarın.",
+            "The agent CLI is the program the assistant runs to think. Not sure? claude if you pay for Claude,\n"
+            "otherwise gemini (free quota with a Google account). codex = ChatGPT account, opencode = your own key."))
+    print(t("Bu bilgisayarda bulunan: ", "Found on this computer: ") + (", ".join(found) or "-"))
+    cli = ask(t("Ajan CLI", "Agent CLI"), agent.get("cli", found[0] if found else "claude"), CLIS)
+    if not cli_setup(cli):
+        print(t(f"  {cli} hazır değil; kurulum sürüyor, sonunda ne kaldığını yazacağım.",
+                f"  {cli} isn't ready; setup goes on and lists what's left at the end."))
+    same = agent.get("cli") == cli
+    models = {"claude": ("sonnet", "opus", "haiku")}.get(cli, ("", "", ""))
+    fast, deep, light = ((agent.get("fast_model", models[0]), agent.get("deep_model", models[1]), agent.get("light_model", models[2]))
+                         if same else models)
+    if not QUICK:
+        print(t("Üç model: günlük = sıradan mesajlar, derin = zor işler, hafif = küçük arka plan işleri. Emin değilsen Enter.",
+                "Three models: everyday = ordinary messages, deep = hard work, light = small background jobs. Not sure? Enter."))
+        if cli != "claude":
+            print(t("  Boş bırakırsan CLI'ın kendi varsayılanı kullanılır.", "  Empty means the CLI's own default."))
+        fast = ask(t("Günlük model", "Everyday model"), fast)
+        deep = ask(t("Derin model", "Deep model"), deep)
+        light = ask(t("Hafif model", "Light model"), light)
+    perm = agent.get("permission_mode", "acceptEdits")
+    bypass_ok = bool(agent.get("bypass_confirmed")) and perm == "bypassPermissions"
+    if not QUICK:
+        perm, bypass_ok = permission_setup(agent)
 
     plan = old.get("plan", "max")
     if cli == "claude":
@@ -614,13 +734,31 @@ def main():
                 "Your Claude plan: pro = scheduled runs are lean and sparse, leaving room for your own chats (README, Using with Pro);\n"
                 "                  max = everything full; api = pay as you go with ANTHROPIC_API_KEY."))
         plan = ask(t("Plan", "Plan"), old.get("plan", "max" if old else "pro"), ("pro", "max", "api"))
+        if plan == "api" and not koltuk.has_key("ANTHROPIC_API_KEY"):
+            k = anahtar.ask("anthropic", t, yes, secret, "ANTHROPIC_API_KEY")
+            if k:
+                koltuk.save_key("ANTHROPIC_API_KEY", k)
 
     SECRETS.mkdir(parents=True, exist_ok=True)
-    api = chat_api_setup(old.get("chat_api", {}))
-    council_setup()
+    step("Ücretsiz anahtarlar", "Free keys")
+    api = free_keys_setup(old.get("chat_api") or {"base_url": "", "model": "", "key_env": "PENTARCH_CHAT_KEY"})
+    if not QUICK:
+        step("Ek servis ve konsey", "Extra service and council")
+        api = chat_api_setup(api)
+        print(t("Konsey: zor bir soruda birkaç farklı modele sorup cevapları karşılaştırır. Her koltuk bir model.",
+                "Council: on a hard question it asks several different models and compares the answers. Each seat is one model."))
+        council_setup()
+    step("Telegram (telefondan konuşmak için)", "Telegram (to chat from your phone)")
     telegram_setup()
-    job_boards = career_setup(old, lang)
-    mcp_servers = mcp_setup(old) if cli == "claude" else old.get("mcp_servers", {})
+    job_boards, mcp_servers = old.get("job_boards") or {}, old.get("mcp_servers", {})
+    if not QUICK:
+        step("Kariyer takibi ve MCP", "Career tracking and MCP")
+        job_boards = career_setup(old, lang)
+        if cli == "claude":
+            print(t("MCP: Claude'a ek araç bağlayan sunucular (takvim, tarayıcı gibi). Bilmiyorsan hayır de.",
+                    "MCP: servers that give Claude extra tools (calendar, browser and so on). If unsure, say no."))
+            mcp_servers = mcp_setup(old)
+    step("Kurulum", "Installing")
 
     off = set(old.get("jobs_off", ["insa", "posta"]))
     if plan == "pro" and old.get("plan") != "pro":
@@ -631,7 +769,7 @@ def main():
             "\nTwo routines start off; turn them on now if you like, or later in the panel (Settings > Disabled routines)."))
     for job, tr_q, en_q in (("insa", "Gece kendini geliştirme turu (insa) açılsın mı?", "Turn on the nightly self-build round (insa)?"),
                             ("posta", "Posta kontrolü (posta) açılsın mı?", "Turn on the mail check (posta)?")):
-        if yes(t(tr_q, en_q), job not in off):
+        if opt(t(tr_q, en_q), job not in off):
             off.discard(job)
         else:
             off.add(job)
@@ -639,7 +777,7 @@ def main():
             "  Pentarch boşta kalınca kendini yeniden başlatır ve sana tek satır yazar.",
             "  Auto-update: every night at 05:10 pulls the new version from GitHub (only when you have no local changes),\n"
             "  Pentarch restarts itself once idle and tells you in one line."))
-    if yes(t("Otomatik güncelleme (guncelle) açık kalsın mı?", "Keep auto-update (guncelle) on?"), "guncelle" not in off):
+    if opt(t("Otomatik güncelleme (guncelle) açık kalsın mı?", "Keep auto-update (guncelle) on?"), "guncelle" not in off):
         off.discard("guncelle")
     else:
         off.add("guncelle")
@@ -647,7 +785,8 @@ def main():
     cfg = {**old, "owner": owner or "Owner", "name": name or "Pentarch", "lang": lang, "notes_dir": notes,
            "agent": {**agent, "cli": cli, "fast_model": fast, "deep_model": deep, "light_model": light,
                      "permission_mode": perm, "bypass_confirmed": bypass_ok},
-           "plan": plan, "chat_api": api, "jobs_off": sorted(off), "job_boards": job_boards, "mcp_servers": mcp_servers}
+           "plan": plan, "chat_api": api, "jobs_off": sorted(off), "job_boards": job_boards, "mcp_servers": mcp_servers,
+           "council": koltuk.seats()}  # koltuk.add wrote seats to the file during setup; `old` predates them
 
     HOME.mkdir(parents=True, exist_ok=True)
     CONFIG.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -667,7 +806,7 @@ def main():
   Welcome, {cfg['owner']}! Your notes folder is empty, so you have no wiki yet.
   {cfg['name']} keeps what it learns in a small wiki: who you are, your decisions, your projects.
   I can set up an empty skeleton; {cfg['name']} fills it as you talk and checks it every night."""))
-        if yes(t("  Wiki iskeleti kurulsun mu?", "  Set up the wiki skeleton?"), True):
+        if opt(t("  Wiki iskeleti kurulsun mu?", "  Set up the wiki skeleton?"), True):
             sys.path.insert(0, str(APP))
             import wiki
             made = wiki.kur(notes, cfg["owner"], cfg["name"], lang)
@@ -706,14 +845,14 @@ def main():
     if kept:
         print(t(f"Olduğu gibi kaldı: {', '.join(kept)} (--force üstüne yazar)", f"Kept existing: {', '.join(kept)} (--force overwrites)"))
     (HOME / "v2.on").write_text("", encoding="utf-8") if cli == "claude" else (HOME / "v2.on").unlink(missing_ok=True)
-    skills_setup(cli, cfg["notes_dir"])
+    skills_setup(cli, cfg["notes_dir"], not QUICK)
 
-    if yes(t("\nPython paketleri kurulsun mu (sesli mesaj ve sesli cevap)?", "\nInstall the Python packages (voice in/out)?"), True):
+    if opt(t("\nPython paketleri kurulsun mu (sesli mesaj ve sesli cevap)?", "\nInstall the Python packages (voice in/out)?"), True):
         subprocess.run([sys.executable, "-m", "pip", "install", "-r", str(REPO / "requirements.txt")])
 
     if TERMUX:
         boot = Path.home() / ".termux" / "boot"
-        if yes(t("Telefon açılınca Pentarch başlasın mı (Termux:Boot uygulaması gerekir)?",
+        if opt(t("Telefon açılınca Pentarch başlasın mı (Termux:Boot uygulaması gerekir)?",
                  "Start Pentarch when the phone boots (needs the Termux:Boot app)?"), True):
             boot.mkdir(parents=True, exist_ok=True)
             f = boot / "pentarch.sh"
@@ -736,23 +875,25 @@ def main():
     if os.name == "nt":
         icon = REPO / "assets" / "pentarch.ico"
         appdata = Path(os.environ["APPDATA"]) / "Microsoft/Windows"
-        if yes(t("Windows açılınca Pentarch başlasın mı?", "Start Pentarch when Windows starts?"), True):
+        if opt(t("Windows açılınca Pentarch başlasın mı?", "Start Pentarch when Windows starts?"), True):
             shortcut(appdata / "Start Menu/Programs/Startup/Pentarch.lnk", f'-I "{APP / "pentarch.py"}" --quiet', icon)
-        if yes(t("Masaüstüne panel kısayolu eklensin mi?", "Add a desktop shortcut for the panel?"), True):
+        if opt(t("Masaüstüne panel kısayolu eklensin mi?", "Add a desktop shortcut for the panel?"), True):
             desk = Path(os.environ.get("USERPROFILE", Path.home())) / "Desktop"
             shortcut(desk / f"{cfg['name']}.lnk", f'-I "{APP / "pentarch.py"}" --panel', icon)
 
+    step("Eşleşme ve başlatma", "Pairing and start")
+    started = pair_and_start(cli, cfg["name"])
     todo = []
     if not shutil.which(cli):
-        todo.append(t(f"{cli} CLI'ını kur ve giriş yap (yukarıdaki komut)", f"install {cli} and log in (command above)"))
+        todo.append(t(f"{cli} CLI'ını kur ve giriş yap: npm i -g {NPM_PKG[cli]}, sonra {LOGIN[cli][0]}",
+                      f"install {cli} and log in: npm i -g {NPM_PKG[cli]}, then {LOGIN[cli][0]}"))
     if not (SECRETS / "telegram.txt").exists():
-        todo.append(t(f"Telegram token'ını {SECRETS / 'telegram.txt'} içine yaz", f"put your Telegram bot token in {SECRETS / 'telegram.txt'}"))
+        todo.append(t("Telegram botunu kur: python setup.py (Telegram adımı)", "set up the Telegram bot: python setup.py (Telegram step)"))
     print(t("\nBitti.", "\nDone."))
     if todo:
         print(t("Asistanı başlatmadan önce:", "Before starting the assistant:") + "".join(f"\n  - {x}" for x in todo))
-    print(t(f"""Başlatmak için:  python -I "{APP / 'pentarch.py'}"
-Henüz yapmadıysan Telegram'dan bota /start <kod> yaz (kod: {SECRETS / 'telegram-pair.txt'}); bunu gönderen sohbet sahip olur.""", f"""Start it with:  python -I "{APP / 'pentarch.py'}"
-If you have not yet, send the bot /start <code> in Telegram (code: {SECRETS / 'telegram-pair.txt'}); that chat becomes the owner."""))
+    if not started:
+        print(t(f"Başlatmak için:  python -I \"{APP / 'pentarch.py'}\"", f"Start it with:  python -I \"{APP / 'pentarch.py'}\""))
     if (REPO / "tracker" / "config.json").exists():
         print(t(f"""Modelsiz çalışan kariyer parçaları (bir CLI gerekmez):
   ilanları tara:   python -I "{REPO / 'tracker' / 'scan.py'}" --config "{REPO / 'tracker' / 'config.json'}"

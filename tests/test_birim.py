@@ -1169,3 +1169,173 @@ class RulesUpgrade(unittest.TestCase):
                                  "# Bot\n1. one, my wording\n2. two for Ada\n  a. sub\n2b. new after two\n3. three\n")
                 self.assertEqual((home / "kurallar.md.bak").read_text(encoding="utf-8"), mine)
                 self.assertEqual(setup.rules_upgrade({"lang": "en", "owner": "Ada", "name": "Bot"}), [])
+
+
+class KeyGuide(unittest.TestCase):
+    """anahtar.ask: guide + page offer, format check, test call; fake keys only, network and browser mocked."""
+
+    def setUp(self):
+        import anahtar
+        self.a = anahtar
+        self.t = lambda tr, en: en
+        self.out = io.StringIO()
+        self.web = mock.patch.object(anahtar.webbrowser, "open", return_value=True).start()
+        mock.patch("sys.stdout", self.out).start()
+        self.addCleanup(mock.patch.stopall)
+
+    def run_ask(self, name, keys, answers, urlopen=None):
+        keys, answers = iter(keys), iter(answers)
+        with mock.patch.object(self.a.urllib.request, "urlopen", side_effect=urlopen or AssertionError("no call")) as u:
+            got = self.a.ask(name, self.t, lambda q, d=False: next(answers), lambda q: next(keys))
+        return got, u
+
+    def http(self, code):
+        return urllib.error.HTTPError("u", code, "x", {}, None)
+
+    def test_every_guide_has_pages_and_steps(self):
+        for name, g in self.a.GUIDES.items():
+            self.assertTrue(g["signup"].startswith("https://"), name)
+            self.assertTrue(not g["keys"] or g["keys"].startswith("https://"), name)
+            self.assertTrue(g["steps"] and all(len(s) == 2 for s in g["steps"]), name)
+
+    def test_formats(self):
+        ok = {"openrouter": "sk-or-v1-" + "a1" * 32, "anthropic": "sk-ant-api03-" + "x" * 30,
+              "telegram": "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11", "groq": "gsk_" + "Q" * 40}
+        for name, key in ok.items():
+            self.assertTrue(self.a.looks_right(name, key), name)
+        self.assertFalse(self.a.looks_right("openrouter", "sk-or-v1-short"))
+        self.assertFalse(self.a.looks_right("telegram", "not a token"))
+        self.assertFalse(self.a.looks_right("anthropic", "sk-ant- with spaces"))
+
+    def test_good_key_opens_page_and_is_returned(self):
+        key = "123456:" + "A" * 35
+        got, u = self.run_ask("telegram", [key], [True], [cevap("")])
+        self.assertEqual(got, key)
+        self.web.assert_called_once_with("https://t.me/BotFather")
+        self.assertIn("/bot" + key + "/getMe", u.call_args[0][0].full_url)
+        self.assertIn("The key works", self.out.getvalue())
+
+    def test_refused_key_retries_then_takes_the_new_one(self):
+        bad, good = "sk-or-v1-" + "0" * 64, "sk-or-v1-" + "1" * 64
+        got, u = self.run_ask("openrouter", [bad, good], [False, True], [self.http(401), cevap("")])
+        self.assertEqual(got, good)
+        self.web.assert_not_called()
+        self.assertEqual(u.call_args[0][0].get_header("Authorization"), "Bearer " + good)
+        self.assertIn("refused", self.out.getvalue())
+
+    def test_wrong_format_asks_again_without_a_call(self):
+        good = "sk-ant-api03-" + "k" * 40
+        got, u = self.run_ask("anthropic", ["oops", good], [False, True], [cevap("")])
+        self.assertEqual(got, good)
+        self.assertEqual(u.call_count, 1)
+        self.assertEqual(u.call_args[0][0].get_header("X-api-key"), good)
+
+    def test_empty_skips_and_offline_still_saves(self):
+        self.assertEqual(self.run_ask("groq", [""], [False])[0], "")
+        key = "gsk_" + "z" * 50
+        self.assertEqual(self.run_ask("groq", [key], [False], OSError("offline"))[0], key)
+        self.assertIn("Couldn't test", self.out.getvalue())
+
+    def test_no_test_call_for_nvidia_and_no_prompt_for_local(self):
+        key = "nvapi-" + "n" * 60
+        self.assertEqual(self.run_ask("nvidia", [key], [False])[0], key)
+        self.assertEqual(self.run_ask("ollama", [], [True])[0], "")
+        self.web.assert_called_once_with("https://ollama.com/download")
+
+
+class GuidedSetup(unittest.TestCase):
+    """setup.py's guided steps: CLI install/login, free keys, Telegram pairing. Fake keys; npm, network, browser mocked."""
+
+    def setUp(self):
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+        import setup
+        self.s = setup
+        self.out = io.StringIO()
+        mock.patch("sys.stdout", self.out).start()
+        mock.patch.object(setup, "yes", lambda q, d=False: d).start()  # every question takes its default
+        self.addCleanup(mock.patch.stopall)
+
+    def test_preflight_names_whats_missing(self):
+        with mock.patch.object(self.s.shutil, "which", lambda n: None if n == "npm" else "/bin/" + n):
+            self.s.preflight()
+        self.assertIn("npm is missing", self.out.getvalue())
+        self.assertIn("https://nodejs.org/", self.out.getvalue())
+        self.assertNotIn("git is missing", self.out.getvalue())
+
+    def test_cli_setup_installs_then_retests_after_login(self):
+        installed = []
+        which = lambda n: "/bin/npm" if n == "npm" else ("/bin/gemini" if installed else None)  # noqa: E731
+        with mock.patch.object(self.s.shutil, "which", which), \
+                mock.patch.object(self.s.subprocess, "run", side_effect=lambda *a, **k: installed.append(a[0])) as run, \
+                mock.patch.object(self.s.subprocess, "Popen") as popen, \
+                mock.patch.object(self.s, "agent_test", side_effect=[False, True]) as test:
+            self.assertTrue(self.s.cli_setup("gemini"))
+        self.assertEqual(run.call_args[0][0], ["/bin/npm", "i", "-g", "@google/gemini-cli"])
+        self.assertEqual(test.call_count, 2)
+        self.assertIn("Login with Google", self.out.getvalue())
+        self.assertEqual(popen.called, os.name == "nt")  # the login window is a Windows-only offer
+
+    def test_cli_setup_without_npm_points_at_node(self):
+        with mock.patch.object(self.s.shutil, "which", return_value=None), mock.patch.object(self.s.subprocess, "run") as run:
+            self.assertFalse(self.s.cli_setup("claude"))
+        run.assert_not_called()
+        self.assertIn("npm i -g @anthropic-ai/claude-code", self.out.getvalue())
+
+    def test_free_keys_skip_saved_and_declined_ones(self):
+        mock.patch.object(self.s, "yes", lambda q, d=False: "nvidia" not in q).start()
+        key = "sk-or-v1-" + "a" * 64
+        with mock.patch.object(self.s.koltuk, "has_key", lambda env: env == "GROQ_API_KEY"), \
+                mock.patch.object(self.s.anahtar, "ask", return_value=key) as ask, \
+                mock.patch.object(self.s.koltuk, "save_key") as save, mock.patch.object(self.s.koltuk, "add") as add:
+            api = self.s.free_keys_setup({"base_url": "", "model": "", "key_env": "PENTARCH_CHAT_KEY"})
+        ask.assert_called_once()
+        self.assertEqual(ask.call_args[0][0], "openrouter")
+        save.assert_called_once_with("OPENROUTER_API_KEY", key)
+        add.assert_called_once_with("openrouter", "openrouter", check=False)
+        self.assertEqual(api, {"base_url": "https://openrouter.ai/api/v1", "model": "google/gemma-4-31b-it:free",
+                               "key_env": "OPENROUTER_API_KEY"})
+
+    def test_free_keys_keep_an_existing_chat_api(self):
+        old = {"base_url": "http://a.test/v1", "model": "m", "key_env": "X"}
+        with mock.patch.object(self.s.koltuk, "has_key", return_value=False), \
+                mock.patch.object(self.s.anahtar, "ask", return_value="nvapi-" + "n" * 40), \
+                mock.patch.object(self.s.koltuk, "save_key"), mock.patch.object(self.s.koltuk, "add") as add:
+            self.assertEqual(self.s.free_keys_setup(dict(old)), old)
+        self.assertEqual(add.call_count, 3)
+
+    def test_pairing_claims_owner_and_start_runs_quiet(self):
+        import tg
+        state = {"chat_id": None, "offset": 0}
+        calls = []
+
+        def api(method, http_timeout=20, **params):
+            calls.append(method)
+            if method == "getMe":
+                return {"username": "my_bot"}
+            if method == "getUpdates":
+                return [{"update_id": 7, "message": {"chat": {"id": 1, "type": "group"}, "text": "/start 1234"}},
+                        {"update_id": 8, "message": {"chat": {"id": 42, "type": "private"}, "text": "/start 1234"}}]
+            return {}
+        with tempfile.TemporaryDirectory() as d:
+            token = Path(d) / "telegram.txt"
+            token.write_text("123:fake", encoding="utf-8")
+            with mock.patch.object(tg, "TOKEN_FILE", token), mock.patch.object(tg, "api", api), \
+                    mock.patch.object(tg, "load_state", return_value=state), mock.patch.object(tg, "save_state") as save, \
+                    mock.patch.object(tg, "pair_code", return_value="1234"), \
+                    mock.patch.object(self.s.webbrowser, "open") as web, \
+                    mock.patch.object(self.s.shutil, "which", return_value="/bin/claude"), \
+                    mock.patch.object(self.s.subprocess, "Popen") as popen:
+                self.assertTrue(self.s.pair_and_start("claude", "Bot"))
+        web.assert_called_once_with("https://t.me/my_bot?start=1234")
+        self.assertEqual(save.call_args[0][0], {"chat_id": 42, "offset": 9})  # the group message didn't claim it
+        self.assertEqual(calls, ["getMe", "getUpdates", "sendMessage"])
+        self.assertEqual(popen.call_args[0][0][-1], "--quiet")
+        self.assertIn("Paired", self.out.getvalue())
+
+    def test_no_start_offer_without_the_cli(self):
+        import tg
+        with mock.patch.object(tg, "TOKEN_FILE", Path("/nonexistent/telegram.txt")), \
+                mock.patch.object(self.s.shutil, "which", return_value=None), \
+                mock.patch.object(self.s.subprocess, "Popen") as popen:
+            self.assertFalse(self.s.pair_and_start("claude", "Bot"))
+        popen.assert_not_called()
