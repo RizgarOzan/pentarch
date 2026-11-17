@@ -1241,3 +1241,101 @@ class KeyGuide(unittest.TestCase):
         self.assertEqual(self.run_ask("nvidia", [key], [False])[0], key)
         self.assertEqual(self.run_ask("ollama", [], [True])[0], "")
         self.web.assert_called_once_with("https://ollama.com/download")
+
+
+class GuidedSetup(unittest.TestCase):
+    """setup.py's guided steps: CLI install/login, free keys, Telegram pairing. Fake keys; npm, network, browser mocked."""
+
+    def setUp(self):
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+        import setup
+        self.s = setup
+        self.out = io.StringIO()
+        mock.patch("sys.stdout", self.out).start()
+        mock.patch.object(setup, "yes", lambda q, d=False: d).start()  # every question takes its default
+        self.addCleanup(mock.patch.stopall)
+
+    def test_preflight_names_whats_missing(self):
+        with mock.patch.object(self.s.shutil, "which", lambda n: None if n == "npm" else "/bin/" + n):
+            self.s.preflight()
+        self.assertIn("npm is missing", self.out.getvalue())
+        self.assertIn("https://nodejs.org/", self.out.getvalue())
+        self.assertNotIn("git is missing", self.out.getvalue())
+
+    def test_cli_setup_installs_then_retests_after_login(self):
+        installed = []
+        which = lambda n: "/bin/npm" if n == "npm" else ("/bin/gemini" if installed else None)  # noqa: E731
+        with mock.patch.object(self.s.shutil, "which", which), \
+                mock.patch.object(self.s.subprocess, "run", side_effect=lambda *a, **k: installed.append(a[0])) as run, \
+                mock.patch.object(self.s.subprocess, "Popen") as popen, \
+                mock.patch.object(self.s, "agent_test", side_effect=[False, True]) as test:
+            self.assertTrue(self.s.cli_setup("gemini"))
+        self.assertEqual(run.call_args[0][0], ["/bin/npm", "i", "-g", "@google/gemini-cli"])
+        self.assertEqual(test.call_count, 2)
+        self.assertIn("Login with Google", self.out.getvalue())
+        self.assertEqual(popen.called, os.name == "nt")  # the login window is a Windows-only offer
+
+    def test_cli_setup_without_npm_points_at_node(self):
+        with mock.patch.object(self.s.shutil, "which", return_value=None), mock.patch.object(self.s.subprocess, "run") as run:
+            self.assertFalse(self.s.cli_setup("claude"))
+        run.assert_not_called()
+        self.assertIn("npm i -g @anthropic-ai/claude-code", self.out.getvalue())
+
+    def test_free_keys_skip_saved_and_declined_ones(self):
+        mock.patch.object(self.s, "yes", lambda q, d=False: "nvidia" not in q).start()
+        key = "sk-or-v1-" + "a" * 64
+        with mock.patch.object(self.s.koltuk, "has_key", lambda env: env == "GROQ_API_KEY"), \
+                mock.patch.object(self.s.anahtar, "ask", return_value=key) as ask, \
+                mock.patch.object(self.s.koltuk, "save_key") as save, mock.patch.object(self.s.koltuk, "add") as add:
+            api = self.s.free_keys_setup({"base_url": "", "model": "", "key_env": "PENTARCH_CHAT_KEY"})
+        ask.assert_called_once()
+        self.assertEqual(ask.call_args[0][0], "openrouter")
+        save.assert_called_once_with("OPENROUTER_API_KEY", key)
+        add.assert_called_once_with("openrouter", "openrouter", check=False)
+        self.assertEqual(api, {"base_url": "https://openrouter.ai/api/v1", "model": "google/gemma-4-31b-it:free",
+                               "key_env": "OPENROUTER_API_KEY"})
+
+    def test_free_keys_keep_an_existing_chat_api(self):
+        old = {"base_url": "http://a.test/v1", "model": "m", "key_env": "X"}
+        with mock.patch.object(self.s.koltuk, "has_key", return_value=False), \
+                mock.patch.object(self.s.anahtar, "ask", return_value="nvapi-" + "n" * 40), \
+                mock.patch.object(self.s.koltuk, "save_key"), mock.patch.object(self.s.koltuk, "add") as add:
+            self.assertEqual(self.s.free_keys_setup(dict(old)), old)
+        self.assertEqual(add.call_count, 3)
+
+    def test_pairing_claims_owner_and_start_runs_quiet(self):
+        import tg
+        state = {"chat_id": None, "offset": 0}
+        calls = []
+
+        def api(method, http_timeout=20, **params):
+            calls.append(method)
+            if method == "getMe":
+                return {"username": "my_bot"}
+            if method == "getUpdates":
+                return [{"update_id": 7, "message": {"chat": {"id": 1, "type": "group"}, "text": "/start 1234"}},
+                        {"update_id": 8, "message": {"chat": {"id": 42, "type": "private"}, "text": "/start 1234"}}]
+            return {}
+        with tempfile.TemporaryDirectory() as d:
+            token = Path(d) / "telegram.txt"
+            token.write_text("123:fake", encoding="utf-8")
+            with mock.patch.object(tg, "TOKEN_FILE", token), mock.patch.object(tg, "api", api), \
+                    mock.patch.object(tg, "load_state", return_value=state), mock.patch.object(tg, "save_state") as save, \
+                    mock.patch.object(tg, "pair_code", return_value="1234"), \
+                    mock.patch.object(self.s.webbrowser, "open") as web, \
+                    mock.patch.object(self.s.shutil, "which", return_value="/bin/claude"), \
+                    mock.patch.object(self.s.subprocess, "Popen") as popen:
+                self.assertTrue(self.s.pair_and_start("claude", "Bot"))
+        web.assert_called_once_with("https://t.me/my_bot?start=1234")
+        self.assertEqual(save.call_args[0][0], {"chat_id": 42, "offset": 9})  # the group message didn't claim it
+        self.assertEqual(calls, ["getMe", "getUpdates", "sendMessage"])
+        self.assertEqual(popen.call_args[0][0][-1], "--quiet")
+        self.assertIn("Paired", self.out.getvalue())
+
+    def test_no_start_offer_without_the_cli(self):
+        import tg
+        with mock.patch.object(tg, "TOKEN_FILE", Path("/nonexistent/telegram.txt")), \
+                mock.patch.object(self.s.shutil, "which", return_value=None), \
+                mock.patch.object(self.s.subprocess, "Popen") as popen:
+            self.assertFalse(self.s.pair_and_start("claude", "Bot"))
+        popen.assert_not_called()
