@@ -2,6 +2,7 @@
 
 ## Unreleased (platform-polish)
 
+- A recruiter reply in the mail check (rejection, interview, offer) now asks Yes/No to move the matching tracker row (idea from JobOps). Matched by code; nothing moves without a yes.
 - `nudges` reader: drafts a polite payment reminder per overdue receivable, to copy and send yourself (idea from Clawbolt).
 - Quick answers: `shortcut add <name> = receivables + shifts` makes one word that answers from your own files with no AI run (idea taken from Atticus' learned shortcuts, minus the learning).
 

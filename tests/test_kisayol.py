@@ -73,5 +73,29 @@ class KisayolTest(unittest.TestCase):
         self.assertEqual(kisayol.oku()[0]["adimlar"], ["tahsilat"])
 
 
+class YanitTest(unittest.TestCase):
+    ROWS = [{"id": "acme-dev", "company": "Acme Labs", "stage": "sent"},
+            {"id": "old", "company": "Globex", "stage": "closed"},
+            {"id": "x", "company": "Ab", "stage": "sent"}]
+
+    def test_rejection_interview_offer(self):
+        import yanit
+        o = yanit.oneriler(["HR <jobs@acmelabs.com> | Your application | Unfortunately we are not moving forward"], self.ROWS)
+        self.assertEqual(o, [("acme-dev", "Acme Labs", "closed")])
+        o = yanit.oneriler(["Acme Labs <hr@a.com> | Interview invitation | pick a time"], self.ROWS)
+        self.assertEqual(o[0][2], "process")
+        o = yanit.oneriler(["Acme Labs <hr@a.com> | We are pleased to offer you the role"], self.ROWS)
+        self.assertEqual(o[0][2], "decide")
+
+    def test_rejection_beats_interview_and_unrelated_mail_is_ignored(self):
+        import yanit
+        self.assertEqual(yanit.oneriler(["Acme Labs | interview | unfortunately no"], self.ROWS)[0][2], "closed")
+        self.assertEqual(yanit.oneriler(["Newsletter <n@x.com> | Weekly digest"], self.ROWS), [])
+
+    def test_closed_rows_and_tiny_names_never_match(self):
+        import yanit
+        self.assertEqual(yanit.oneriler(["Globex | unfortunately", "Ab | interview"], self.ROWS), [])
+
+
 if __name__ == "__main__":
     unittest.main()
