@@ -1,7 +1,7 @@
 """Upcoming deadlines and things left hanging: the morning brief builds its suggestion from this instead of waiting to be asked.
 
 No model, instant. Lists lines in the notes folder that mention a date in the next N days (2026-11-05, 5 Kasım,
-5 November, November 5), tasks whose time has passed, and pending replies older than 24 hours.
+5 November, November 5, 20 de novembro, 5. März, 05.11.2026, 5/11), tasks whose time has passed, and pending replies older than 24 hours.
     python -I hedef.py        # 7 days
     python -I hedef.py 14
 """
@@ -17,10 +17,22 @@ from config import HOME, NOTES, T  # noqa: E402
 AYLAR = ["ocak", "şubat", "mart", "nisan", "mayıs", "haziran", "temmuz", "ağustos", "eylül", "ekim", "kasım", "aralık"]
 MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october",
           "november", "december"]
-NAMES = "|".join(AYLAR + MONTHS + [m[:3] for m in MONTHS if len(m) > 3] + ["sept"])
+# Portuguese, Spanish, German and French full names: a freelancer writes "Pagar IVA até 20 de novembro"
+OTHER = {"janeiro": 1, "fevereiro": 2, "março": 3, "abril": 4, "maio": 5, "junho": 6, "julho": 7, "agosto": 8,
+         "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12,
+         "enero": 1, "febrero": 2, "marzo": 3, "mayo": 5, "junio": 6, "julio": 7, "septiembre": 9, "setiembre": 9,
+         "octubre": 10, "noviembre": 11, "diciembre": 12,
+         "januar": 1, "februar": 2, "märz": 3, "juni": 6, "juli": 7, "oktober": 10, "dezember": 12,
+         "janvier": 1, "février": 2, "mars": 3, "avril": 4, "mai": 5, "juin": 6, "juillet": 7, "août": 8,
+         "septembre": 9, "octobre": 10, "novembre": 11, "décembre": 12}
+NAMES = "|".join(sorted({*AYLAR, *MONTHS, *OTHER, *[m[:3] for m in MONTHS if len(m) > 3], "sept"}, key=len, reverse=True))
 ISO = re.compile(r"\b(20\d\d)-(\d\d)-(\d\d)\b")
-DAY_MONTH = re.compile(r"\b(\d{1,2}) (" + NAMES + r")\b\.?(?:'\w+)?", re.I)
+DAY_MONTH = re.compile(r"(?<![\w.])(\d{1,2})\.? (?:de )?(" + NAMES + r")\b\.?(?:'\w+)?", re.I)
 MONTH_DAY = re.compile(r"\b(" + NAMES + r")\.? (\d{1,2})(?:st|nd|rd|th)?\b", re.I)
+# Day first, as written in Turkey and Europe: 26.12.2026, 26/12/26, 26/12 and 26.12. ("10.30" alone is a time, so a
+# dotted date without a year needs the closing dot)
+WITH_YEAR = re.compile(r"(?<![\d./])(\d{1,2})([./])(\d{1,2})\2((?:20)?\d\d)(?![\d./]?\d)")
+NO_YEAR = re.compile(r"(?<![\d./])(\d{1,2})(?:/(\d{1,2})(?![\d/])|\.(\d{1,2})\.(?!\d))")
 SKIP = re.compile(r"^(updated|tarih|date|created):|^\s*\|?\s*20\d\d-\d\d-\d\d \d\d:\d\d")  # frontmatter, log tables
 
 
@@ -28,6 +40,8 @@ def month(name):
     name = name.lower()
     if name in AYLAR:
         return AYLAR.index(name) + 1
+    if name in OTHER:
+        return OTHER[name]
     return next(i + 1 for i, m in enumerate(MONTHS) if m.startswith(name[:3]))
 
 
@@ -43,6 +57,16 @@ def dates_in(line, today):
     for d, n in pairs:
         try:
             yield datetime(today.year, month(n), int(d)).date()
+        except ValueError:
+            pass
+    for d, _, m, y in WITH_YEAR.findall(line):
+        try:
+            yield datetime(int(y) + (2000 if len(y) == 2 else 0), int(m), int(d)).date()
+        except ValueError:
+            pass
+    for d, m1, m2 in NO_YEAR.findall(line):
+        try:
+            yield datetime(today.year, int(m1 or m2), int(d)).date()
         except ValueError:
             pass
 

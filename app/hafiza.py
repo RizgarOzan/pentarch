@@ -10,6 +10,7 @@ import hashlib
 import json
 import math
 import operator
+import os
 import re
 import sqlite3
 import urllib.request
@@ -26,7 +27,9 @@ DB = HOME / "hafiza.db"
 KONUSMA = HOME / "konusma.log"
 BECERILER = HOME / "beceriler"
 BUTCE = 2400  # characters, ~800 tokens; without skills the pointers are ~100-200 tokens
-OLLAMA, GOMME = "http://127.0.0.1:11434/api/embed", "bge-m3"  # local, multilingual; without Ollama search uses words only
+_HOST = os.environ.get("OLLAMA_HOST") or "127.0.0.1:11434"  # Ollama's own variable, so a moved Ollama is found too
+OLLAMA = (_HOST if "://" in _HOST else "http://" + _HOST).rstrip("/") + "/api/embed"
+GOMME = "bge-m3"  # local, multilingual; without Ollama search uses words only
 ESIK = 0.5  # semantic matches below this similarity are noise
 TAZE = timedelta(hours=3)  # the last 3 hours of conversation are already in the session; not fetched again
 DUR = set("bir bu şu ve ile için ama da de mi mı mu mü ne ki çok daha en gibi olan oldu var yok şey ben sen o biz siz onlar "

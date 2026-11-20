@@ -214,7 +214,8 @@ def panel_hizli_cevap_verir():
     threading.Thread(target=U.serve_panel, daemon=True).start()
     time.sleep(0.5)
     t0 = time.monotonic()
-    req = urllib.request.Request(f"http://127.0.0.1:{U.PANEL_PORT}/", headers={"Host": f"127.0.0.1:{U.PANEL_PORT}"})
+    req = urllib.request.Request(f"http://127.0.0.1:{U.PANEL_PORT}/", headers={"Host": f"127.0.0.1:{U.PANEL_PORT}",
+                                                                           "Cookie": f"pentarch={U.panel_token}"})
     with urllib.request.urlopen(req, timeout=5) as r:
         assert r.status == 200
     assert time.monotonic() - t0 < 2, f"panel yavaş: {time.monotonic() - t0:.1f} sn"

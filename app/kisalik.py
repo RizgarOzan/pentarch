@@ -4,6 +4,8 @@ Usage: python -I kisalik.py [hours=24] [limit=50]
 """
 import sys
 
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))  # python -I leaves the script's folder off the path
 from config import NAME, T
 from mesaj_denetim import mesajlar
 

@@ -17,7 +17,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 import agents  # noqa: E402
 import config  # noqa: E402
-from config import C, EXTRA_DIRS, HOME, NOTES, OWNER  # noqa: E402
+from config import C, EXTRA_DIRS, HOME, NOTES, OWNER, T  # noqa: E402
 
 RULES = HOME / "kurallar.md"
 WIKI = NOTES
@@ -89,6 +89,7 @@ class Beyin:
             self.log(f"beyin-ayar.json yazılamadı: {e!r}")
         if C["agent"]["permission_mode"] != "bypassPermissions":
             args += ["--allowedTools", config.allowed_tools(C["agent"]["allowed_tools"])]
+        args += ["--disallowedTools", config.denied_tools()]  # deny rules hold under bypassPermissions too
         if C["desktop_control"] and MASAUSTU.exists():
             args += ["--mcp-config", str(MASAUSTU)]
         if mcp := agents.mcp_dosyasi():
@@ -102,7 +103,7 @@ class Beyin:
         self.anahtar = secrets.token_hex(4)
         is_env = {"PENTARCH_IS": self.is_id, "PENTARCH_IS_ANAHTAR": self.anahtar} if self.is_id else {}
         self.proc = subprocess.Popen(self._args(), cwd=self.cwd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                     env={**os.environ, "CLAUDE_CODE_FORK_SUBAGENT": "0", **is_env},  # fork alt ajan bütün oturumu kopyalar
+                                     env=config.agent_env(CLAUDE_CODE_FORK_SUBAGENT="0", **is_env),  # fork alt ajan bütün oturumu kopyalar
                                      stderr=open(HOME / "beyin.err", "a", encoding="utf-8"), encoding="utf-8",
                                      errors="replace", creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         self.events = queue.Queue()
@@ -163,8 +164,11 @@ class Beyin:
 
     def _kill(self):
         if self._alive():  # claude.CMD -> cmd.exe -> node: yalnız cmd ölürse node yetim kalıp çalışıyordu (2026-11-03)
-            subprocess.run(["taskkill", "/T", "/F", "/PID", str(self.proc.pid)], capture_output=True,
-                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            if os.name == "nt":
+                subprocess.run(["taskkill", "/T", "/F", "/PID", str(self.proc.pid)], capture_output=True,
+                               creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            else:
+                self.proc.kill()
             self.kayip = not self.summary
         self.proc = None
 
@@ -243,8 +247,11 @@ class Kucuk(Beyin):
                                                {"role": "user", "content": text}], timeout=timeout), "total_cost_usd": 0}
             except Exception as e:
                 self.log(f"küçük: API sağlayıcıları düştü, CLI'ye geçiliyor ({str(e)[:200]})")
+        if agents.CLI == "opencode":  # no tool-free mode there; outside text must not reach a run with tools
+            return {"result": T("(opencode'da araçsız çalışma yok)", "(opencode has no tool-free mode)"), "is_error": True}
         if agents.CLI != "claude":
-            return agents.run_other(self.sistem + "\n\n" + text, C["agent"]["light_model"] or None, timeout)
+            return agents.run_other(self.sistem + "\n\n" + text, C["agent"]["light_model"] or None, timeout,
+                                    cwd=HOME, salt_okur=True)
         with self.lock:
             if self._alive() and self.turns >= self.TUR:
                 self._kill()
@@ -268,7 +275,7 @@ class Tek:
                 text = self.ilk() + "\n\n" + text
             if ek:
                 text += ek(self.gorulen)
-            out = agents.run_other(text, self.model, timeout)
+            out = agents.run_other(text, self.model, timeout, kind="telegram")
             self.turns += 1
             return out
 
