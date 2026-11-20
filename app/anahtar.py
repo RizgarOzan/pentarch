@@ -4,7 +4,9 @@ then a format check and a free test call. Used by setup.py and koltuk.py; the ca
     key = anahtar.ask("groq", t, yes, secret)   # "" = skipped
 """
 import json
+import os
 import re
+import sys
 import urllib.error
 import urllib.request
 import webbrowser
@@ -75,7 +77,8 @@ GUIDES = {
         "free": ("Ücretsiz.", "Free."),
         "signup": "https://telegram.org/apps",
         "keys": "https://t.me/BotFather",
-        "steps": (("Telefonunda ya da bilgisayarında Telegram yoksa kur ve giriş yap.", "Install Telegram on your phone or computer if you don't have it, and sign in."),
+        "steps": (("Bu bilgisayarda https://web.telegram.org adresini aç ve telefonundaki Telegram ile giriş yap; token'ı telefondan bilgisayara taşımakla uğraşmazsın.",
+                   "On this computer open https://web.telegram.org and sign in with Telegram on your phone, so the token doesn't have to travel from phone to laptop."),
                   ("BotFather bağlantısını aç (resmî bot, mavi tikli), Start'a bas.", "Open the BotFather link (the official bot, blue tick) and press Start."),
                   ("/newbot gönder; önce bir görünen ad, sonra 'bot' ile biten bir kullanıcı adı yaz.",
                    "Send /newbot, then a display name, then a username that ends in 'bot'."),
@@ -105,6 +108,11 @@ GUIDES = {
 }
 
 
+def ekran():
+    """False on a Linux box with no desktop (SSH, server): a browser would open as text inside the terminal."""
+    return not sys.platform.startswith("linux") or bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
+
+
 def show(name, t, yes):
     """Prints what the service is and the numbered steps, then offers to open the page in the browser."""
     g = GUIDES.get(name)
@@ -118,7 +126,7 @@ def show(name, t, yes):
     for i, step in enumerate(g["steps"], 1):
         print(f"    {i}. {t(*step)}")
     page = g["keys"] or g["signup"]
-    if yes(t("  Sayfa tarayıcıda açılsın mı?", "  Open the page in your browser?"), True):
+    if ekran() and yes(t("  Sayfa tarayıcıda açılsın mı?", "  Open the page in your browser?"), True):
         try:
             if not webbrowser.open(page):
                 raise OSError

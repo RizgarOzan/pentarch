@@ -8,6 +8,8 @@ import sys
 from collections import Counter
 from datetime import datetime, timedelta
 
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))  # python -I leaves the script's folder off the path
 from config import NAME, T
 from tg import LOG_FILE
 

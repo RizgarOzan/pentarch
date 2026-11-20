@@ -17,6 +17,8 @@ import sys
 from datetime import date, datetime
 from pathlib import Path
 
+from config import T
+
 LINK = re.compile(r"\[\[([^\]|#^\\]+)")
 CODE = re.compile(r"```.*?```|`[^`\n]*`", re.DOTALL)
 FIELDS = ("type", "domain", "tags", "updated")
@@ -222,13 +224,16 @@ def yeniden(folder, new=None):
     count_src = sum(1 for p in wroot.rglob("*.md") if "raw" not in p.relative_to(wroot).parts)
     count_dst = sum(len(v) for v in moved.values())
     after = tara(dst)
-    lines = [f"# Yeniden kurulum raporu ({date.today().isoformat()})", "", f"Kaynak: {src} (dokunulmadı)", "",
-             f"Sayfa: {count_src} → {count_dst}" + ("" if count_src == count_dst else "  ⚠ EKSİK VAR, geçme"), "",
-             "## Nereye gitti", ""] + [f"- **{k}**: {len(v)}" for k, v in sorted(moved.items())]
+    lines = [T(f"# Yeniden kurulum raporu ({date.today().isoformat()})", f"# Rebuild report ({date.today().isoformat()})"), "",
+             T(f"Kaynak: {src} (dokunulmadı)", f"Source: {src} (untouched)"), "",
+             T(f"Sayfa: {count_src} → {count_dst}", f"Pages: {count_src} → {count_dst}")
+             + ("" if count_src == count_dst else T("  ⚠ EKSİK VAR, geçme", "  ⚠ PAGES MISSING, do not switch")), "",
+             T("## Nereye gitti", "## Where they went"), ""] + [f"- **{k}**: {len(v)}" for k, v in sorted(moved.items())]
     if clash:
-        lines += ["", "## Aynı adlı sayfalar (ikisi de tutuldu, birleştirmeye karar ver)", ""] + [f"- {c}" for c in clash]
-    lines += ["", "## Bulgular: önce → sonra", "", "```", ozet(before), "---", ozet(after), "```", "",
-              "Geçmek için eski klasörü yedekleyip yenisini onun yerine koy. Bunu Pentarch kendisi yapmaz."]
+        lines += ["", T("## Aynı adlı sayfalar (ikisi de tutuldu, birleştirmeye karar ver)", "## Pages with the same name (both kept, you decide how to merge)"), ""] + [f"- {c}" for c in clash]
+    lines += ["", T("## Bulgular: önce → sonra", "## Findings: before → after"), "", "```", ozet(before), "---", ozet(after), "```", "",
+              T("Geçmek için eski klasörü yedekleyip yenisini onun yerine koy. Bunu Pentarch kendisi yapmaz.",
+                "To switch, back up the old folder and put the new one in its place. Pentarch never does this itself.")]
     (dst / "RAPOR.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     return dst / "RAPOR.md"
 

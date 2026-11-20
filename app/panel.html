@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="dark">
+<meta name="color-scheme" content="dark light">
 <title>{{NAME}}</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230a0708'/%3E%3Cpath d='M16 4l11.4 8.3-4.4 13.4H9L4.6 12.3z' fill='none' stroke='%23e5555f' stroke-width='2'/%3E%3Ccircle cx='16' cy='16.5' r='3.2' fill='%23e5555f'/%3E%3C/svg%3E">
 <style>
@@ -17,7 +17,7 @@
   @font-face { font-family: "Major Mono Display"; font-weight: 400; font-display: swap; src: url(/fonts/MajorMonoDisplay-400-latin.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+2000-206F, U+20AC, U+2122, U+2212; }
 
   :root {
-    --bg: #0a0708; --s1: #110c0d; --s2: #1a1214; --line: #2a1c1e; --line-hi: #46292d;
+    --bg: #0a0708; --s1: #110c0d; --s2: #1a1214; --line: #2a1c1e; --line-hi: #46292d; --ctl: #7f5f63;
     --red: #e5555f; --red-dim: rgba(229, 85, 95, .14); --amber: #e6ad60; --amber-dim: rgba(230, 173, 96, .08); --ice: #a3cedd; --ok: #80c78c;
     --text: #eee4e5; --text-2: #c4b2b5; --muted: #9c888b;
     --display: "Big Shoulders Display", Bahnschrift, sans-serif;
@@ -32,12 +32,19 @@
   button { font: inherit; color: inherit; cursor: pointer; }
   button:disabled { cursor: default; opacity: .45; }
   :focus-visible { outline: 2px solid var(--red); outline-offset: 2px; }
+  @media (prefers-color-scheme: light) {  /* follows the system; same reds, darkened enough to read on light paper */
+    :root { --bg: #faf6f5; --s1: #f3ecea; --s2: #ebe1df; --line: #dccdca; --line-hi: #c3a9a5; --ctl: #806064;
+      --red: #b8293a; --red-dim: rgba(184, 41, 58, .10); --amber: #8f5806; --amber-dim: rgba(143, 88, 6, .08); --ice: #2b6a80; --ok: #2c7a38;
+      --text: #1d1415; --text-2: #46373a; --muted: #67575a; }
+  }
+  .atla { position: absolute; left: 8px; top: -60px; z-index: 60; padding: 8px 12px; background: var(--s2); color: var(--text); border: 1px solid var(--red); }
+  .atla:focus { top: 8px; }
   .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   svg.i { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
 
   /* üst şerit: yalnız kimlik, durum, saat */
   header { display: flex; align-items: center; gap: 16px; height: 60px; padding: 0 20px 0 24px; border-bottom: 1px solid var(--line); }
-  .mark { font: 22px/1 var(--mark); color: var(--red); letter-spacing: .04em; text-transform: lowercase; }
+  .mark { margin: 0; font: 22px/1 var(--mark); color: var(--red); letter-spacing: .04em; text-transform: lowercase; }
   #durum { display: flex; align-items: center; gap: 8px; min-width: 0; font: 12px var(--mono); color: var(--text-2); }
   #durumyazi { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
@@ -49,7 +56,7 @@
   #saat { font: 700 24px/1 var(--display); letter-spacing: .04em; font-variant-numeric: tabular-nums; }
   #saat small { font-size: 15px; color: var(--muted); font-weight: 500; margin-left: 1px; }
   #tarih { font: 11px/1 var(--mono); color: var(--muted); margin-top: 4px; }
-  .ikon { width: 38px; height: 38px; display: grid; place-items: center; border: 1px solid var(--line-hi); border-radius: 8px;
+  .ikon { width: 38px; height: 38px; display: grid; place-items: center; border: 1px solid var(--ctl); border-radius: 8px;
           background: none; color: var(--text-2); flex: none; transition: border-color .15s, color .15s, background .15s; }
   .ikon:hover { border-color: var(--red); color: var(--text); }
 
@@ -86,11 +93,11 @@
   .alt { padding: 0 28px 14px; }
   #secenekler { display: flex; gap: 8px; flex-wrap: wrap; max-width: 740px; margin: 0 auto; }
   #secenekler:not(:empty) { padding-bottom: 10px; }
-  .opt { border: 1px solid var(--line-hi); border-radius: 8px; background: var(--s1); color: var(--text); padding: 7px 14px; font-size: 13.5px; }
+  .opt { border: 1px solid var(--ctl); border-radius: 8px; background: var(--s1); color: var(--text); padding: 7px 14px; font-size: 13.5px; }
   .opt:hover:not(:disabled) { border-color: var(--red); background: var(--red-dim); }
 
   form { display: flex; gap: 6px; align-items: flex-end; max-width: 740px; margin: 0 auto; padding: 7px 7px 7px 16px;
-         border: 1px solid var(--line-hi); border-radius: 12px; background: var(--s2); transition: border-color .15s, box-shadow .15s; }
+         border: 1px solid var(--ctl); border-radius: 12px; background: var(--s2); transition: border-color .15s, box-shadow .15s; }
   form:focus-within { border-color: var(--red); box-shadow: 0 0 0 3px var(--red-dim); }
   #mesaj { flex: 1; align-self: center; background: none; border: 0; outline: 0; color: var(--text); font: 15px/22px var(--read); caret-color: var(--red);
            resize: none; height: 22px; max-height: 198px; overflow-y: auto; padding: 0; }
@@ -112,7 +119,7 @@
   .stage { position: relative; height: 204px; }
   canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
   .kontrol { display: flex; flex-wrap: wrap; gap: 8px; }
-  .btn { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 12px; border: 1px solid var(--line-hi); border-radius: 8px;
+  .btn { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 12px; border: 1px solid var(--ctl); border-radius: 8px;
          background: none; color: var(--text-2); font-size: 13px; transition: border-color .15s, color .15s, background .15s; }
   .btn:hover:not(:disabled) { border-color: var(--red); color: var(--text); }
   .btn.warn { border-color: rgba(230, 173, 96, .55); color: var(--amber); background: var(--amber-dim); }
@@ -194,13 +201,15 @@
   .ayar { display: grid; grid-template-columns: 1fr auto; gap: 3px 14px; align-items: center; padding: 11px 0; border-bottom: 1px solid var(--line); }
   .ayar > b { font-weight: 600; font-size: 14px; }
   .ayar > span { grid-column: 1 / -1; color: var(--muted); font-size: 12.5px; }
-  .ayar input, .ayar select { background: var(--bg); border: 1px solid var(--line-hi); border-radius: 6px; color: var(--text); font: 13px var(--mono); padding: 6px 8px; width: 112px; }
+  .ayar input, .ayar select { background: var(--bg); border: 1px solid var(--ctl); border-radius: 6px; color: var(--text); font: 13px var(--mono); padding: 6px 8px; width: 112px; }
   .ayar input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--red); }
   .ayar input[type=time] { width: 92px; }
   .ayar .aralik { display: flex; align-items: center; gap: 6px; color: var(--muted); }
   .isler { display: flex; flex-wrap: wrap; gap: 6px 16px; grid-column: 1 / -1; padding-top: 6px; }
   .isler label { font: 12.5px var(--mono); cursor: pointer; display: flex; gap: 6px; align-items: center; color: var(--text-2); }
   .isler input { width: 16px !important; height: 16px; }
+  .isler { flex-direction: column; }
+  .isler small { font: 12.5px system-ui, sans-serif; opacity: .8; }
   #ayardurum { position: sticky; bottom: 0; padding: 12px 20px 16px; min-height: 3em; background: var(--s1); color: var(--muted); font: 12px var(--mono); }
   #ayardurum.hata { color: var(--amber); }
 
@@ -225,9 +234,10 @@
 </style>
 </head>
 <body>
+<a class="atla" href="#mesaj" data-t="skip"></a>
 
 <header>
-  <span class="mark" id="mark">{{NAME}}</span>
+  <h1 class="mark" id="mark">{{NAME}}</h1>
   <span id="durum" role="status"><span class="dot" id="nokta"></span><span id="durumyazi"></span></span>
   <span class="spacer"></span>
   <div class="zaman"><div id="saat">--:--</div><div id="tarih"></div></div>
@@ -237,15 +247,17 @@
 
 <main>
   <section class="chat" id="sohbetalan">
-    <div id="kscroll"><div id="konusma" aria-live="polite"></div></div>
+    <h2 class="sr" id="sohbetbaslik"></h2>
+    <div id="kscroll"><div id="konusma" role="log" aria-live="off" aria-relevant="additions"></div></div>
     <div class="alt">
       <div id="secenekler"></div>
       <form id="form">
         <textarea id="mesaj" rows="1" autofocus></textarea>
-        <button type="button" class="ikon" id="mik"><svg class="i" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
+        <button type="button" class="ikon" id="mik" aria-pressed="false"><svg class="i" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
         <button type="submit" class="ikon" id="gonder"><svg class="i" viewBox="0 0 24 24"><path d="M4 20.5 21 12 4 3.5v6.4l11 2.1-11 2.1z"/></svg></button>
       </form>
       <div class="ipucu"><span id="ipucu"></span><span id="say"></span></div>
+      <p class="sr" id="duyuru" role="status"></p>
     </div>
   </section>
 
@@ -259,7 +271,7 @@
       </div>
       <button type="button" class="btn" id="beyin"></button>
     </section>
-    <section class="blok" id="onaykutu" hidden><h2><span data-t="approvals"></span><small id="hak"></small></h2><div id="onaylar"></div></section>
+    <section class="blok" id="onaykutu" role="region" aria-live="polite" hidden><h2><span data-t="approvals"></span><small id="hak"></small></h2><div id="onaylar"></div></section>
     <section class="blok" id="sorkutu" hidden><h2 data-t="duties"></h2><div id="sorumluluklar"></div></section>
     <section class="blok"><h2><span data-t="reminders"></span><small id="remsay"></small></h2><div id="hatirlatmalar"></div></section>
     <section class="blok"><h2 data-t="jobs"></h2><div class="tabs" id="sekmeler"></div><div id="aktif"></div></section>
@@ -285,21 +297,22 @@ const T = {
     connecting: "bağlanıyor", ready: "hazır", thinking: "düşünüyor", min: "dk", queued: n => `${n} sırada`,
     offline: "bağlantı yok", restarting: "yeniden başlıyor",
     chat: "Sohbet", status: "Durum", settings: "Ayarlar", board: "Başvuru panosu", close: "Kapat (Esc)",
-    placeholder: `${NAME} ile konuş…`, mic: "Sesli yaz (Ctrl+M)", send: "Gönder (Enter)",
+    placeholder: `${NAME} ile konuş…`, mic: "Sesli yaz (Ctrl+M)", send: "Gönder (Enter)", sendFailed: "Gönderilemedi, tekrar dene",
+    choices: n => `aşağıda ${n} seçenek var`, decided: (id, e) => `#${id} ${e ? "onaylandı" : "reddedildi"}`,
     hint: "<kbd>Enter</kbd> gönderir · <kbd>Shift+Enter</kbd> yeni satır · <kbd>Ctrl+M</kbd> ses", chars: "karakter",
     recording: "kayıt sürüyor, bitirmek için tekrar bas", transcribing: "yazıya çevriliyor…", noMic: "mikrofon yok",
     sttFail: "çevrilemedi", sttEmpty: "ses anlaşılmadı",
-    noChat: "Henüz konuşma yok.", more: "devamı ▾", less: "kısalt ▴", deliberating: `${NAME} düşünüyor`,
-    duties: "Sorumluluklar", dutyNext: "sonraki bakış", dutyDone: "bitti", dutyPaused: "duraklatıldı",
-    approvals: "Onay bekliyor", left: n => `bugün ${n} öneri hakkı kaldı`, yes: "Evet", no: "Hayır",
+    noChat: "Henüz konuşma yok.", more: "devamı <span aria-hidden=\"true\">▾</span>", less: "kısalt <span aria-hidden=\"true\">▴</span>", deliberating: `${NAME} düşünüyor`,
+    duties: "Sorumluluklar ve rutinler", dutyNext: "sonraki bakış", dutyDone: "bitti", dutyPaused: "duraklatıldı", routine: "rutin",
+    skip: "Mesaj kutusuna geç", approvals: "Onay bekliyor", left: n => `bugün ${n} öneri hakkı kaldı`, yes: "Evet", no: "Hayır",
     reminders: "Geri sayım", waiting: n => `${n} bekliyor`, noRem: "Bekleyen hatırlatma yok", hourly: n => `saatlik · ${n} kez kaldı`, day: "g",
-    jobs: "İş panosu", tabs: {calisiyor: "çalışıyor", bekliyor: "bekliyor", bitti: "bitti", hata: "hata"},
+    jobs: "Yapılan işler", tabs: {calisiyor: "çalışıyor", bekliyor: "bekliyor", bitti: "bitti", hata: "hata"},
     noErr: "Son 24 saatte hata yok", none: "Boş", plan: "Gün planı",
     system: "Sistem", down: "kesik", scanning: "sistem taranıyor", spent: "bugün harcanan", runs: n => `${n} koşu`,
     net: "internet bugün", netLeft: k => `ay sonuna ${k} GB`, netOver: "bütçe aşıldı", netOver2: "bütçenin iki katı",
     netOpen: "İnternet serbest", netLimited: "İnternet sınırlı",
     netTip: "Sınırlıyken ağır rutinler seyrekleşir, büyük indirme yapılmaz. Değiştirmek için bas.",
-    pause: "Koşuları durdur", paused: t => `Sürdür · ${t}'e dek durdu`, pauseTip: "Otomatik koşular, görevler ve bildirimler 2 saat durur",
+    pause: "Otomatik işleri durdur", paused: t => `Sürdür · ${t}'e dek durdu`, pauseTip: "Otomatik işler, görevler ve bildirimler 2 saat durur",
     brain: "Beyin", oneShot: "tek seferlik", deepOff: "derin kapalı", deepAlways: "hep derin", deepAuto: "zorda derin",
     events: "Olay günlüğü", council: "Konsey", saved: k => `kaydedildi: ${k}`, notSaved: e => `kaydedilmedi: ${e}`,
     opt: {otomatik: "otomatik", hep: "hep", kapali: "kapalı"},
@@ -308,13 +321,14 @@ const T = {
     connecting: "connecting", ready: "ready", thinking: "thinking", min: "min", queued: n => `${n} queued`,
     offline: "offline", restarting: "restarting",
     chat: "Chat", status: "Status", settings: "Settings", board: "Application board", close: "Close (Esc)",
-    placeholder: `Message ${NAME}…`, mic: "Dictate (Ctrl+M)", send: "Send (Enter)",
+    placeholder: `Message ${NAME}…`, mic: "Dictate (Ctrl+M)", send: "Send (Enter)", sendFailed: "Not sent, try again",
+    choices: n => `${n} choices below`, decided: (id, e) => `#${id} ${e ? "approved" : "declined"}`,
     hint: "<kbd>Enter</kbd> sends · <kbd>Shift+Enter</kbd> new line · <kbd>Ctrl+M</kbd> voice", chars: "characters",
     recording: "recording, press again to stop", transcribing: "transcribing…", noMic: "no microphone",
     sttFail: "could not transcribe", sttEmpty: "couldn't make that out",
-    noChat: "No conversation yet.", more: "show more ▾", less: "show less ▴", deliberating: `${NAME} is thinking`,
-    duties: "Responsibilities", dutyNext: "next look", dutyDone: "done", dutyPaused: "paused",
-    approvals: "Needs approval", left: n => `${n} suggestions left today`, yes: "Yes", no: "No",
+    noChat: "No conversation yet.", more: "show more <span aria-hidden=\"true\">▾</span>", less: "show less <span aria-hidden=\"true\">▴</span>", deliberating: `${NAME} is thinking`,
+    duties: "Responsibilities and routines", dutyNext: "next look", dutyDone: "done", dutyPaused: "paused", routine: "routine",
+    skip: "Skip to the message box", approvals: "Needs approval", left: n => `${n} suggestions left today`, yes: "Yes", no: "No",
     reminders: "Countdown", waiting: n => `${n} pending`, noRem: "No pending reminders", hourly: n => `hourly · ${n} left`, day: "d",
     jobs: "Job board", tabs: {calisiyor: "running", bekliyor: "queued", bitti: "done", hata: "errors"},
     noErr: "No errors in the last 24 hours", none: "Empty", plan: "Day plan",
@@ -343,14 +357,25 @@ let D = null, thinking = false, seen = 0, health = [], surum = "", ad = NAME, sa
 
 // sabit yazılar dile göre bir kez yerleşir
 document.querySelectorAll("[data-t]").forEach(el => el.textContent = T[el.dataset.t]);
-$("mesaj").placeholder = T.placeholder; $("ipucu").innerHTML = T.hint; $("durumyazi").textContent = T.connecting;
+$("mesaj").placeholder = T.placeholder; $("mesaj").setAttribute("aria-label", T.placeholder); $("sohbetbaslik").textContent = T.chat; $("ipucu").innerHTML = T.hint; $("durumyazi").textContent = T.connecting;
 [["panoac", T.board], ["ayarac", T.settings], ["mik", T.mic], ["gonder", T.send], ["ayarkapa", T.close]].forEach(([id, s]) => { $(id).title = s; $(id).setAttribute("aria-label", s); });
 $("durdur").title = T.pauseTip; $("internet").title = T.netTip;
 $("sohbetalan").setAttribute("aria-label", T.chat); $("durumalan").setAttribute("aria-label", T.status);
 
 // yalnız değişen bölüm yeniden çizilir
 const onbellek = new Map();
-function koy(id, html) { if (onbellek.get(id) !== html) { onbellek.set(id, html); $(id).innerHTML = html; return true; } }
+function koy(id, html) {
+  if (onbellek.get(id) === html) return;
+  onbellek.set(id, html);
+  // innerHTML odaktaki düğmeyi siler; ekran okuyucu sayfanın başına düşmesin diye aynı düğmeye ya da mesaj kutusuna dön
+  const el = $(id), a = document.activeElement, at = el.contains(a) && [...a.attributes].find(x => x.name.startsWith("data-"));
+  const odak = el.contains(a);
+  el.innerHTML = html;
+  if (odak) (at && el.querySelector(`[${at.name}="${CSS.escape(at.value)}"]`) || $("mesaj")).focus();
+  return true;
+}
+// görünen ipucu satırı + ekran okuyucuya tek seferlik duyuru (karakter sayacı duyurulmaz)
+function bildir(s) { $("say").textContent = s; $("duyuru").textContent = s; }
 
 async function post(yol, veri) {
   const r = await fetch(yol, {method: "POST", headers: {"X-Pentarch": TOKEN, "Content-Type": "application/json"}, body: JSON.stringify(veri)});
@@ -391,7 +416,8 @@ $("sekmeler").addEventListener("click", e => { const b = e.target.closest("[data
 $("onaylar").addEventListener("click", async e => {
   const b = e.target.closest("[data-onay]"); if (!b) return;
   b.parentElement.querySelectorAll("button").forEach(x => x.disabled = true);
-  await post("/api/onay", {id: +b.dataset.onay, evet: !!b.dataset.evet});
+  const r = await post("/api/onay", {id: +b.dataset.onay, evet: !!b.dataset.evet});
+  bildir(r.ok ? T.decided(b.dataset.onay, !!b.dataset.evet) : T.sendFailed);
 });
 
 /* --- ayarlar: gruplu; her değişiklik tek tek kaydedilir. [ad tr, not tr, ad en, not en, seçenekler] --- */
@@ -408,16 +434,36 @@ const AYAR = [
     sessiz: ["Sessiz saatler", "bu aralıkta haberler sabaha birikir", "Quiet hours", "updates in this window wait until morning"],
     kelime_siniri: ["Kelime sınırı", "otomatik haberlerin üst sınırı", "Word limit", "upper limit for automatic updates"],
   }],
-  [["Bütçe ve inisiyatif", "Budget and initiative"], {
+  [["Bütçe ve öneriler", "Budget and initiative"], {
     otomatik_gunluk_usd: ["Rutin bütçesi $/gün", "kalp, sabah, gece turları", "Routine budget $/day", "heartbeat, morning and night rounds"],
     gorev_gunluk_usd: ["Görev bütçesi $/gün", "kuyruktaki işler", "Task budget $/day", "queued jobs"],
     inisiyatif_gunluk: ["Günlük öneri hakkı", "asistanın kendiliğinden önerebileceği iş sayısı; 0 kapatır", "Daily suggestions", "how many jobs the assistant may propose on its own; 0 turns it off"],
   }],
   [["Rutinler", "Routines"], {
-    kapali_isler: ["Kapalı işler", "işaretli rutinler çalışmaz", "Disabled routines", "checked routines don't run"],
+    kapali_isler: ["Çalışmasın", "işaretlediğin rutinler çalışmaz", "Disabled routines", "checked routines don't run"],
   }],
 ];
-const DI = EN ? 1 : 0, AYAR_AD = Object.assign({}, ...AYAR.map(([, g]) => g));
+const IS_AD = {  // what each routine code does, for the "Disabled routines" list
+  yoklama: ["cevap beklediğin mesajları takip eder (2 saatte bir)", "follows up messages awaiting a reply (every 2 h)"],
+  kalp: ["kontrol listesine bakar (saatte bir)", "checks your checklist (hourly)"],
+  sabah: ["sabah özeti (09:00)", "morning brief (09:00)"],
+  aksam: ["akşam özeti (23:00)", "evening summary (23:00)"],
+  posta: ["gelen postaya bakar (6 saatte bir)", "checks incoming mail (every 6 h)"],
+  hafiza: ["günü hafızaya işler (00:40)", "files the day into memory (00:40)"],
+  pr: ["GitHub PR'larını izler", "watches your GitHub PRs"],
+  insa: ["gece kendini geliştirme görevi (02:00)", "nightly self-improvement task (02:00)"],
+  pano: ["iş ilanlarını tarar, panoyu yeniler (08:30)", "scans job postings, refreshes the board (08:30)"],
+  taslak: ["başvuru paketlerini hazırlar (08:45)", "prepares application packages (08:45)"],
+  guncelle: ["gece otomatik güncelleme (05:10)", "nightly auto-update (05:10)"],
+  haber: ["alanındaki haberler (Pzt/Çar/Cum 13:00)", "news in your field (Mon/Wed/Fri 13:00)"],
+  retro: ["haftalık değerlendirme (Pazar 23:30)", "weekly retro (Sunday 23:30)"],
+  gom: ["notlarını arama için dizinler (03:30)", "indexes your notes for search (03:30)"],
+  wiki: ["wiki'yi düzenli tutar (04:10)", "keeps the wiki tidy (04:10)"],
+  wiki_yedek: ["wiki yedeği (04:40)", "wiki backup (04:40)"],
+  gelisim: ["günün hatalarından düzeltme önerir (03:50)", "proposes fixes from the day's errors (03:50)"],
+  kesif: ["haftalık yeni araç/fikir keşfi (Perşembe 14:00)", "weekly look for new tools and ideas (Thu 14:00)"],
+};
+const DI = EN ? 1 : 0, AYAR_AD =Object.assign({}, ...AYAR.map(([, g]) => g));
 function ayarCiz() {
   const A = D.ayarlar || {};
   $("ayaralan").innerHTML = AYAR.map(([baslik, grup]) => `<h3>${baslik[DI]}</h3>` + Object.entries(grup).map(([k, d]) => {
@@ -426,11 +472,12 @@ function ayarCiz() {
     let alan;
     if (sec) alan = `<select ${al}>${sec.map(o => `<option value="${o}" ${o === v ? "selected" : ""}>${esc(T.opt[o] || o)}</option>`).join("")}</select>`;
     else if (typeof v === "boolean") alan = `<input type="checkbox" ${al} ${v ? "checked" : ""}>`;
-    else if (k === "sessiz") alan = `<div class="aralik"><input type="time" ${al} value="${esc(v[0])}">–<input type="time" ${al} value="${esc(v[1])}"></div>`;
+    else if (k === "sessiz") alan = `<div class="aralik">${[0, 1].map(i => `<input type="time" data-k="${k}" aria-label="${esc(isim)}: ${
+      [EN ? "start" : "başlangıç", EN ? "end" : "bitiş"][i]}" value="${esc(v[i])}">`).join("–")}</div>`;
     else if (k === "kapali_isler") alan = "";
     else alan = `<input type="number" min="0" step="${Number.isInteger(v) ? 1 : 0.5}" ${al} value="${esc(v)}">`;
     const isler = k === "kapali_isler" ? `<div class="isler">${(D.isler || []).map(j =>
-      `<label><input type="checkbox" data-k="kapali_isler" value="${esc(j)}" ${v.includes(j) ? "checked" : ""}>${esc(j)}</label>`).join("")}</div>` : "";
+      `<label><input type="checkbox" data-k="kapali_isler" value="${esc(j)}" ${v.includes(j) ? "checked" : ""}>${esc(j)}${IS_AD[j] ? ` <small>${IS_AD[j][DI]}</small>` : ""}</label>`).join("")}</div>` : "";
     return `<div class="ayar"><b>${isim}</b>${alan}${not ? `<span>${not}</span>` : ""}${isler}</div>`;
   }).join("")).join("");
 }
@@ -449,11 +496,12 @@ $("ayaralan").addEventListener("change", async e => {
 let ayarDonus = null;
 function ayarAc() {
   if (!D) return; ayarDonus = document.activeElement; ayarCiz(); $("ayardurum").textContent = "";
-  $("ayarlar").classList.add("acik"); $("perde").classList.add("acik"); $("ayarkapa").focus();
+  $("ayarlar").classList.add("acik"); $("perde").classList.add("acik"); arka(true); $("ayarkapa").focus();
 }
+function arka(kapali) { for (const s of ["header", "main", "#mnav"]) document.querySelector(s).inert = kapali; }  // Tab çekmeceden çıkmasın
 function ayarKapa() {
   if (!$("ayarlar").classList.contains("acik")) return;
-  $("ayarlar").classList.remove("acik"); $("perde").classList.remove("acik"); ayarDonus?.focus();
+  $("ayarlar").classList.remove("acik"); $("perde").classList.remove("acik"); arka(false); ayarDonus?.focus();
 }
 $("ayarac").onclick = ayarAc; $("beyin").onclick = ayarAc;
 $("ayarkapa").onclick = ayarKapa; $("perde").onclick = ayarKapa;
@@ -470,7 +518,15 @@ function kim(s) {
 const acik = new Set();  // açılmış uzun mesajlar
 const uzun = (m, i, n) => i < n - 1 && clean(m[3]).length > 420 && !acik.has(m[1] + m[2]);
 let dugum = new Map();  // günlük satırı -> {h, el}: ekrandaki mesaj düğümleri
+function katla(el, k, u, uz) {
+  el.querySelector(".body").classList.toggle("kisa", u);
+  let b = el.querySelector(".ac");
+  if (!(u || acik.has(k) && uz)) return b?.remove();
+  if (!b) { b = Object.assign(document.createElement("button"), {type: "button", className: "ac"}); b.dataset.k = k; el.append(b); }
+  b.setAttribute("aria-expanded", !u); b.textContent = u ? T.more : T.less;
+}
 const yaziyor = Object.assign(document.createElement("div"), {className: "msg typing"});
+yaziyor.setAttribute("aria-hidden", "true");  // "düşünüyor" zaten durum satırında okunuyor
 function sohbet() {
   const box = $("kscroll"), stick = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
   const lines = (D.konusma || []).map(l => l.match(/^(\S+ \S+) \| ([^:]+): (.*)$/)).filter(Boolean);
@@ -489,21 +545,26 @@ function sohbet() {
       if (sm && sm[1].includes("|")) { opts = sm[1].split(/\s*\|\s*/).filter(Boolean); last[3] = last[3].replace(/\s*\/?\s*(?:Seçenekler|Options):.*$/, ""); }
     }
   }
-  lines.forEach(m => { m[3] = m[3].replace(/\s*\[\[[^\]]+\]\]\s*$/, ""); });
+  // şık metni cevaplandıktan sonra da gizli kalsın: metin değişirse mesaj yeniden çizilir ve ekran okuyucu baştan okur
+  lines.forEach(m => {
+    m[3] = m[3].replace(/\s*\[\[[^\]]+\]\]\s*$/, "");
+    if (kim(m[2]) === "bot") m[3] = m[3].replace(/\s\[[^\[\]]*[|\/][^\[\]]*\]\s*$/, "").replace(/\s*\/?\s*(?:Seçenekler|Options):[^\/]*\|[^\/]*$/, "");
+  });
   if (opts.length) last[3] = last[3].replace(/\s\[[^\[\]]+\]\s*$/, "");
-  koy("secenekler", opts.map(o => `<button type="button" class="opt">${esc(o)}</button>`).join(""));
+  if (koy("secenekler", opts.map(o => `<button type="button" class="opt">${esc(o)}</button>`).join("")) && opts.length) bildir(T.choices(opts.length));
   // yalnız yeni ya da değişen mesaj çizilir
   const K = $("konusma"), ilk = !dugum.size, yeni = new Map();
   const els = lines.map((m, i) => {
     const k = m[1] + m[2], u = uzun(m, i, lines.length), c = kim(m[2]), metin = clean(m[3]);
     const [, isim, kaynak] = m[2].match(/^(.*?)\s*(?:\((.*)\))?$/);
     const h = `<div class="meta"><b>${esc(isim)}</b>${kaynak ? `<span>${esc(kaynak)}</span>` : ""}<time>${esc(kisaZaman(m[1]))}</time></div>
-      <div class="body ${u ? "kisa" : ""}">${esc(metin)}</div>${u || acik.has(k) && metin.length > 420 ? `<button type="button" class="ac" data-k="${esc(k)}" aria-expanded="${!u}">${u ? T.more : T.less}</button>` : ""}`;
+      <div class="body">${esc(metin)}</div>`;
     let key = m[0]; while (yeni.has(key)) key += "+";
     const eski = dugum.get(key);
-    if (eski && eski.h === h) { yeni.set(key, eski); return eski.el; }
+    // katlama yerinde değişir; mesaj düğümü değişmez ki ekran okuyucu eski mesajı yeni sanıp okumasın
+    if (eski && eski.h === h) { katla(eski.el, k, u, metin.length > 420); yeni.set(key, eski); return eski.el; }
     const el = document.createElement("div");
-    el.className = `msg ${c === "bot" ? "" : c}`; el.innerHTML = h;
+    el.className = `msg ${c === "bot" ? "" : c}`; el.innerHTML = h; katla(el, k, u, metin.length > 420);
     if (!ilk && !eski) { el.classList.add("new"); el.addEventListener("animationend", () => el.classList.remove("new"), {once: true}); }
     yeni.set(key, {h, el}); return el;
   });
@@ -512,13 +573,14 @@ function sohbet() {
     yaziyor.innerHTML = `<div class="meta"><b>${esc(ad)}</b></div><div class="body">${T.deliberating}<i><span></span></i></div>`;
     els.push(yaziyor);
   }
-  if (!els.length) K.innerHTML = `<div class="bos">${T.noChat}</div>`;
+  if (!els.length) dugum.clear(), K.innerHTML = `<div class="bos">${T.noChat}</div>`;
   else {
     [...K.children].forEach(c => els.includes(c) || c.remove());
     els.forEach((el, i) => K.children[i] !== el && K.insertBefore(el, K.children[i] || null));
   }
   if (stick || lines.length > seen) box.scrollTop = box.scrollHeight;
   seen = lines.length;
+  K.setAttribute("aria-live", "polite");  // ilk çizimde kapalı: açılışta bütün geçmiş okunmasın
 }
 
 async function yenile() {
@@ -576,17 +638,18 @@ async function yenile() {
   $("onaykutu").hidden = !O.length;
   $("mnavonay").textContent = O.length || "";
   $("hak").textContent = T.left(D.oneri_kalan ?? 0);
-  koy("onaylar", O.map(o => `<div class="onay"><p><span>#${esc(o.id)}</span>${esc(o.oneri)}</p>
-    <div class="butonlar"><button type="button" class="btn evet" data-onay="${esc(o.id)}" data-evet="1">${T.yes}</button><button type="button" class="btn" data-onay="${esc(o.id)}">${T.no}</button></div></div>`).join(""));
+  koy("onaylar", O.map(o => `<div class="onay"><p id="oneri${esc(o.id)}"><span>#${esc(o.id)}</span>${esc(o.oneri)}</p>
+    <div class="butonlar"><button type="button" class="btn evet" data-onay="${esc(o.id)}" data-evet="1" aria-label="${T.yes}, #${esc(o.id)}" aria-describedby="oneri${esc(o.id)}">${T.yes}</button><button type="button" class="btn" data-onay="${esc(o.id)}" aria-label="${T.no}, #${esc(o.id)}" aria-describedby="oneri${esc(o.id)}">${T.no}</button></div></div>`).join(""));
 
   /* sorumluluklar: kendi kendine yürüyen işler; son notları açılır kutuda (Dots'taki "activity" görünümü) */
-  const S = D.sorumluluklar || [];
-  $("sorkutu").hidden = !S.length;
+  const S = D.sorumluluklar || [], RT = D.rutinler || [];
+  $("sorkutu").hidden = !S.length && !RT.length;
   koy("sorumluluklar", S.map(s => {
     const ne = s.durum === "bitti" ? T.dutyDone : s.durum === "duraklat" ? T.dutyPaused : `${T.dutyNext} ${esc(kisaZaman(s.sonraki || s.son || s.kayit))}`;
     return `<details class="onay"><summary><b>${esc(s.ad)}</b> · <small>${ne}</small></summary><p>${esc(s.hedef)}</p>
       ${(s.notlar || []).map(n => `<p><small>${esc(n)}</small></p>`).join("")}</details>`;
-  }).join(""));
+  }).join("") + RT.map(r => `<details class="onay"><summary><b>${esc(r.ad)}</b> · <small>${T.routine} ${esc(r.zaman)}${
+    r.durum === "aktif" ? "" : " · " + T.dutyPaused}</small></summary><p>${esc(r.is)}</p></details>`).join(""));
 
   const E = D.olaylar || [];
   $("olaykutu").hidden = !E.length;
@@ -598,6 +661,7 @@ async function yenile() {
 $("konusma").addEventListener("click", e => {
   const b = e.target.closest(".ac"); if (!b) return;
   acik.has(b.dataset.k) ? acik.delete(b.dataset.k) : acik.add(b.dataset.k); sohbet();
+  $("konusma").querySelector(`.ac[data-k="${CSS.escape(b.dataset.k)}"]`)?.focus();
 });
 $("mnav").addEventListener("click", e => {
   const b = e.target.closest("[data-v]"); if (!b) return;
@@ -617,7 +681,14 @@ $("form").onsubmit = async e => {
   koy("secenekler", "");
   $("mesaj").value = ""; boyut();
   pulse = 1;
-  await fetch("/api/mesaj", {method: "POST", headers: {"X-Pentarch": TOKEN, "Content-Type": "application/json"}, body: JSON.stringify({text})});
+  try {
+    const r = await fetch("/api/mesaj", {method: "POST", headers: {"X-Pentarch": TOKEN, "Content-Type": "application/json"}, body: JSON.stringify({text})});
+    if (!r.ok) throw new Error(r.status);
+  } catch (err) {  // keep what was typed; a failed send must not eat the message
+    $("mesaj").value = text; boyut(); pulse = 0;
+    bildir(T.sendFailed);
+    return;
+  }
   thinking = true; surum = ""; yenile();
 };
 function boyut() {
@@ -635,26 +706,26 @@ async function mikrofon() {
   if (b.classList.contains("cevir")) return;
   let akis;
   try { akis = await navigator.mediaDevices.getUserMedia({audio: true}); }
-  catch { $("say").textContent = T.noMic; return; }
+  catch { bildir(T.noMic); return; }
   const parcalar = [];
   kayit = new MediaRecorder(akis, {mimeType: "audio/webm;codecs=opus"});
   kayit.ondataavailable = e => parcalar.push(e.data);
   kayit.onstop = async () => {
     akis.getTracks().forEach(t => t.stop());
-    kayit = null; b.classList.replace("kayit", "cevir"); b.setAttribute("aria-pressed", "false"); $("say").textContent = T.transcribing;
+    kayit = null; b.classList.replace("kayit", "cevir"); b.setAttribute("aria-pressed", "false"); bildir(T.transcribing);
     try {
       const r = await fetch("/api/ses", {method: "POST", headers: {"X-Pentarch": TOKEN, "Content-Type": "audio/webm"},
                                          body: new Blob(parcalar, {type: "audio/webm"})});
       const {text, hata} = await r.json();
-      if (hata || !text) { $("say").textContent = hata ? T.sttFail : T.sttEmpty; return; }
+      if (hata || !text) { bildir(hata ? T.sttFail : T.sttEmpty); return; }
       const m = $("mesaj"), onu = m.value.slice(0, m.selectionStart), sonra = m.value.slice(m.selectionEnd);
       const ek = (onu && !/\s$/.test(onu) ? " " : "") + text;
       m.value = onu + ek + sonra; m.selectionStart = m.selectionEnd = (onu + ek).length;
       boyut(); m.focus();
-    } catch { $("say").textContent = T.sttFail; }
+    } catch { bildir(T.sttFail); }
     finally { b.classList.remove("cevir"); }
   };
-  kayit.start(); b.classList.add("kayit"); b.setAttribute("aria-pressed", "true"); $("say").textContent = T.recording;
+  kayit.start(); b.classList.add("kayit"); b.setAttribute("aria-pressed", "true"); bildir(T.recording);
 }
 $("mik").onclick = mikrofon;
 addEventListener("keydown", e => { if (e.ctrlKey && e.key.toLowerCase() === "m") { e.preventDefault(); mikrofon(); } });
@@ -669,7 +740,8 @@ new ResizeObserver(size).observe(cv.parentElement);
 function arc(r, a0, a1, w, c, blur = 0) {
   cx.beginPath(); cx.arc(0, 0, r, a0, a1); cx.lineWidth = w; cx.strokeStyle = c; cx.shadowBlur = blur; cx.shadowColor = c; cx.stroke();
 }
-const red = "#e5555f", amber = "#e6ad60", rgba = a => `rgba(229,85,95,${a})`;
+const aydinlik = matchMedia("(prefers-color-scheme: light)").matches;  // the ring's labels need dark ink on a light page
+const red = "#e5555f", amber = "#e6ad60", rgba = a => `rgba(229,85,95,${a})`, yazi = aydinlik ? ["#1d1415", "#67575a", "#b8293a"] : ["#eee4e5", "#9c888b", "#f3dfe1"];
 function ciz(t) {
   const dt = sonKare ? Math.min(t - sonKare, 100) / 1000 : 0;
   sonKare = t; t /= 1000;
@@ -704,7 +776,7 @@ function ciz(t) {
     cx.beginPath(); cx.arc(X, Y, on ? 4 : 3, 0, 6.283);
     cx.fillStyle = on ? red : rgba(.55); cx.shadowColor = red; cx.shadowBlur = on ? 10 : 0; cx.fill(); cx.shadowBlur = 0;
     const u = uyeler[i]; if (!u) return;
-    cx.fillStyle = on ? "#eee4e5" : "#9c888b";
+    cx.fillStyle = on ? yazi[0] : yazi[1];
     const s = String(u).toUpperCase().slice(0, 10);
     if (x > .3) { cx.textAlign = "left"; cx.fillText(s, X + 9, Y); }
     else if (x < -.3) { cx.textAlign = "right"; cx.fillText(s, X - 9, Y); }
@@ -722,7 +794,7 @@ function ciz(t) {
   const br = .75 + Math.sin(t * (thinking ? 6 : 1.4)) * .25, e = R * .2;
   cx.beginPath(); P.forEach(([x, y], i) => i ? cx.lineTo(x * e, y * e) : cx.moveTo(x * e, y * e)); cx.closePath();
   cx.fillStyle = rgba(.25 + br * .35); cx.shadowBlur = 8 + pulse * 14; cx.fill();
-  cx.beginPath(); cx.arc(0, 0, 1.6 + br * 1.3, 0, 6.283); cx.fillStyle = "#f3dfe1"; cx.shadowBlur = 0; cx.fill();
+  cx.beginPath(); cx.arc(0, 0, 1.6 + br * 1.3, 0, 6.283); cx.fillStyle = yazi[2]; cx.shadowBlur = 0; cx.fill();
   cx.restore();
 }
 function dongu(t) {

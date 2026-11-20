@@ -1,0 +1,32 @@
+# docker compose run --rm pentarch python setup.py   # once: answers, Telegram pairing, agent login
+# docker compose up -d                                # runs and restarts on its own
+# docker compose exec pentarch python -I app/pentarch.py panel   # prints the panel link
+services:
+  pentarch:
+    build:
+      context: .
+      args:
+        AGENT_CLI: ${PENTARCH_AGENT_CLI:-claude}   # claude | gemini | codex | opencode | none
+        VOICE: ${PENTARCH_VOICE:-true}
+    image: pentarch
+    restart: unless-stopped
+    init: true
+    environment:
+      TZ: ${TZ:-UTC}   # the 08:30 routines and quiet hours follow this clock
+    logging:
+      driver: json-file
+      options: {max-size: 10m, max-file: "3"}
+    stdin_open: true
+    tty: true
+    ports:
+      - "127.0.0.1:47824:47824"   # same number on both sides: the panel only answers to Host 127.0.0.1:47824
+    volumes:
+      - home:/home/pentarch                                      # agent CLI logins (~/.claude, ~/.gemini, ~/.codex)
+      - ${PENTARCH_DATA:-./pentarch-data}:/home/pentarch/.pentarch  # config, secrets, memory, logs
+      - ${PENTARCH_NOTES:-./notes}:/home/pentarch/notes             # your notes folder
+    # Ollama or LM Studio on the host: use http://host.docker.internal:11434/v1 as the base_url in setup
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  home:

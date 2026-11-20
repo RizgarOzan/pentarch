@@ -6,8 +6,10 @@ Usage:
 
 Engine: edge-tts (needs internet). Voice is config "tts_voice", or a default for the configured language. Without
 internet it falls back to Piper (local): the first <home>/piper/<lang>_*.onnx model, e.g. en_US-lessac-medium.onnx.
-ffmpeg cleans the audio up and converts it to ogg/opus for Telegram.
+ffmpeg cleans the audio up and converts it to ogg/opus for Telegram. Without ffmpeg the mp3 (or wav) goes out as an
+audio file instead of a voice note.
 """
+import shutil
 import site
 import subprocess
 import sys
@@ -16,19 +18,22 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.append(site.getusersitepackages())  # piper is often pip --user installed; -I hides that folder
-from config import C, HOME, LANG, NAME, T  # noqa: E402
+from config import C, HOME, LANG, LANG_CODES, NAME, T  # noqa: E402
 import tg  # noqa: E402
 
-VOICES = {"tr": ("tr-TR-AhmetNeural", "-4%", "-5Hz"), "en": ("en-US-GuyNeural", "+0%", "+0Hz")}
-VOICE, RATE, PITCH = (C.get("tts_voice"), "+0%", "+0Hz") if C.get("tts_voice") else VOICES.get(LANG, VOICES["en"])
+VOICES = {"tr": ("tr-TR-AhmetNeural", "-4%", "-5Hz"), "en": ("en-US-GuyNeural", "+0%", "+0Hz"),
+          "de": ("de-DE-ConradNeural", "+0%", "+0Hz"), "es": ("es-ES-AlvaroNeural", "+0%", "+0Hz"), "fr": ("fr-FR-HenriNeural", "+0%", "+0Hz")}
+RL = LANG_CODES.get((C.get("reply_lang") or "").strip().lower())  # a written-to-me language beats the setup language
+VOICE, RATE, PITCH = (C.get("tts_voice"), "+0%", "+0Hz") if C.get("tts_voice") else VOICES.get(RL or LANG, VOICES["en"])
 NOWIN = getattr(subprocess, "CREATE_NO_WINDOW", 0)  # under pythonw, ffmpeg would open a console window
 FX = "highpass=f=90,equalizer=f=3500:t=q:w=1.2:g=3,loudnorm=I=-16:TP=-1.5"  # clean voice; flanger/echo sounded muffled
 
 
 def piper_model():
-    found = sorted((HOME / "piper").glob(f"{LANG}_*.onnx"))
+    kod = RL or LANG  # same language choice as the online voice
+    found = sorted((HOME / "piper").glob(f"{kod}_*.onnx"))
     if not found:
-        raise FileNotFoundError(T(f"{HOME / 'piper'} içinde {LANG}_*.onnx yok", f"no {LANG}_*.onnx in {HOME / 'piper'}"))
+        raise FileNotFoundError(T(f"{HOME / 'piper'} içinde {kod}_*.onnx yok", f"no {kod}_*.onnx in {HOME / 'piper'}"))
     return found[0]
 
 
@@ -51,6 +56,7 @@ def to_ogg(src, ogg):
 
 
 def make(text, ogg):
+    """Writes ogg and returns it; without ffmpeg returns the unconverted mp3/wav instead."""
     tmp = Path(tempfile.mkdtemp())
     try:
         src = tmp / "voice.mp3"
@@ -59,7 +65,10 @@ def make(text, ogg):
         print(T(f"edge-tts olmadı ({e}), piper deneniyor", f"edge-tts failed ({e}), trying piper"), file=sys.stderr)
         src = tmp / "voice.wav"
         piper_wav(text, src)
+    if not shutil.which("ffmpeg"):
+        return src
     to_ogg(src, ogg)
+    return ogg
 
 
 def main():
@@ -73,7 +82,7 @@ def main():
         args = args[:i] + args[i + 2:]
     text = " ".join(args)
     ogg = out or Path(tempfile.mkdtemp()) / "voice.ogg"
-    make(text, ogg)
+    ogg = make(text, ogg)
     if out:
         print(T(f"yazıldı: {out}", f"written: {out}"))
         return

@@ -1,9 +1,7 @@
 {
   "_": "What the assistant (and scan.py, which needs no model) reads before it scans, judges or applies for jobs. Copy to profile.json and edit; profile.json is in .gitignore.",
   "target_roles": [
-    "junior gameplay programmer",
-    "Unity developer",
-    "AI/LLM application developer"
+    "junior software engineer"
   ],
   "seniority": [
     "intern",
@@ -11,44 +9,68 @@
     "entry level"
   ],
   "locations": [
-    "remote",
-    "Europe",
-    "relocation ok"
+    "remote"
   ],
   "boards": {
-    "_": "public job boards scan.py reads; the slug is the last part of boards.greenhouse.io/<slug>, jobs.lever.co/<slug>, jobs.ashbyhq.com/<slug>",
+    "_": "public job boards scan.py reads; the slug is the last part of boards.greenhouse.io/<slug>, jobs.lever.co/<slug>, jobs.ashbyhq.com/<slug>, apply.workable.com/<slug>, <slug>.recruitee.com, jobs.smartrecruiters.com/<slug>, <slug>.jobs.personio.de. remotive/arbeitnow/remoteok take a category or tag (\"\" = all)",
     "greenhouse": [],
     "lever": [],
-    "ashby": []
+    "ashby": [],
+    "workable": [],
+    "recruitee": [],
+    "smartrecruiters": [],
+    "personio": [],
+    "remotive": [],
+    "arbeitnow": [],
+    "remoteok": []
   },
-  "exclude": ["senior", "sr", "lead", "head", "principal", "staff", "director", "manager", "chief"],
+  "exclude": [
+    "senior",
+    "sr",
+    "lead",
+    "head",
+    "principal",
+    "staff",
+    "director",
+    "manager",
+    "chief"
+  ],
   "max_years": 2,
   "max_age_days": 60,
   "signals": {
     "_": "literal phrases scan.py looks for in a posting's text; the lists under quality are for the assistant's judgement",
-    "strong": ["mentorship", "mentoring", "onboarding", "graduate program", "visa sponsorship"],
-    "weak": ["fast-paced", "wear many hats", "rockstar", "unpaid"],
-    "deal_breakers": ["security clearance", "crypto", "gambling", "betting"]
+    "strong": [
+      "mentorship",
+      "mentoring",
+      "onboarding",
+      "graduate program",
+      "visa sponsorship"
+    ],
+    "weak": [
+      "fast-paced",
+      "wear many hats",
+      "rockstar",
+      "unpaid"
+    ],
+    "deal_breakers": [
+      "security clearance",
+      "SC clearance",
+      "DV clearance",
+      "TS/SCI"
+    ]
   },
   "skills": [
-    "C#",
-    "Unity",
     "Python",
-    "LLM APIs"
+    "Git"
   ],
-  "must_have": [
-    "remote or visa sponsorship",
-    "English-speaking team"
-  ],
+  "must_have": [],
   "nice_to_have": [
-    "open-source friendly",
-    "small team",
-    "salary range posted"
+    "salary range posted",
+    "mentoring or onboarding"
   ],
   "deal_breakers": [
     "unpaid",
-    "gambling or crypto",
-    "asks for 5+ years"
+    "asks for 5+ years at a junior title"
   ],
   "quality": {
     "min_score": 3,
@@ -68,7 +90,12 @@
     "language": "en",
     "style": "plain, short bullets, a number or link under every claim",
     "format": "xyz",
-    "sections": ["Education", "Experience", "Projects", "Technical Skills"],
+    "sections": [
+      "Education",
+      "Experience",
+      "Projects",
+      "Technical Skills"
+    ],
     "max_pages": 1,
     "highlight": [
       "shipped projects with links",
@@ -80,7 +107,7 @@
     ]
   },
   "cover_letter": {
-    "language": "same as the posting",
+    "language": "same as cv.language",
     "length": "under 150 words",
     "tone": "direct, specific to the posting, no flattery"
   },

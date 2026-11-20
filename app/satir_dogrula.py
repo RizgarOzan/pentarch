@@ -6,6 +6,8 @@ Usage: python -I satir_dogrula.py file line "phrase"   (exit 1 = not on that lin
 import sys
 from pathlib import Path
 
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))  # python -I leaves the script's folder off the path
 from config import T
 
 

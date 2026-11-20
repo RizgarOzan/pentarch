@@ -168,7 +168,12 @@ def load_config(path=None, **over):
     cfg, base = dict(DEFAULTS), HERE
     if path:
         path = pathlib.Path(path)
-        cfg.update(json.loads(path.read_text(encoding="utf-8")))
+        if not path.is_file():
+            raise SystemExit(f"Config file not found: {path}. Copy config.example.json (or run setup) first.")
+        try:
+            cfg.update(json.loads(path.read_text(encoding="utf-8")))
+        except ValueError as e:
+            raise SystemExit(f"Config file {path} is not valid JSON: {e}")
         base = path.resolve().parent
     for k in PATH_KEYS:
         if cfg[k]: cfg[k] = (base / cfg[k]).resolve()
@@ -304,7 +309,8 @@ def pr_url(): return f'https://github.com/pulls?q=is%3Apr+author%3A{CFG["github_
 def render_html(bas, acik, kapali, ser, egt, plan, sonra, cur, etk, man, rit, gh, prog, rut, bugun, acil, odak, notlar, tarama):
     def link(u, t, cls=""):
         c = f' class="{cls}"' if cls else ""
-        return f'<a{c} href="{esc(u)}" target="_blank" rel="noopener">{t}</a>' if u else ""
+        # links come from feeds and postings: only web links, so a javascript: URL never reaches the board's origin
+        return f'<a{c} href="{esc(u)}" target="_blank" rel="noopener">{t}</a>' if u and re.match(r"https?://", str(u), re.I) else ""
     def flink(p, t):  # URL, or a file next to index.html (shown only if it exists)
         if p and re.match(r"https?://", p): return link(p, t)
         return f'<a href="{esc(p)}">{t}</a>' if p and (OUT / p).exists() else ""

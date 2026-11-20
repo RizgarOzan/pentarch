@@ -6,6 +6,8 @@ Usage: python -I yasak.py "message text, recipient or server name"   (exit 1 = B
 import re
 import sys
 
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))  # python -I leaves the script's folder off the path
 from config import NAME, OWNER, T
 
 AD = r"[A-ZÇĞİÖŞÜ][\w.'’-]*(?: (?:[A-ZÇĞİÖŞÜ]|de |la |van |von )[\w.'’-]*)*"  # capitalised name, may span words

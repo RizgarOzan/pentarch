@@ -49,7 +49,7 @@ TITLES, FIELDS, EXCLUDE, LOCATIONS = (words(CFG[k]) for k in ("titles", "fields"
 MUST = [(re.compile(r"(no|not|unable to|cannot|can't|won't|will not|without)( offer| provide)?( visa)? sponsor|"
                      r"sponsorship (is )?not (available|offered|provided)|must (already )?(be|have) (legally )?"
                      r"authori[sz]ed to work", re.I), T("vize sponsoru yok", "no visa sponsorship")),
-        (re.compile(r"security clearance|clearance (is )?required|active (secret|ts/sci)", re.I),
+        (re.compile(r"security clearance|clearance (is )?required|active (secret|ts/sci)|\b(?:SC|DV|NV1|NV2) clearance", re.I),
          T("güvenlik izni ister", "needs security clearance"))]
 
 

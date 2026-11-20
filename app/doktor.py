@@ -9,6 +9,7 @@ import shutil
 import socket
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -84,14 +85,30 @@ def kontroller():
          (NOTES.exists(), T("not klasörü: ", "notes folder: ") + str(NOTES))]
     r += [(d.exists(), T("ek klasör: ", "extra folder: ") + str(d)) for d in EXTRA_DIRS]
     cli = C["agent"]["cli"]
-    r.append((bool(shutil.which(cli)), f"agent CLI {cli}: " + (shutil.which(cli) or T("PATH'te yok", "not on PATH"))))
-    r.append((bool(shutil.which("ffmpeg")) or None, "ffmpeg: " + (shutil.which("ffmpeg") or T("yok (sesli cevap çalışmaz)", "missing (voice replies won't work)"))))
+    if cli == "api":  # the brain is the providers list itself
+        import agents
+        p = agents.providers()
+        r.append((bool(p), T("beyin: API ", "brain: API ") + (", ".join(f"{x['base_url']} ({x['model']})" for x in p)
+                                                              or T("providers boş, sohbet cevap veremez", "providers is empty, the chat can't answer"))))
+    else:
+        r.append((bool(shutil.which(cli)), f"agent CLI {cli}: " + (shutil.which(cli) or T("PATH'te yok", "not on PATH"))))
+    kur = ("winget install Gyan.FFmpeg" if os.name == "nt" else "brew install ffmpeg" if sys.platform == "darwin"
+           else "pkg install ffmpeg" if "com.termux" in os.environ.get("PREFIX", "") else "sudo apt install ffmpeg")
+    r.append((bool(shutil.which("ffmpeg")) or None, "ffmpeg: " + (shutil.which("ffmpeg") or T(f"yok (sesli cevap ses notu değil ses dosyası olarak gider; kur: {kur})", f"missing (voice replies go out as audio files, not voice notes; install: {kur})"))))
     if (C.get("sandbox") or {}).get("backend") == "docker":
         r.append((bool(shutil.which("docker")), "docker: " + (shutil.which("docker") or T("yok: sandbox komutları reddedilir", "missing: sandbox commands are refused"))))
     for ad, s in (C.get("mcp_servers") or {}).items():
         r.append((bool(shutil.which(s.get("command", ""))), f"MCP {ad}: {s.get('command')}"))
     tg = bool(os.environ.get("PENTARCH_TELEGRAM_TOKEN")) or (SECRETS / "telegram.txt").exists()
     r.append((tg, "Telegram token: " + (T("var", "set") if tg else T("yok", "missing"))))
+    if tg:
+        import tg as tgmod
+        try:
+            sahip = tgmod.load_state().get("chat_id")
+        except (OSError, ValueError):
+            sahip = None
+        r.append((bool(sahip), T("Telegram eşleşmesi: ", "Telegram pairing: ") + (T("tamam", "done") if sahip else
+                  T(f"yok; bota /start {tgmod.pair_code()} yaz", f"not yet; send /start {tgmod.pair_code()} to the bot"))))
     for yer, ad in env_adlari():
         r.append((bool(os.environ.get(ad)) or None, f"{ad} ({yer}): " + (T("tanımlı", "set") if os.environ.get(ad) else T("tanımsız", "not set"))))
     for ad in ("panel_port", "lock_port"):
@@ -147,12 +164,34 @@ def erisim(url):
     return True
 
 
+def uc_noktalar(c=C, ulas=erisim):
+    """One line per chat_api/providers endpoint: is the base_url answering? A local one that is down is usually
+    Ollama or LM Studio not running."""
+    r = []
+    for p in [c.get("chat_api") or {}, *(c.get("providers") or [])]:
+        url = (p.get("base_url") or "").rstrip("/")
+        if not url:
+            continue
+        ok = ulas(url + "/models")
+        yerel = any(h in url for h in ("localhost", "127.0.0.1", "[::1]"))
+        ipucu = T(" (Ollama/LM Studio açık mı? `ollama serve`)", " (is Ollama/LM Studio running? `ollama serve`)") if yerel and not ok else ""
+        r.append((ok, f"{p.get('model') or '?'} @ {url}: " + (T("açık", "reachable") if ok else T("YOK", "UNREACHABLE")) + ipucu))
+    return r
+
+
 def sistem_kontrolleri():
     """Real connectivity, plus the Windows checks. Kept out of kontroller(): it touches the network and takes seconds."""
     hedef = {"google": "https://www.google.com", "telegram": "https://api.telegram.org"}
     sonuc = {k: erisim(u) for k, u in hedef.items()}
     r = [(any(sonuc.values()), T("internet: ", "internet: ") + ", ".join(
         f"{k} {T('açık', 'reachable') if v else T('YOK', 'UNREACHABLE')}" for k, v in sonuc.items()))]
+    if sonuc["telegram"]:  # a token that exists can still be revoked or mistyped
+        import tg as tgmod
+        try:
+            r.append((True, T("Telegram token geçerli: @", "Telegram token accepted: @") + tgmod.api("getMe").get("username", "?")))
+        except Exception as e:
+            r.append((False, T(f"Telegram token reddedildi: {e}", f"Telegram rejected the token: {e}")[:200]))
+    r += uc_noktalar()
     if os.name != "nt":
         return r
     try:
@@ -165,12 +204,33 @@ def sistem_kontrolleri():
 
 
 def doctor():
+    from config import VERSION
+    print(f"pentarch {VERSION}, {T('loglar', 'logs')}: {HOME / 'pentarch.log'}")
     sorun = 0
     for ok, satir in kontroller() + sistem_kontrolleri():
         print(("OK " if ok else "-- " if ok is None else "!! ") + satir)
         sorun += ok is False
-    print(T(f"{sorun} sorun", f"{sorun} problem(s)"))
+    print(T(f"{sorun} sorun", f"{sorun} problem(s)") + (T(" - !! satırlarını düzelt, sonra doctor'u yeniden çalıştır; takılırsan python -I setup.py", " - fix the !! lines above, then run doctor again; or re-run python -I setup.py") if sorun else ""))
     return sorun
+
+
+def saglam_mi(paketler=False):
+    """After a pull: installs changed requirements, then checks that the new code compiles and that pentarch.py imports
+    in a throwaway home. Returns the error text, or "" when it's fine."""
+    termux = "com.termux" in os.environ.get("PREFIX", "")  # no faster-whisper wheels there: only the spoken-reply package
+    pip = ["edge-tts>=6.1"] if termux else ["-r", str(REPO / "requirements.txt")]
+    adimlar = ([[sys.executable, "-m", "pip", "install", "-q", *pip]] if paketler else []) + [
+        [sys.executable, "-I", "-m", "compileall", "-q", str(REPO / "app"), str(REPO / "setup.py")],
+        [sys.executable, "-I", "-c", f"import sys; sys.path.insert(0, {str(REPO / 'app')!r}); import pentarch"]]
+    with tempfile.TemporaryDirectory() as ev:
+        for cmd in adimlar:
+            try:
+                p = subprocess.run(cmd, capture_output=True, text=True, timeout=600, env={**os.environ, "PENTARCH_HOME": ev})
+            except subprocess.TimeoutExpired:
+                return T("kontrol zaman aşımına uğradı", "the check timed out")
+            if p.returncode:
+                return (p.stderr or p.stdout).strip()[-300:]
+    return ""
 
 
 def update(git=shutil.which("git") or "git"):
@@ -188,14 +248,33 @@ def update(git=shutil.which("git") or "git"):
         return T("git pull olmadı: ", "git pull failed: ") + (p.stderr or p.stdout).strip()[-300:]
     if head() == before:
         return T("Zaten güncel.", "Already up to date.")
-    log = subprocess.run([git, "-C", str(REPO), "log", "--no-merges", "--format=- %s", f"{before}..HEAD"],
+    changed = subprocess.run([git, "-C", str(REPO), "diff", "--name-only", before, "HEAD"], capture_output=True, text=True).stdout
+    if hata := saglam_mi("requirements.txt" in changed.split()):  # a broken pull would crash-loop the service: step back
+        subprocess.run([git, "-C", str(REPO), "reset", "--keep", before], capture_output=True)
+        return T(f"Yeni sürüm burada çalışmadı, eski sürümde kaldım ({before[:8]}): ", f"The new version didn't work here, kept the old one ({before[:8]}): ") + hata
+    log =subprocess.run([git, "-C", str(REPO), "log", "--no-merges", "--format=- %s", f"{before}..HEAD"],
                          capture_output=True, text=True, encoding="utf-8").stdout.splitlines()
     msg = T("Yeni sürüm geldi:\n", "New version pulled:\n") + "\n".join(log[:8] + (["- ..."] if len(log) > 8 else []))
-    changed = subprocess.run([git, "-C", str(REPO), "diff", "--name-only", before, "HEAD"], capture_output=True, text=True).stdout
     if "requirements.txt" in changed.split():
-        msg += T("\nPython paketleri değişti: pip install -r requirements.txt", "\nPython packages changed: pip install -r requirements.txt")
+        msg += T("\nPython paketleri değişti ve kuruldu.", "\nPython packages changed and were installed.")
     return msg + T("\nÇalışan Pentarch boşta kalınca yeniden başlar ve yeni becerileri kendisi kurar. Yeni ayar soruları için: python -I setup.py",
                    "\nA running Pentarch restarts once idle and installs the new skills itself. For new setup questions: python -I setup.py")
+
+
+def yedek(hedef=None, home=HOME):
+    """Zip the home folder (notes, memory, routines, config) without the secrets folder; keys stay on this machine."""
+    import time
+    import zipfile
+    zf = Path(hedef or Path.cwd() / f"pentarch-yedek-{time.strftime('%Y%m%d-%H%M')}.zip")
+    n = 0
+    with zipfile.ZipFile(zf, "w", zipfile.ZIP_DEFLATED) as z:
+        for p in sorted(home.rglob("*")):
+            rel = p.relative_to(home)
+            if p.is_file() and p.resolve() != zf.resolve() and rel.parts[0] != SECRETS.name and "__pycache__" not in rel.parts:
+                z.write(p, rel.as_posix())
+                n += 1
+    return T(f"{n} dosya yedeklendi: {zf}\nAnahtarlar (secrets/) içinde değil. Geri yüklemek için Pentarch kapalıyken zip'i {home} içine açın, sonra python -I setup.py ile anahtarları girin.",
+             f"Backed up {n} files: {zf}\nKeys (secrets/) are not in it. To restore, unzip it into {home} while Pentarch is stopped, then enter the keys with python -I setup.py.")
 
 
 def main():

@@ -17,7 +17,7 @@ education, a current employer you don't have, a sponsorship answer that contradi
 a placeholder like [number?] left from the CV draft.
 --config defaults to tracker/config.json next to this file; profile.json is read from the same folder.
 """
-import argparse, datetime, json, pathlib, re, sys
+import argparse, datetime, json, pathlib, re, sys, unicodedata
 
 HERE = pathlib.Path(__file__).parent
 sys.path.insert(0, str(HERE))
@@ -54,6 +54,8 @@ class Book:
         if row is None:
             row = dict(id=id_, company=company, role=role, added=self.today)
             self.rows.append(row)
+        elif row.get("stage") == "sent":
+            sys.exit(f"{id_} was already sent on {row.get('sent_on', '?')}; use `set` to move it to interview or rejected")
         row.update({k: v for k, v in extra.items() if v not in (None, "")}, stage=stage, checked=self.today)
         return row
 
@@ -68,9 +70,13 @@ class Book:
         """New postings worth a draft: in scan.json's new list, at min_score or better, no record for the same link or id."""
         links = {r.get("posting") for r in self.rows}
         ids = {r.get("id") for r in self.rows}
-        out = [dict(id=slug(j["company"], j["role"]), **j) for j in scan.get("new", [])
-               if j.get("score", 0) >= min_score and j.get("link") not in links]
-        return [j for j in out if j["id"] not in ids][:limit]
+        out = []
+        for j in scan.get("new", []):
+            j = dict(id=slug(j["company"], j["role"]), **j)
+            if j.get("score", 0) >= min_score and j.get("link") not in links and j["id"] not in ids:
+                ids.add(j["id"])  # the same role posted twice (two boards, two cities) is drafted once
+                out.append(j)
+        return out[:limit]
 
     def approve(self, id_, quote):
         r = self.find(id_)
@@ -92,8 +98,8 @@ class Book:
 
 # ---- form check -------------------------------------------------------------------------------------------------
 
-YES = re.compile(r"^\s*(yes|y|true|evet|e)\b", re.I)
-NO = re.compile(r"^\s*(no|n|false|hayır|hayir|h)\b", re.I)
+YES = re.compile(r"^\s*(yes|y|true|evet|e|ja)\b", re.I)
+NO = re.compile(r"^\s*(no|n|false|hayır|hayir|h|nein)\b", re.I)
 NONE = re.compile(r"^\s*(-|—|none|n/?a|no|yok|hiçbiri|student|öğrenci|unemployed|not employed|çalışmıyorum)?\s*$", re.I)
 PLACEHOLDER = re.compile(r"\[[^\]\n]{0,40}\?\]|\{\{|\bTODO\b|\bTBD\b|lorem ipsum|<your [a-z ]+>", re.I)
 EMAIL = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
@@ -101,8 +107,25 @@ YEAR = re.compile(r"\b(19[5-9]\d|20[0-6]\d)\b")
 
 
 def digits(s): return re.sub(r"\D", "", str(s or ""))
-def url(s): return re.sub(r"^(https?://)?(www\.)?", "", str(s or "").strip().lower()).rstrip("/")
-def words(s): return set(re.findall(r"\w+", str(s or "").lower()))
+def url(s): return re.sub(r"^(https?://)?(www\.)?", "", str(s or "").strip().lower().split("?")[0].split("#")[0]).rstrip("/")
+def fold(s):
+    """"Rızgar Özan" and "Rizgar Ozan" are one name: forms often drop Turkish and German letters."""
+    s = unicodedata.normalize("NFKD", str(s or "").lower().replace("ı", "i").replace("ß", "ss"))
+    return "".join(c for c in s if not unicodedata.combining(c))
+
+
+def words(s): return set(re.findall(r"\w+", fold(s)))
+
+
+def money(s):
+    """Amounts in a salary answer: "£32k" and "32.000 €" are both 32000."""
+    out = []
+    for n, k in re.findall(r"(\d[\d,.]*)\s*([kK])?", str(s or "")):
+        try:
+            out.append(float(n.replace(",", "")) * 1000 if k else float(re.sub(r"[,.](?=\d{3}\b)", "", n).replace(",", ".")))
+        except ValueError:
+            pass
+    return out
 
 
 def check_form(form, ap):
@@ -128,35 +151,40 @@ def check_form(form, ap):
                 bad.append((label, f"email {e} is not yours ({ap['email']})"))
         if label == "text":
             continue
-        if re.search(r"phone|mobile|telefon|cep", L) and value.strip() and ap.get("phone"):
+        if re.search(r"phone|mobile|mobilnummer|telefon|cep|handy|rufnummer", L) and value.strip() and ap.get("phone"):
             a, b = digits(value), digits(ap["phone"])
             if a[-9:] != b[-9:]:
                 bad.append((label, f"phone {value} is not yours ({ap['phone']})"))
-        if re.search(r"(^|\b)(full |first |last |given |family |sur)?name\b|ad[ıi] ?soyad|^ad$|^soyad", L) \
-                and not re.search(r"company|employer|school|university|referr|reference|manager|şirket|okul", L) \
+        if re.search(r"(^|\b)(full |first |last |given |family |sur)?name\b|ad[ıi] ?soyad|^ad$|^soyad|vorname|nachname", L) \
+                and not re.search(r"company|employer|school|university|referr|reference|manager|şirket|okul|firma|unternehmen|schule", L) \
                 and value.strip() and ap.get("full_name") and not words(value) <= words(ap["full_name"]):
             bad.append((label, f"name {value!r} is not part of {ap['full_name']!r}"))
-        if re.search(r"graduat|mezun", L) and ap.get("education"):
+        if re.search(r"graduat|mezun|abschluss", L) and ap.get("education"):
             for y in YEAR.findall(value):
                 if y not in YEAR.findall(ap["education"]):
                     bad.append((label, f"graduation year {y} is not in your education ({ap['education']})"))
         # an older profile without the key: unknown, so not judged (the apply skill asks instead)
-        if "current_employer" in ap and re.search(r"current(ly)?\s*(company|employer)|present employer|şu anki (şirket|işveren)|mevcut işveren", L):
+        if "current_employer" in ap and re.search(r"current(ly)?\s*(company|employer)|present employer|şu anki (şirket|işveren)|mevcut işveren|(aktuell|derzeitig)\w*\s+arbeitgeber", L):
             mine = ap.get("current_employer", "")
             if mine and not NONE.match(value) and not words(value) & words(mine):
                 bad.append((label, f"current employer {value!r}; yours is {mine!r}"))
             elif not mine and not NONE.match(value):
                 bad.append((label, f"current employer {value!r}, but you have none (leave it empty or write student)"))
-        if re.search(r"sponsor|vize|visa", L) and NO.match(ap.get("needs_sponsorship", "")) and YES.match(value):
-            bad.append((label, "says you need sponsorship; your answer is no"))
-        if re.search(r"sponsor|vize|visa", L) and YES.match(ap.get("needs_sponsorship", "")) and NO.match(value):
-            bad.append((label, "says you don't need sponsorship; your answer is yes"))
-        if re.search(r"linkedin|github|portfolio|website|portfolyo", L) and value.strip():
+        if re.search(r"sponsor|vize|visa|visum|work permit|arbeitserlaubnis|aufenthaltstitel|authori[sz]ed to work|right to work|eligible to work", L):
+            # "Are you authorized to work…?" / "Haben Sie eine Arbeitserlaubnis?" ask the opposite of "do you need a visa?"
+            have = re.search(r"authori[sz]ed|right to work|eligible|do you (have|hold)|haben sie|besitzen sie|verfügen sie", L)
+            needs, needs_not = (NO, YES) if have else (YES, NO)
+            if NO.match(ap.get("needs_sponsorship", "")) and needs.match(value):
+                bad.append((label, f"{value!r} says you need sponsorship or a permit; your answer is no"))
+            if YES.match(ap.get("needs_sponsorship", "")) and needs_not.match(value):
+                bad.append((label, f"{value!r} says you need no sponsorship or permit; your answer is yes"))
+        if re.search(r"linkedin|github|portfolio|website|portfolyo|xing|webseite|homepage", L) and value.strip():
             mine = {url(x) for x in ap.get("links") or []}
             if mine and url(value) not in mine:
                 bad.append((label, f"link {value} is not one of yours"))
-        if re.search(r"salary|compensation|maaş|ücret", L) and ap.get("salary") and digits(value):
-            if not set(re.findall(r"\d+", value.replace(",", "").replace(".", ""))) & set(re.findall(r"\d+", ap["salary"].replace(",", "").replace(".", ""))):
+        if re.search(r"salary|compensation|maaş|ücret|gehalt|vergütung", L) and ap.get("salary") and digits(value):
+            mine, given = money(ap["salary"]), money(value)
+            if mine and given and not (min(given) <= max(mine) and min(mine) <= max(given)):  # "£32k" = "£32,000"; ranges that overlap agree
                 bad.append((label, f"salary {value} differs from your answer ({ap['salary']})"))
     return bad
 
@@ -210,6 +238,12 @@ def main(argv=None):
         for label, why in bad:
             print(f"FAIL {label}: {why}")
         if bad:
+            if a.id:  # an earlier yes was for the form that passed, not this one
+                r = book.find(a.id)
+                if r.get("stage") != "sent" and (r.pop("approved_on", None) or r.pop("awaiting", None)):
+                    r.pop("awaiting", None)
+                    r["status"] = "Form check failed; fix it, check again and ask for a new yes"
+                    book.save()
             return 1
         print(f"ok: {len(form) if isinstance(form, dict) else 'text'} checked against {prof_path.name}")
         if a.id:

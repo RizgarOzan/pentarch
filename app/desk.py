@@ -22,6 +22,8 @@ if len(sys.argv) < 2 or sys.argv[1] in ("-h", "--help"):
 if not C.get("desktop_control"):
     raise SystemExit(T("Masaüstü kontrolü kapalı (ayar: desktop_control).", "Desktop control is off (config: desktop_control)."))
 
+if sys.platform != "win32":
+    raise SystemExit(T("Masaüstü kontrolü şimdilik yalnızca Windows'ta çalışır.", "Desktop control works on Windows only for now."))
 u = ctypes.windll.user32
 u.SetProcessDPIAware()
 ULONG_PTR = ctypes.c_size_t
