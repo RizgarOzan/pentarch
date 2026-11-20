@@ -186,6 +186,7 @@ Run it from a scheduled task, or let the Pentarch agent run it before its own ju
 python -I tracker/apply.py todo                       # postings at min_score or better with no record yet, one JSON line each
 python -I tracker/apply.py add --company Acme --role "Junior Dev" --posting URL --stage drafted
 python -I tracker/apply.py list --stage drafted
+python -I tracker/apply.py stats                      # funnel counts, applications quiet for 14+ days, passed deadlines
 python -I tracker/apply.py check form.json --id ID    # form.json is {"label": "value"}; plain text works too
 python -I tracker/apply.py approve ID --quote "yes, send it"
 python -I tracker/apply.py sent ID

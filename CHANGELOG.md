@@ -2,6 +2,10 @@
 
 ## Unreleased (platform-polish)
 
+- Interview skill with a story bank (idea from career-ops): finds the themes you have no story for, matches stories to likely questions, flags a result with no number, "we" instead of "I" and answers that run past 90 seconds. It never writes a story for you.
+- `apply.py stats`: funnel counts (sent, answered), applications quiet for 14+ days and passed deadlines (idea from career-ops).
+- Expense ledger in plain words: `expense add flour 1200`, then `expenses` shows this month, last month and the biggest names. Also a `expenses` quick-answer reader.
+- After you ask about the same readers three times in free text, Pentarch suggests the matching `shortcut add` once. It keeps only counts, not your messages.
 - A recruiter reply in the mail check (rejection, interview, offer) now asks Yes/No to move the matching tracker row (idea from JobOps). Matched by code; nothing moves without a yes.
 - `nudges` reader: drafts a polite payment reminder per overdue receivable, to copy and send yourself (idea from Clawbolt).
 - Quick answers: `shortcut add <name> = receivables + shifts` makes one word that answers from your own files with no AI run (idea taken from Atticus' learned shortcuts, minus the learning).

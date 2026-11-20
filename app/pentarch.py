@@ -2729,8 +2729,9 @@ def komut_cevap(text):
     import wiki
     if re.fullmatch(r"\s*/?(yardım|yardim|help|hilfe|ayuda|aide|start)\s*[?!.]?\s*", text, re.I):
         return tg.ornekler()
+    import gider
     import kisayol
-    return kisayol.komut(text) or wiki.komut(text, NOTES) or ogren.komut(text, MEMORY_PAGE, lambda satir: hafiza_ekle(("Lessons", "Dersler", "Status", "Durum"), satir))
+    return kisayol.komut(text) or gider.komut(text) or wiki.komut(text, NOTES) or ogren.komut(text, MEMORY_PAGE, lambda satir: hafiza_ekle(("Lessons", "Dersler", "Status", "Durum"), satir))
 
 
 def gecit_isle(text, source):
@@ -2831,6 +2832,10 @@ def dagit(texts):
     if len(texts) == 1 and (cevap := komut_cevap(texts[0])):
         send(cevap)
         texts = []
+    elif len(texts) == 1:
+        import kisayol
+        if ipucu := kisayol.ipucu(texts[0]):
+            send(ipucu)
     if len(texts) == 1 and (cevap := pause_command(texts[0]) or net_command(texts[0])):
         send(cevap)
         texts = []

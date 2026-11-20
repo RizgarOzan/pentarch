@@ -13,6 +13,7 @@ Skills are instructions an AI assistant follows for one kind of task. Agents are
 | [`linkedin-network/`](linkedin-network/SKILL.md) | comments, connection notes and recruiter messages for the companies in your job search, with a follow-up log |
 | [`linkedin-analyze/`](linkedin-analyze/SKILL.md) | weekly or monthly review of your own numbers and next week's plan |
 | [`cv/`](cv/SKILL.md) | a one-page CV for a posting, XYZ bullets, then a rule check with `cv/cv.py` |
+| [`interview/`](interview/SKILL.md) | an interview is coming: a story bank (situation, action, result, reflection), the gaps in it, the stories that fit each likely question, and practice one question at a time. Checks structure with `interview/interview.py`, never writes your answers |
 | [`apply/`](apply/SKILL.md) | fill an application form, check it with `tracker/apply.py`, send only after the owner's yes |
 
 `linkedin/li.py` is the script the four LinkedIn skills share: post checker, profile scorer, post log and contact log.

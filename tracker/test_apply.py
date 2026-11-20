@@ -106,6 +106,29 @@ class Record(Base):
         self.assertIn("waiting for your approval before it is sent: Acme", page)
 
 
+class Stats(Base):
+    def test_funnel_quiet_and_late(self):
+        rows = [dict(id="a", company="A", stage="sent", sent_on="2026-10-01"),
+                dict(id="b", company="B", stage="sent", sent_on="2026-11-18"),
+                dict(id="c", company="C", stage="process", sent_on="2026-10-05"),
+                dict(id="d", company="D", stage="closed", sent_on="2026-10-02"),
+                dict(id="e", company="E", stage="watching", deadline="2026-11-01"),
+                dict(id="f", company="F", stage="watching", deadline="soon")]
+        (self.tmp / "data" / "applications.json").write_text(json.dumps(rows), encoding="utf-8")
+        code, out = self.run_("--today", "2026-11-20", "stats")
+        self.assertEqual(code, 0)
+        self.assertIn("sent 4, answered with an interview or offer 1 (25%)", out)
+        self.assertIn("quiet 50 days: A", out)
+        self.assertNotIn("B (b)", out)  # sent two days ago
+        self.assertIn("deadline passed 2026-11-01: E", out)
+        self.assertNotIn("F (f)", out)
+
+    def test_empty_book(self):
+        code, out = self.run_("stats")
+        self.assertEqual(code, 0)
+        self.assertIn("0 applications", out)
+
+
 class Form(unittest.TestCase):
     def bad(self, form):
         return [w for _, w in apply.check_form(form, AP)]

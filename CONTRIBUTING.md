@@ -5,7 +5,7 @@ Run everything with one command each (no network, no model):
 ```bash
 python -I -m unittest discover -s tests -p "test_*.py"   # main suite
 python -I tests/e2e.py                                   # fake Telegram + fake agent
-python -I tracker/test_scan.py && python -I tracker/test_apply.py && python -I skills/cv/test_cv.py && python -I skills/linkedin/test_li.py
+python -I tracker/test_scan.py && python -I tracker/test_apply.py && python -I skills/cv/test_cv.py && python -I skills/linkedin/test_li.py && python -I skills/interview/test_interview.py
 ```
 
 CI runs all of these (`.github/workflows/ci.yml`). Set `PENTARCH_HOME` to a temp folder first so tests never touch your own install.

@@ -95,6 +95,24 @@ class Book:
         r.pop("awaiting", None)
         return r
 
+    def stats(self, stale_days=14):
+        """Funnel counts plus the applications that went quiet. Only reads the book."""
+        n = lambda *st: sum(1 for r in self.rows if r.get("stage") in st)
+        gone = sum(1 for r in self.rows if r.get("stage") == "closed" and r.get("sent_on"))  # sent, then closed
+        sent = n("sent", "process", "decide") + gone
+        today = datetime.date.fromisoformat(self.today)
+        quiet = []
+        for r in self.rows:
+            if r.get("stage") == "sent" and r.get("sent_on"):
+                days = (today - datetime.date.fromisoformat(r["sent_on"])).days
+                if days >= stale_days:
+                    quiet.append((r.get("id"), r.get("company"), days))
+        late = [(r.get("id"), r.get("company"), r["deadline"]) for r in self.rows
+                if r.get("stage") in ("watching", "drafted", "ready") and re.fullmatch(r"\d{4}-\d\d-\d\d", str(r.get("deadline", "")))
+                and r["deadline"] < self.today]
+        return dict(total=len(self.rows), by_stage={s: n(s) for s in build.STAGES if n(s)}, sent=sent,
+                    answered=n("process", "decide"), quiet=sorted(quiet, key=lambda x: -x[2]), late=late)
+
 
 # ---- form check -------------------------------------------------------------------------------------------------
 
@@ -203,6 +221,7 @@ def main(argv=None):
     for k in ("id", "posting", "status", "cv", "package", "location", "deadline", "note"): p.add_argument("--" + k)
     p.add_argument("--stage", default="watching"); p.add_argument("--score", type=int)
     p = sub.add_parser("set"); p.add_argument("id"); p.add_argument("stage"); p.add_argument("--status")
+    p = sub.add_parser("stats"); p.add_argument("--stale-days", type=int, default=14)
     p = sub.add_parser("check"); p.add_argument("form"); p.add_argument("--id")
     p = sub.add_parser("approve"); p.add_argument("id"); p.add_argument("--quote", required=True)
     p = sub.add_parser("sent"); p.add_argument("id")
@@ -216,6 +235,16 @@ def main(argv=None):
         for r in book.rows:
             if not a.stage or r.get("stage") == a.stage:
                 print(f"{r.get('id')}\t{r.get('stage')}\t{r.get('company')} · {r.get('role')}\t{r.get('status', '')}")
+        return 0
+    if a.cmd == "stats":
+        st = book.stats(a.stale_days)
+        print(f"{st['total']} applications: " + ", ".join(f"{v} {k}" for k, v in st["by_stage"].items()))
+        if st["sent"]:
+            print(f"sent {st['sent']}, answered with an interview or offer {st['answered']} ({round(100 * st['answered'] / st['sent'])}%)")
+        for id_, co, days in st["quiet"]:
+            print(f"quiet {days} days: {co} ({id_}); a short follow-up is fine, or close it")
+        for id_, co, dl in st["late"]:
+            print(f"deadline passed {dl}: {co} ({id_}); never sent, close it or move on")
         return 0
     if a.cmd == "todo":
         scan_p = book.data / "scan.json"

@@ -3,7 +3,7 @@
     shortcut add <name> = receivables + shifts      kısayol ekle <ad> = alacak + vardiya
     shortcut list | remove <name>                   kısayol liste | sil <ad>
 Then sending just `<name>` (or `/<name>`) in the chat answers at once. Readers: alacak (receivables), vardiya (shifts),
-ders (study), rutin (routines), tahsilat (nudges: drafted payment reminders to copy, nothing is sent). They only read the owner's own files; nothing is changed or sent anywhere.
+ders (study), gider (expenses), rutin (routines), tahsilat (nudges: drafted payment reminders to copy, nothing is sent). They only read the owner's own files; nothing is changed or sent anywhere.
 Data: <home>/kisayollar.json.
 """
 import json
@@ -13,8 +13,9 @@ from config import HOME, T
 from rutin import AD, adla
 
 DOSYA = HOME / "kisayollar.json"
+TEKRAR = HOME / "kisayol-tekrar.json"  # how often the owner asked about the same readers (counts only, no message text)
 OKUYUCU = {"alacak": "alacak", "receivables": "alacak", "vardiya": "vardiya", "shifts": "vardiya",
-           "ders": "ders", "study": "ders", "tahsilat": "tahsilat", "nudges": "tahsilat", "rutin": "rutin", "routines": "rutin", "routine": "rutin"}
+           "ders": "ders", "study": "ders", "tahsilat": "tahsilat", "nudges": "tahsilat", "gider": "gider", "giderler": "gider", "expenses": "gider", "rutin": "rutin", "routines": "rutin", "routine": "rutin"}
 # words that already mean something in the chat: a shortcut with one of these names would hide the real command
 AYRIK = {"yardim", "help", "start", "iptal", "kes", "dur", "stop", "cancel", "evet", "hayir", "yes", "no", "ok", "test",
          "durum", "status", "ekle", "add", "sor", "ask", "kisayol", "shortcut", "tartisma", "debate", "konsey", "council",
@@ -72,6 +73,9 @@ def _calistir(adim):
         import datetime
         f = alacak.dosya()
         return alacak.taslaklar(alacak.oku(f), datetime.date.today()) if f else alacak.cli()
+    if adim == "gider":
+        import gider
+        return gider.cli()
     if adim == "vardiya":
         import vardiya
         return vardiya.cli([])
@@ -108,3 +112,39 @@ def komut(text):
     if len(text) <= 40 and (r := next((x for x in oku() if x["ad"] == adla(text.strip().lstrip("/"))), None)):
         return calistir(r)
     return None
+
+
+def _okuyucular(text):
+    """Which readers a free-text message is about (word stems: alacaklar -> alacak)."""
+    kelimeler = re.findall(r"\w+", text.lower())
+    return sorted({v for k, v in OKUYUCU.items() for w in kelimeler if w.startswith(k) or (len(w) >= 6 and k.startswith(w))})
+
+
+def ipucu(text):
+    """After the owner asks about the same readers a third time in free text, suggest saving a shortcut (once per
+    reader set). Only counts are stored, never the message. Returns the hint, or None."""
+    if len(text) > 80 or EKLE.fullmatch(text) or DIGER.fullmatch(text):
+        return None
+    oku_ = _okuyucular(text)
+    if not oku_ or (len(oku_) == 1 and text.strip().lstrip("/").lower() in OKUYUCU):
+        return None  # a bare reader word already answers on its own
+    if any(sorted(r["adimlar"]) == oku_ for r in oku()):
+        return None
+    anahtar = "+".join(oku_)
+    try:
+        sayac = json.loads(TEKRAR.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        sayac = {}
+    k = sayac.setdefault(anahtar, {"n": 0, "gosterildi": False})
+    k["n"] += 1
+    ipucu_ = k["n"] >= 3 and not k["gosterildi"]
+    k["gosterildi"] = k["gosterildi"] or ipucu_
+    try:
+        TEKRAR.write_text(json.dumps(sayac), encoding="utf-8")
+    except OSError:
+        pass
+    if not ipucu_:
+        return None
+    ad = T("sabah", "morning")
+    return T(f"💡 Bunu sık soruyorsun. Tek kelimeyle cevaplamam için: kısayol ekle {ad} = {' + '.join(oku_)}",
+             f"💡 You ask this a lot. To get it with one word, no model needed: shortcut add {ad} = {' + '.join(oku_)}")

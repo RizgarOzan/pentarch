@@ -72,6 +72,25 @@ class KisayolTest(unittest.TestCase):
         kisayol.komut("kısayol ekle tahsil = nudges")
         self.assertEqual(kisayol.oku()[0]["adimlar"], ["tahsilat"])
 
+    def test_hint_on_third_repeat_only_once(self):
+        kisayol.TEKRAR.unlink(missing_ok=True)
+        q = "alacaklar ve vardiyalar ne durumda"
+        self.assertIsNone(kisayol.ipucu(q))
+        self.assertIsNone(kisayol.ipucu(q))
+        h = kisayol.ipucu(q)
+        self.assertIn("alacak + vardiya", h)
+        self.assertIsNone(kisayol.ipucu(q))  # once only
+        self.assertNotIn("alacaklar", kisayol.TEKRAR.read_text(encoding="utf-8"))  # counts only
+
+    def test_no_hint_for_bare_reader_word_unrelated_text_or_existing_shortcut(self):
+        kisayol.TEKRAR.unlink(missing_ok=True)
+        for _ in range(4):
+            self.assertIsNone(kisayol.ipucu("alacak"))
+            self.assertIsNone(kisayol.ipucu("merhaba nasılsın"))
+        kisayol.komut("kısayol ekle sabah = alacak + vardiya")
+        for _ in range(4):
+            self.assertIsNone(kisayol.ipucu("vardiya ve alacak?"))
+
 
 class YanitTest(unittest.TestCase):
     ROWS = [{"id": "acme-dev", "company": "Acme Labs", "stage": "sent"},
