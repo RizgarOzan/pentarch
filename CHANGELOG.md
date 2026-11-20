@@ -2,6 +2,9 @@
 
 ## Unreleased (platform-polish)
 
+- `nudges` reader: drafts a polite payment reminder per overdue receivable, to copy and send yourself (idea from Clawbolt).
+- Quick answers: `shortcut add <name> = receivables + shifts` makes one word that answers from your own files with no AI run (idea taken from Atticus' learned shortcuts, minus the learning).
+
 - Runs on Windows, Linux, macOS and Termux. `setup.py` can install a systemd user service or a launchd agent that restarts Pentarch, and the Termux boot loop does the same.
 - The installers (`install.ps1`, `setup.py`) stay open on errors, find the real Desktop folder under OneDrive, and install only what Termux can build.
 - A responsibility's event command is now a read-only `gh`/`git` lookup and runs without a shell.

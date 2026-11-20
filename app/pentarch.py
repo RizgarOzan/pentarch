@@ -2697,7 +2697,8 @@ def komut_cevap(text):
     import wiki
     if re.fullmatch(r"\s*/?(yardım|yardim|help|hilfe|ayuda|aide|start)\s*[?!.]?\s*", text, re.I):
         return tg.ornekler()
-    return wiki.komut(text, NOTES) or ogren.komut(text, MEMORY_PAGE, lambda satir: hafiza_ekle(("Lessons", "Dersler", "Status", "Durum"), satir))
+    import kisayol
+    return kisayol.komut(text) or wiki.komut(text, NOTES) or ogren.komut(text, MEMORY_PAGE, lambda satir: hafiza_ekle(("Lessons", "Dersler", "Status", "Durum"), satir))
 
 
 def gecit_isle(text, source):

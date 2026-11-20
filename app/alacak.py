@@ -155,6 +155,19 @@ def odendi(ad):
     return T(f"Ödendi olarak işaretlendi: {satirlar[idx[0]][6:]}", f"Marked as paid: {satirlar[idx[0]][6:]}"), True
 
 
+def taslaklar(metin, bugun):
+    """Polite payment reminders to copy and send, one per overdue line owed to you. Nothing is sent from here."""
+    out = []
+    for borc, vade, kisi, tl, _ in sorted(kayitlar(metin), key=lambda r: r[1]):
+        if borc or vade >= bugun:
+            continue
+        out.append(T(f"{kisi}: Merhaba {kisi}, {vade} tarihli {para(tl)} tutarındaki ödeme henüz bize ulaşmadı. "
+                     "Gözünüzden kaçmış olabilir, müsait olduğunuzda bakabilir misiniz? Teşekkürler.",
+                     f"{kisi}: Hi {kisi}, the {para(tl)} payment that was due on {vade} hasn't reached us yet. "
+                     "It may have slipped through, could you take a look when you can? Thanks."))
+    return chr(10).join(out) or T("Geciken alacak yok, hatırlatma gerekmiyor.", "Nothing overdue, no reminders needed.")
+
+
 def cli(args=()):
     f = dosya()
     if not f:
