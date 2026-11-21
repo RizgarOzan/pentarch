@@ -1155,8 +1155,9 @@ class Aktar(unittest.TestCase):
         self.assertIn("daily-0830-2 07:00", t)
         satirlar = [l for l in t.splitlines() if "routine add" in l or "rutin ekle" in l]
         self.assertEqual(len(satirlar), 3)
-        self.assertTrue(all(l.rstrip().endswith("'") for l in satirlar))  # nothing after the quoted job text
-        self.assertNotIn('"', t)
+        if os.name == "nt":  # PowerShell quoting; shlex.quote on sh leaves a plain word bare and writes "'" for a quote
+            self.assertTrue(all(l.rstrip().endswith("'") for l in satirlar))  # nothing after the quoted job text
+            self.assertNotIn('"', t)
         self.assertIn("# durgun:", t)
         self.assertTrue((hedef / "beceriler" / "not-2" / "SKILL.md").exists())
         self.assertIn("description: Uzun aciklama", (hedef / "beceriler" / "not" / "SKILL.md").read_text(encoding="utf-8"))
@@ -1291,10 +1292,16 @@ class LinuxImport(unittest.TestCase):
     def test_no_windows_flags(self):
         import importlib
         import subprocess
-        with mock.patch.object(subprocess, "CREATE_NO_WINDOW", 0, create=True):
-            delattr(subprocess, "CREATE_NO_WINDOW")
+        had = hasattr(subprocess, "CREATE_NO_WINDOW")  # only Windows has it; mock.patch can't undo a delattr on Linux/macOS
+        saved = getattr(subprocess, "CREATE_NO_WINDOW", None)
+        try:
+            if had:
+                delattr(subprocess, "CREATE_NO_WINDOW")
             for m in ("beyin", "wiki"):
                 importlib.reload(importlib.import_module(m))
+        finally:
+            if had:
+                subprocess.CREATE_NO_WINDOW = saved
 
 
 class YardimcilarCli(unittest.TestCase):
@@ -2254,6 +2261,7 @@ class KeyGuide(unittest.TestCase):
         self.t = lambda tr, en: en
         self.out = io.StringIO()
         self.web = mock.patch.object(anahtar.webbrowser, "open", return_value=True).start()
+        mock.patch.object(anahtar, "ekran", return_value=True).start()  # CI on Linux has no DISPLAY, which skips the page offer
         mock.patch("sys.stdout", self.out).start()
         self.addCleanup(mock.patch.stopall)
 
@@ -2376,7 +2384,7 @@ class GuidedSetup(unittest.TestCase):
         self.assertEqual(run.call_args[0][0], ["/bin/npm", "i", "-g", "@google/gemini-cli"])
         self.assertEqual(test.call_count, 2)
         self.assertIn("Login with Google", self.out.getvalue())
-        self.assertEqual(popen.called, os.name == "nt")  # the login window is a Windows-only offer
+        self.assertEqual(popen.called, os.name == "nt" or sys.platform == "darwin")  # the login window is a Windows and macOS offer
 
     def test_cli_setup_without_npm_points_at_node(self):
         with mock.patch.object(self.s.shutil, "which", return_value=None), mock.patch.object(self.s.subprocess, "run") as run:
@@ -2428,11 +2436,15 @@ class GuidedSetup(unittest.TestCase):
                     mock.patch.object(self.s.webbrowser, "open") as web, \
                     mock.patch.object(self.s.shutil, "which", return_value="/bin/claude"), \
                     mock.patch.object(self.s.subprocess, "Popen") as popen:
-                self.assertTrue(self.s.pair_and_start("claude", "Bot"))
+                started = self.s.pair_and_start("claude", "Bot")
+        self.assertEqual(started, os.name == "nt")  # on Linux and macOS the service step starts it, not this function
         web.assert_called_once_with("https://t.me/my_bot?start=1234")
         self.assertEqual(save.call_args[0][0], {"chat_id": 42, "offset": 9})  # the group message didn't claim it
         self.assertEqual(calls, ["getMe", "getUpdates", "sendMessage"])
-        self.assertEqual(popen.call_args[0][0][-1], "--quiet")
+        if os.name == "nt":
+            self.assertEqual(popen.call_args[0][0][-1], "--quiet")
+        else:
+            popen.assert_not_called()
         self.assertIn("Paired", self.out.getvalue())
 
     def test_no_start_offer_without_the_cli(self):
