@@ -2434,6 +2434,7 @@ class GuidedSetup(unittest.TestCase):
                     mock.patch.object(tg, "load_state", return_value=state), mock.patch.object(tg, "save_state") as save, \
                     mock.patch.object(tg, "pair_code", return_value="1234"), \
                     mock.patch.object(self.s.webbrowser, "open") as web, \
+                    mock.patch.object(self.s.anahtar, "ekran", return_value=True), \
                     mock.patch.object(self.s.shutil, "which", return_value="/bin/claude"), \
                     mock.patch.object(self.s.subprocess, "Popen") as popen:
                 started = self.s.pair_and_start("claude", "Bot")
