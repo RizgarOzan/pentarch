@@ -214,12 +214,16 @@ def panel_hizli_cevap_verir():
         s.bind(("127.0.0.1", 0))
         U.PANEL_PORT = s.getsockname()[1]
     threading.Thread(target=U.serve_panel, daemon=True).start()
-    time.sleep(0.5)
+    for _ in range(100):  # the server's bind can take seconds on a macOS runner (reverse lookup of the host name)
+        try:
+            socket.create_connection(("127.0.0.1", U.PANEL_PORT), timeout=1).close()
+            break
+        except OSError:
+            time.sleep(0.2)
     t0 = time.monotonic()
     req = urllib.request.Request(f"http://127.0.0.1:{U.PANEL_PORT}/", headers={"Host": f"127.0.0.1:{U.PANEL_PORT}",
                                                                            "Cookie": f"pentarch={U.panel_token}"})
-    direct = urllib.request.build_opener(urllib.request.ProxyHandler({}))  # macOS urllib reads the system proxy, even for 127.0.0.1
-    with direct.open(req, timeout=5) as r:
+    with urllib.request.urlopen(req, timeout=5) as r:
         assert r.status == 200
     assert time.monotonic() - t0 < 2, f"panel yavaş: {time.monotonic() - t0:.1f} sn"
 
