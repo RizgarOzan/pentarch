@@ -336,8 +336,9 @@ def free_keys_setup(api):
     return api
 
 
-def pair_and_start(cli, name):
-    """Waits for the owner's /start <code> in Telegram, then offers to start the assistant in the background."""
+def pair_and_start(cli, name, has_channel=True):
+    """Waits for the owner's /start <code> in Telegram, then offers to start the assistant in the background.
+    has_channel=False (no bot token, no other gateway): nobody could write to it, so no start is offered."""
     import tg
     state = tg.load_state()
     if tg.TOKEN_FILE.exists() and state.get("chat_id") is None:
@@ -373,7 +374,13 @@ def pair_and_start(cli, name):
             except KeyboardInterrupt:
                 print()
             except Exception as e:
-                print(t(f"  ! Telegram okunamadı ({e}).", f"  ! Could not read Telegram ({e})."))
+                if "Conflict" in str(e):  # Telegram's 409: a second program is already reading this bot's messages
+                    print(t("  ! Bu botu başka bir program zaten dinliyor (çalışan bir Pentarch ya da bu token'la başka bir bot).\n"
+                            "    Onu kapat ya da eşleşmeyi atla: bota /start yazman, asistan çalışırken de yeter.",
+                            "  ! Another program is already reading this bot (a running Pentarch, or another bot using the same token).\n"
+                            "    Stop it, or skip pairing: sending /start to the bot also works while the assistant runs."))
+                else:
+                    print(t(f"  ! Telegram okunamadı ({e}).", f"  ! Could not read Telegram ({e})."))
             if state.get("chat_id") is not None:
                 tg.api("sendMessage", chat_id=state["chat_id"], text=t(f"Eşleştik. Ben {name}, buradan yazabilirsin.\n\n",
                                                                        f"Paired. I'm {name}; you can write to me here.\n\n") + tg.ornekler(TR)
@@ -384,6 +391,8 @@ def pair_and_start(cli, name):
                 print(t(f"  Eşleşme olmadı. Asistan çalışırken bota /start {code} yazman yeter.",
                         f"  Not paired yet. Send the bot /start {code} while the assistant runs."))
     if not hazir(cli) or (os.name == "posix" and not TERMUX):
+        return False
+    if not has_channel:
         return False
     if TERMUX and shutil.which("pgrep") and subprocess.run(["pgrep", "-f", "pentarch.py"], capture_output=True).returncode == 0:
         print(t(f"  {name} zaten çalışıyor.", f"  {name} is already running."))  # a second restart loop would spin forever
@@ -1389,7 +1398,8 @@ def main():
                         "  Couldn't create the desktop shortcut; open the panel with `python app/pentarch.py --panel`."))
 
     step("Eşleşme ve başlatma", "Pairing and start")
-    started = pair_and_start(cli, cfg["name"])
+    no_channel = not (SECRETS / "telegram.txt").exists() and not any((g or {}).get("enabled") for g in gateways.values())
+    started = pair_and_start(cli, cfg["name"], has_channel=not no_channel)
     if os.name == "posix" and not TERMUX and hazir(cli):
         started = service_setup()  # the service is the background start here; it must come after pairing (one getUpdates reader)
     todo = []
@@ -1400,7 +1410,7 @@ def main():
         npm = "npm.cmd" if os.name == "nt" else "npm"  # PowerShell's script policy often blocks npm.ps1
         todo.append(t(f"{cli} programını kur ve giriş yap: {npm} i -g {NPM_PKG[cli]}, sonra {LOGIN[cli][0]}",
                       f"install {cli} and log in: {npm} i -g {NPM_PKG[cli]}, then {LOGIN[cli][0]}"))
-    if not (SECRETS / "telegram.txt").exists() and not any((g or {}).get("enabled") for g in gateways.values()):
+    if no_channel:
         todo.append(t("Telegram botunu kur: python setup.py (Telegram adımı)", "set up the Telegram bot: python setup.py (Telegram step)"))
     print(t("\nBitti.", "\nDone."))
     if not TERMUX:

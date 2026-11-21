@@ -2442,3 +2442,12 @@ class GuidedSetup(unittest.TestCase):
                 mock.patch.object(self.s.subprocess, "Popen") as popen:
             self.assertFalse(self.s.pair_and_start("claude", "Bot"))
         popen.assert_not_called()
+
+    def test_no_start_offer_without_a_channel(self):
+        import tg
+        with mock.patch.object(tg, "TOKEN_FILE", Path("/nonexistent/telegram.txt")), \
+                mock.patch.object(self.s.shutil, "which", return_value="/bin/claude"), \
+                mock.patch.object(self.s, "yes", return_value=True), \
+                mock.patch.object(self.s.subprocess, "Popen") as popen:
+            self.assertFalse(self.s.pair_and_start("claude", "Bot", has_channel=False))
+        popen.assert_not_called()
