@@ -4,6 +4,7 @@
 # Clones into ~\pentarch (or $env:PENTARCH_DIR), makes a virtualenv, then starts the guided setup.
 $prevErrorAction = $ErrorActionPreference  # via iex this runs in the user's own session, so it is put back at the end
 $ErrorActionPreference = 'Stop'
+trap { $ErrorActionPreference = $prevErrorAction; throw $_ }  # a throw would otherwise leave the user's own session on 'Stop'
 
 $dir = if ($env:PENTARCH_DIR) { $env:PENTARCH_DIR } else { Join-Path $HOME 'pentarch' }
 $repo = 'https://github.com/RizgarOzan/pentarch.git'
