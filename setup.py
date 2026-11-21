@@ -1376,9 +1376,11 @@ def main():
                         "  Couldn't create the startup shortcut; start Pentarch by hand, nothing else is affected."))
         if opt(t("Masaüstüne panel kısayolu eklensin mi?", "Add a desktop shortcut for the panel?"), True):
             # the real Desktop folder: OneDrive often moves it away from %USERPROFILE%\Desktop
-            r = subprocess.run(["powershell", "-NoProfile", "-Command", "[Environment]::GetFolderPath('Desktop')"],
-                               capture_output=True, text=True)
-            desk = Path(r.stdout.strip() or Path(os.environ.get("USERPROFILE", Path.home())) / "Desktop")
+            # UTF-8 on both ends: a Turkish Windows prints OEM cp857 but Python decodes cp1254, so "Masaüstü" crashed here
+            r = subprocess.run(["powershell", "-NoProfile", "-Command",
+                                "[Console]::OutputEncoding=[Text.Encoding]::UTF8;[Environment]::GetFolderPath('Desktop')"],
+                               capture_output=True, text=True, encoding="utf-8", errors="replace")
+            desk = Path((r.stdout or "").strip() or Path(os.environ.get("USERPROFILE", Path.home())) / "Desktop")
             safe = re.sub(r'[<>:"/\\|?*]', "", cfg["name"]) or "Pentarch"
             try:
                 shortcut(desk / f"{safe}.lnk", f'-I "{APP / "pentarch.py"}" --panel', icon)
