@@ -130,6 +130,8 @@ def yonlendirme_fazla_dusunmez():
 
 def beyin_kill_cocuklari_da_oldurur():
     """claude.CMD -> cmd.exe -> node: eskiden yalnız cmd ölüyor, node yetim kalıyordu."""
+    if os.name != "nt":
+        return  # needs cmd.exe, PowerShell and tasklist; only Windows has the claude.CMD -> cmd -> node chain
     B = beyin.Beyin(log=lambda m: None)
     B.proc = subprocess.Popen(["cmd", "/c", "ping -n 60 127.0.0.1 >NUL"], creationflags=subprocess.CREATE_NO_WINDOW)
     time.sleep(1)
