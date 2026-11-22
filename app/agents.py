@@ -2,7 +2,7 @@
 
 - Agent CLI (config agent.cli): claude, gemini, codex or opencode. Claude Code gets the full path in pentarch.py and
   beyin.py (persistent session, budgets, MCP, resume). The others run through `run_other` below, which keeps
-  the Telegram chat in one session per day (gemini --resume, codex exec resume, opencode run --continue).
+  the Telegram chat in one session per day (gemini --resume, codex exec resume, opencode run --session).
 - Chat API (config providers, or the older single chat_api): OpenAI-compatible /chat/completions endpoints
   (OpenRouter, Groq, Ollama, LM Studio, OpenAI...), tried in order. Used for cheap one-shot work; when none is set
   or all fail, callers fall back to the agent CLI.
@@ -12,17 +12,29 @@ import os
 import re
 import shutil
 import subprocess
-import tempfile
 import time
 import urllib.error
 import urllib.request
 import uuid
 from pathlib import Path
 
-from config import C, EXTRA_DIRS, NOTES, SECRETS, T
+from config import C, EXTRA_DIRS, HOME, NOTES, SECRETS, T, agent_env
 
 CLI = C["agent"]["cli"]
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
+
+def browser():
+    """Edge or Chrome/Chromium on this machine, or None. Opens the panel as an app window and prints CVs to PDF."""
+    pf = [os.environ.get(k, "") for k in ("ProgramFiles(x86)", "ProgramFiles", "LOCALAPPDATA")]
+    for b in [*(Path(d) / "Microsoft/Edge/Application/msedge.exe" for d in pf if d),
+              *(Path(d) / "Google/Chrome/Application/chrome.exe" for d in pf if d),
+              *(Path(w) for w in map(shutil.which, ("msedge", "google-chrome", "chromium", "chromium-browser", "chrome")) if w),
+              Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"),
+              Path("/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge")]:
+        if b.exists():
+            return b
+    return None
 
 
 def exe(name=None):
@@ -36,40 +48,83 @@ def _yolo():
     return a["permission_mode"] == "bypassPermissions" and a.get("bypass_confirmed") is True
 
 
-def other_cmd(prompt, model=None, out_file=None, resume=None, new_id=None, cli=None):
-    """Headless command line for a non-Claude agent CLI.
+def other_cmd(model=None, out_file=None, resume=None, new_id=None, cli=None, salt_okur=False, ek=(), oto=False):
+    """Headless command line for a non-Claude agent CLI. The prompt goes in on stdin, never as an argument: on Windows
+    the npm .cmd shims cut an argument at its first newline and cmd.exe stops at 8191 characters.
     resume: session id to continue. new_id: gemini only, the id a new kept session gets.
-    codex reports its own id (--json, thread.started); opencode continues the folder's last session."""
+    codex and opencode report their own id in their JSON output.
+    salt_okur: for prompts carrying outside text; gemini asks for every tool (headless, so nothing runs that
+    needs approval), codex gets its read-only sandbox, and no extra folders are added.
+    ek: extra codex flags (the MCP -c overrides from mcp_diger).
+    oto: a scheduled run (routine, brief): the CLI's own tools only read, like claude's read-only hook; folders and
+    MCP servers stay. opencode has no read-only mode."""
     cli = cli or CLI
     m = ["--model", model] if model else []
     if cli == "gemini":
-        cmd = [exe(cli), *m, "--approval-mode", "yolo" if _yolo() else "auto_edit", "--skip-trust"]
-        for d in EXTRA_DIRS:
+        mode = "default" if salt_okur or oto else "yolo" if _yolo() else "auto_edit"
+        cmd = [exe(cli), *m, "--approval-mode", mode, "--skip-trust"]
+        # gelen/: files sent over Telegram land there, outside the notes folder gemini is limited to
+        for d in [] if salt_okur else [*EXTRA_DIRS, HOME / "gelen"]:
             cmd += ["--include-directories", str(d)]
+        if salt_okur:  # the user's own MCP servers (~/.gemini/settings.json) too: allow only a name nobody has
+            cmd += ["--allowed-mcp-server-names", "pentarch-hicbiri"]
         if resume:
             cmd += ["--resume", resume]
         elif new_id:
             cmd += ["--session-id", new_id]
-        return cmd + ["-p", prompt]
+        return cmd  # piped stdin with no -p is the headless prompt
     if cli == "codex":
-        cmd = [exe(cli), "exec", *m, "--skip-git-repo-check", "--output-last-message", str(out_file), "--json",
-               "--dangerously-bypass-approvals-and-sandbox" if _yolo() else "--full-auto"]
-        return cmd + (["resume", resume, prompt] if resume else [prompt])
-    if cli == "opencode":
-        return [exe(cli), "run", *m, *(["--continue"] if resume else []), prompt]
+        cmd = [exe(cli), "exec", *m, *ek, "--skip-git-repo-check", "--output-last-message", str(out_file), "--json",
+               # MCP tool calls run outside codex's sandbox, so outside text also loses ~/.codex/config.toml's servers
+               *(["--sandbox", "read-only", "-c", "mcp_servers={}"] if salt_okur else ["--sandbox", "read-only"] if oto else
+                 ["--dangerously-bypass-approvals-and-sandbox"] if _yolo() else ["--full-auto"])]
+        return cmd + (["resume", resume, "-"] if resume else ["-"])  # "-": read the prompt from stdin
+    if cli == "opencode":  # no message argument: stdin is the message. "last" is what older installs saved
+        devam = ["--continue"] if resume == "last" else ["--session", resume] if resume else []
+        return [exe(cli), "run", *m, "--format", "json", *devam]
     raise ValueError(f"unknown agent cli: {cli}")
 
 
-def run_other(prompt, model=None, timeout=3600, cwd=None, resume=None, keep=False, cli=None):
-    """Run on gemini/codex/opencode. Returns the same dict shape claude's JSON output has
-    (result, is_error, total_cost_usd, session_id) so the rest of the code does not care which CLI ran.
-    keep=True makes the run resumable: session_id comes back and goes into `resume` next time."""
+def opencode_json(out):
+    """(answer, session id) from `opencode run --format json`: one event per line, the session id on each, text in
+    part.text (pieces of one message share a messageID). The answer is the last message's text, as claude reports it.
+    Output that isn't JSON (an older opencode) is the answer itself."""
+    sid, mesajlar = None, {}
+    for line in out.splitlines():
+        try:
+            ev = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(ev, dict):
+            continue
+        sid = sid or ev.get("sessionID")
+        p = ev.get("part") or {}
+        if ev.get("type") == "text" and isinstance(p.get("text"), str):
+            mesajlar[p.get("messageID")] = mesajlar.get(p.get("messageID"), "") + p["text"]
+    if sid is None and not mesajlar:
+        return out.strip(), None
+    return (list(mesajlar.values())[-1].strip() if mesajlar else ""), sid
+
+
+def run_other(prompt, model=None, timeout=3600, cwd=None, resume=None, keep=False, cli=None, salt_okur=False, oto=False,
+              kind=None):
+    """Run on gemini/codex/opencode, or on the API brain (cli "api", api_ajan.py). Returns the same dict shape claude's
+    JSON output has (result, is_error, total_cost_usd, session_id) so the rest of the code does not care which CLI ran.
+    keep=True makes the run resumable: session_id comes back and goes into `resume` next time.
+    kind: PENTARCH_KIND for the run, so `pentarch.py routine add` from an agent becomes a Yes/No, as under claude."""
     cli = cli or CLI
-    out_file = Path(tempfile.gettempdir()) / f"pentarch-codex-{uuid.uuid4().hex}.txt"  # unique: parallel runs share a PID
+    if cli == "api":
+        import api_ajan
+        return api_ajan.calistir(prompt, timeout, resume, keep, salt_okur, oto, kind)
+    tmp = HOME / "tmp"  # inside the private home, not the shared temp folder other users can read
+    tmp.mkdir(exist_ok=True)
+    out_file = tmp / f"pentarch-codex-{uuid.uuid4().hex}.txt"  # unique: parallel runs share a PID
     new_id = str(uuid.uuid4()) if keep and not resume and cli == "gemini" else None
-    env = {**os.environ, "GEMINI_CLI_TRUST_WORKSPACE": "true"}  # headless gemini refuses untrusted folders
+    ek, ek_env = ([], {}) if salt_okur else mcp_diger(cli)  # outside text gets no MCP tools, as with claude
+    env = agent_env(GEMINI_CLI_TRUST_WORKSPACE="true", **ek_env,  # headless gemini refuses untrusted folders
+                    **({"PENTARCH_KIND": kind} if kind else {}))
     try:
-        r = subprocess.run(other_cmd(prompt, model, out_file, resume, new_id, cli), capture_output=True, text=True,
+        r = subprocess.run(other_cmd(model, out_file, resume, new_id, cli, salt_okur, ek, oto), input=prompt, capture_output=True, text=True,
                            encoding="utf-8", errors="replace", timeout=timeout, cwd=cwd or (NOTES if NOTES.is_dir() else None), env=env,
                            creationflags=NO_WINDOW)
     except subprocess.TimeoutExpired:
@@ -83,9 +138,12 @@ def run_other(prompt, model=None, timeout=3600, cwd=None, resume=None, keep=Fals
                     sid = json.loads(line).get("thread_id")
                 except ValueError:
                     pass
+    elif cli == "opencode":
+        text, sid = opencode_json(r.stdout)
+        sid = sid or resume
     else:
         text = r.stdout.strip()
-        sid = resume or new_id or ("last" if cli == "opencode" else None)
+        sid = resume or new_id
     out_file.unlink(missing_ok=True)
     # stderr is never the answer: an empty run is an error with a marker, stderr goes to "error" for the log
     return {"result": text or T(f"(hata: {cli} cevap vermedi)", f"(error: {cli} gave no answer)"),
@@ -102,6 +160,8 @@ KART_RE = re.compile(r"\b\d(?:[ -]?\d){12,18}\b")  # card-like: 13-19 digits
 TEL_RE = re.compile(r"(?<![\w])\+?\(?\d{1,4}\)?(?:[ .-]?\(?\d{2,4}\)?){2,5}(?![\w])")
 BEARER_RE = re.compile(r"(?i)\bbearer\s+[\w.~+/=-]{8,}")
 PAROLA_RE = re.compile(r"(?i)\b(password|passwd|parola|şifre)(\s*[:=]\s*)\S+|\b(pass)(\s*=\s*)\S+")
+# "key: sk-..." / "token=..." from a provider with no known key shape; 16+ characters so "key: the plan" stays
+ANAHTAR_RE = re.compile(r"(?i)\b((?:api[_-]?)?key|token|secret|anahtar)(\s*[:=]\s*)\S{16,}")
 _EV = Path.home()
 EV_RE = re.compile("(?:" + re.escape(str(_EV)).replace(r"\\", r"[\\/]") + "|" + re.escape(_EV.as_posix()) + r")(?![\w.-])",
                    re.I) if len(_EV.parts) > 1 else None  # the home folder path names the OS user
@@ -122,6 +182,7 @@ def redact(text, kisisel=False):
     text = SECRET_RE.sub("[secret]", text)
     text = BEARER_RE.sub("Bearer [secret]", text)
     text = PAROLA_RE.sub(lambda m: (m[1] or m[3]) + (m[2] or m[4]) + "[secret]", text)
+    text = ANAHTAR_RE.sub(lambda m: m[1] + m[2] + "[secret]", text)
     if EV_RE:
         text = EV_RE.sub("~", text)
     if kisisel:
@@ -167,18 +228,23 @@ def yol_yaz(base_url, model, via=None):
         pass  # the log is never worth failing an answer
 
 
-def istek(api, messages, model=None, timeout=60, max_tokens=None, deneme=3, kisisel=False):
+DUSUNCE_RE = re.compile(r"<think>.*?(?:</think>|$)", re.S)  # reasoning models (qwen3, deepseek-r1) put this in content
+
+
+def istek(api, messages, model=None, timeout=60, max_tokens=None, deneme=3, kisisel=False, ek=None, ham=False):
     """One POST with retries. Returns (text, usage). 429/5xx/timeouts are retried with backoff (Retry-After honoured);
     on 429 the provider's fallback_model is tried first when configured. Untrusted providers only get redacted text,
-    and none of the owner's profile/CV/notes (kisisel=True) when privacy.block_personal is on."""
+    and none of the owner's profile/CV/notes (kisisel=True) when privacy.block_personal is on.
+    ek: extra body fields (tools). ham=True returns (message dict, usage) so tool calls come back too."""
     pii = guvensiz(api)
     if pii and kisisel and C.get("privacy", {}).get("block_personal", True):
         raise PermissionError(f"{api['base_url']}: personal data is not sent to an untrusted provider")
     key = os.environ.get(api.get("key_env") or "", "")
     models = (model or api["model"]).split(",")  # "a,b": OpenRouter tries b when a is rate-limited
     govde = {"model": models[0], **({"models": models} if len(models) > 1 else {}),
-             **({"max_tokens": max_tokens} if max_tokens else {}),
-             "messages": [{**m, "content": redact(m["content"], pii)} for m in messages]}
+             **({"max_tokens": max_tokens} if max_tokens else {}), **(ek or {}),
+             "messages": [{**m, "content": redact(m["content"], pii)} if isinstance(m.get("content"), str) else m
+                          for m in messages]}
     hata = None
     for i in range(deneme):
         req = urllib.request.Request(api["base_url"].rstrip("/") + "/chat/completions", json.dumps(govde).encode(), {
@@ -188,7 +254,11 @@ def istek(api, messages, model=None, timeout=60, max_tokens=None, deneme=3, kisi
             with urllib.request.urlopen(req, timeout=timeout) as r:
                 j = json.loads(r.read())
                 yol = r.headers.get("X-Routed-Via") if r.headers else None
-            text = (j["choices"][0]["message"]["content"] or "").strip()
+            msg = j["choices"][0]["message"]
+            text = DUSUNCE_RE.sub("", msg.get("content") or "").strip()
+            if ham and (text or msg.get("tool_calls")):
+                yol_yaz(api["base_url"], j.get("model") or govde["model"], yol)
+                return {**msg, "content": text}, j.get("usage") or {}
             if not text:
                 raise RuntimeError(f"{api['base_url']}: empty answer")
             yol_yaz(api["base_url"], j.get("model") or govde["model"], yol)
@@ -241,4 +311,39 @@ def mcp_dosyasi():
     f.parent.mkdir(parents=True, exist_ok=True)
     f.write_text(json.dumps({"mcpServers": out}, indent=1), encoding="utf-8")
     return f
+
+
+def mcp_diger(cli):
+    """The same mcp_servers for gemini, codex and opencode: (extra codex flags, extra environment).
+    codex: -c overrides; env_vars passes the named variables through (it gives MCP servers only PATH and the like).
+    gemini: a settings file named by GEMINI_CLI_SYSTEM_SETTINGS_PATH (the top layer; it stands in for the machine's
+    own system settings file during the run), env written as $NAME. opencode: OPENCODE_CONFIG, merged under the
+    user's own config; its servers inherit opencode's environment. Values never go into a file."""
+    servers = {ad: s for ad, s in (C.get("mcp_servers") or {}).items() if s.get("command")}
+    if not servers:
+        return [], {}
+    if cli == "codex":
+        ek = []
+        for ad, s in servers.items():
+            if not re.fullmatch(r"[A-Za-z0-9_-]+", ad):
+                continue  # only a bare TOML key fits the dotted override
+            k = f"mcp_servers.{ad}"
+            ek += ["-c", f"{k}.command={json.dumps(s['command'])}", "-c", f"{k}.args={json.dumps(list(s.get('args') or []))}"]
+            if s.get("env"):
+                ek += ["-c", f"{k}.env_vars={json.dumps(list(s['env']))}"]
+        return ek, {}
+    if cli == "gemini":
+        veri = {"mcpServers": {ad: {"command": s["command"], "args": list(s.get("args") or []),
+                                    **({"env": {v: "$" + v for v in s["env"]}} if s.get("env") else {})}
+                               for ad, s in servers.items()}}
+        f, degisken = SECRETS.parent / "gemini-mcp.json", "GEMINI_CLI_SYSTEM_SETTINGS_PATH"
+    elif cli == "opencode":  # the v1 shape; opencode 2 still reads it
+        veri = {"mcp": {ad: {"type": "local", "command": [s["command"], *(s.get("args") or [])], "enabled": True}
+                        for ad, s in servers.items()}}
+        f, degisken = SECRETS.parent / "opencode-mcp.json", "OPENCODE_CONFIG"
+    else:
+        return [], {}
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(json.dumps(veri, indent=1), encoding="utf-8")
+    return [], {degisken: str(f)}
 

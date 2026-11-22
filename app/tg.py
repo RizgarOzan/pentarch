@@ -37,7 +37,7 @@ def pair_code():
     if not PAIR_FILE.exists():
         import secrets as _s
         PAIR_FILE.parent.mkdir(parents=True, exist_ok=True)
-        PAIR_FILE.write_text(_s.token_hex(4), encoding="utf-8")
+        PAIR_FILE.write_text(_s.token_hex(8), encoding="utf-8")
         PAIR_FILE.chmod(0o600)
     return PAIR_FILE.read_text(encoding="utf-8").strip()
 LOG_FILE = HOME / "konusma.log"
@@ -68,9 +68,9 @@ def api(method, http_timeout=20, **params):
     return body["result"]
 
 
-def keyboard(buttons):
-    """Mesajın altına düğmeler; callback_data düğmenin sırası (64 bayt sınırı Türkçe metne yetmeyebilir)."""
-    return json.dumps({"inline_keyboard": [[{"text": b, "callback_data": str(i)} for i, b in enumerate(buttons)]]})
+def keyboard(buttons, onek=""):
+    """Mesajın altına düğmeler; callback_data önek + düğmenin sırası (64 bayt sınırı Türkçe metne yetmeyebilir)."""
+    return json.dumps({"inline_keyboard": [[{"text": b, "callback_data": f"{onek}{i}"} for i, b in enumerate(buttons)]]})
 
 
 def download(file_id, dest):
@@ -115,17 +115,45 @@ def load_state():
     return {"chat_id": None, "offset": 0}
 
 
+def ornekler(tr=None):
+    """What to try first; sent after pairing and as the answer to 'yardım' / 'help', so the first chat isn't blank.
+    tr: setup passes the language just chosen, which the loaded config may not have yet."""
+    if T(True, False) if tr is None else tr:
+        return ("Bana normal konuşur gibi yazabilirsin. Örnekler:\n"
+                "• Her pazartesi 8'de un siparişini hatırlat\n• Yarın 10'da tedarikçiyi aramamı hatırlat\n"
+                "• Bugünkü maillerde önemli bir şey var mı?\n• Bu dosyayı özetle (dosyayı gönder)\n"
+                "Sesli mesaj da olur. Uzun süren bir işi kesmek için 'iptal' yaz.")
+    return ("Write to me the way you'd talk. Some ideas:\n"
+            "• Remind me every Monday at 8 to order flour\n• Remind me to call the supplier tomorrow at 10\n"
+            "• Anything important in today's mail?\n• Summarise this file (send the file)\n"
+            "Voice messages work too. Write 'cancel' to stop a long job.")
+
+
+def try_pair(state, msg):
+    """While there is no owner: a private `/start <code>` claims the bot. True when this message did it."""
+    if state["chat_id"] is not None or not msg or msg["chat"]["type"] != "private":
+        return False
+    if msg.get("text", "").strip() != f"/start {pair_code()}":
+        if msg.get("text", "").startswith("/start"):
+            state["bad_tries"] = state.get("bad_tries", 0) + 1
+            if state["bad_tries"] >= 20:  # someone is guessing: burn the code, the owner reads the new one
+                PAIR_FILE.unlink(missing_ok=True)
+                state["bad_tries"] = 0
+        return False
+    state["chat_id"] = msg["chat"]["id"]
+    state.pop("bad_tries", None)
+    print(T("sahip kaydedildi", "owner claimed") + f": @{msg['from'].get('username')} ({msg['from'].get('first_name')})")
+    return True
+
+
 def read(state):
     for upd in api("getUpdates", offset=state["offset"], timeout=0):
         state["offset"] = upd["update_id"] + 1
         msg = upd.get("message")
         if not msg or msg["chat"]["type"] != "private":
             continue
-        if state["chat_id"] is None:
-            if msg.get("text", "").strip() != f"/start {pair_code()}":
-                continue
-            state["chat_id"] = msg["chat"]["id"]
-            print(T("sahip kaydedildi", "owner claimed") + f": @{msg['from'].get('username')} ({msg['from'].get('first_name')})")
+        if state["chat_id"] is None and not try_pair(state, msg):
+            continue
         if msg["chat"]["id"] != state["chat_id"]:
             continue
         when = datetime.fromtimestamp(msg["date"]).strftime("%Y-%m-%d %H:%M")
@@ -183,7 +211,7 @@ def send_doc(state, path, caption=""):
 
 
 def send_voice(state, path, caption=""):
-    """ogg/opus dosyasını Telegram sesli mesajı olarak yollar."""
+    """Sends ogg/opus as a Telegram voice note; any other file (mp3/wav when ffmpeg is missing) as an audio file."""
     if state["chat_id"] is None:
         sys.exit(T(f"Sahip yok: bota Telegram'dan /start {pair_code()} yaz.", f"No owner yet: send /start {pair_code()} to the bot in Telegram."))
     tok = token()
@@ -191,10 +219,12 @@ def send_voice(state, path, caption=""):
     parts = []
     for name, value in (("chat_id", state["chat_id"]), ("caption", caption[:1000])):
         parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n'.encode())
-    parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="voice"; filename="{Path(path).name}"\r\n'
-                 'Content-Type: audio/ogg\r\n\r\n'.encode() + Path(path).read_bytes() + b"\r\n")
+    ogg = Path(path).suffix == ".ogg"
+    alan, tur = ("voice", "audio/ogg") if ogg else ("audio", "audio/mpeg" if Path(path).suffix == ".mp3" else "audio/wav")
+    parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{alan}"; filename="{Path(path).name}"\r\n'
+                 f'Content-Type: {tur}\r\n\r\n'.encode() + Path(path).read_bytes() + b"\r\n")
     parts.append(f"--{boundary}--\r\n".encode())
-    req = urllib.request.Request(f"https://api.telegram.org/bot{tok}/sendVoice", b"".join(parts),
+    req = urllib.request.Request(f"https://api.telegram.org/bot{tok}/{'sendVoice' if ogg else 'sendAudio'}", b"".join(parts),
                                  {"Content-Type": f"multipart/form-data; boundary={boundary}"})
     with urllib.request.urlopen(req, timeout=120) as r:
         if not json.load(r).get("ok"):

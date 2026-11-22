@@ -50,22 +50,31 @@ def rol(gorev):
     return (ad, f"[Role: {ad}] {ROLLER[ad]}\n\nTask: {geri.strip()}") if ad in ROLLER and geri.strip() else (None, gorev)
 
 
-def tek(gorev, model=None, timeout=1800, cli=None):
-    """One headless run; the same dict shape as claude's JSON output (result, is_error, total_cost_usd)."""
+def tek(gorev, model=None, timeout=1800, cli=None, araclar=True):
+    """One headless run; the same dict shape as claude's JSON output (result, is_error, total_cost_usd).
+    araclar=False is for prompts that carry outside text (a job posting): claude gets no tools, no MCP and no extra
+    folders, so whatever the text says, the run can only answer. gemini and codex get their read-only modes;
+    opencode has none, so it refuses."""
     cli = cli or agents.CLI
     if cli != "claude":
+        if not araclar and cli == "opencode":
+            return {"result": "(opencode has no tool-free mode)", "is_error": True, "cli": cli}
         try:
-            return {**agents.run_other(gorev, None if cli != agents.CLI else model, timeout, cwd=WD, cli=cli),
-                    "cli": cli}
+            return {**agents.run_other(gorev, None if cli != agents.CLI else model, timeout, cwd=WD, cli=cli,
+                                       salt_okur=not araclar), "cli": cli}
         except (TimeoutError, OSError) as e:
             return {"result": f"({cli}: {e})", "is_error": True, "cli": cli}
     a = C["agent"]
-    cmd = [agents.exe(), "-p", "--output-format", "json", "--permission-mode", a["permission_mode"],
-           *(["--model", model] if model else [])]
-    if a["permission_mode"] != "bypassPermissions":
-        cmd += ["--allowedTools", config.allowed_tools(a["allowed_tools"])]
-    for d in EXTRA_DIRS:
-        cmd += ["--add-dir", str(d)]
+    cmd = [agents.exe(), "-p", "--output-format", "json", *(["--model", model] if model else [])]
+    if not araclar:
+        cmd += ["--tools", "", "--strict-mcp-config", "--disable-slash-commands", "--permission-mode", "default"]
+    else:
+        cmd += ["--permission-mode", a["permission_mode"]]
+        if a["permission_mode"] != "bypassPermissions":
+            cmd += ["--allowedTools", config.allowed_tools(a["allowed_tools"])]
+        cmd += ["--disallowedTools", config.denied_tools()]  # deny rules hold under bypassPermissions too
+        for d in EXTRA_DIRS:
+            cmd += ["--add-dir", str(d)]
     try:
         p = subprocess.run(cmd, input=gorev, cwd=WD, capture_output=True, encoding="utf-8", errors="replace",
                            timeout=timeout, creationflags=agents.NO_WINDOW)

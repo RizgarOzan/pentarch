@@ -161,7 +161,9 @@ python tracker/scan.py --config tracker/config.json            # scan, write dat
 python tracker/scan.py --config tracker/config.json --dry-run  # print, write nothing
 ```
 
-Supported boards (their public JSON endpoints): Greenhouse, Lever, Ashby. Find the slug in a company's careers URL, for example `boards.greenhouse.io/<slug>`, `jobs.lever.co/<slug>`, `jobs.ashbyhq.com/<slug>`, and list it under `boards` in `profile.json`.
+Supported boards (their public feeds): Greenhouse, Lever, Ashby, Workable, Recruitee, SmartRecruiters and Personio. Find the slug in a company's careers URL, for example `boards.greenhouse.io/<slug>`, `jobs.lever.co/<slug>`, `jobs.ashbyhq.com/<slug>`, `apply.workable.com/<slug>`, `<slug>.recruitee.com`, `jobs.smartrecruiters.com/<slug>`, `<slug>.jobs.personio.de`, and list it under `boards` in `profile.json`. SmartRecruiters lists no description, so the scan fetches it only for postings that pass the title checks.
+
+Three remote-job sites work without a company slug: `remotive` takes a category (`software-dev`), `arbeitnow` and `remoteok` a tag (`python`). An empty string reads everything they have, which is a few hundred postings, so the title and location checks do most of the work there.
 
 How a posting is judged, in order:
 
@@ -184,6 +186,7 @@ Run it from a scheduled task, or let the Pentarch agent run it before its own ju
 python -I tracker/apply.py todo                       # postings at min_score or better with no record yet, one JSON line each
 python -I tracker/apply.py add --company Acme --role "Junior Dev" --posting URL --stage drafted
 python -I tracker/apply.py list --stage drafted
+python -I tracker/apply.py stats                      # funnel counts, applications quiet for 14+ days, passed deadlines
 python -I tracker/apply.py check form.json --id ID    # form.json is {"label": "value"}; plain text works too
 python -I tracker/apply.py approve ID --quote "yes, send it"
 python -I tracker/apply.py sent ID
@@ -195,7 +198,14 @@ A record can only reach `sent` in one order: a passing `check`, then `approve` w
 
 When `current_employer` is empty, any value other than empty, "none" or "student" in a current-employer field fails. A finished internship written as your current job is the mistake this catches.
 
-The Pentarch app adds a `taslak` job at 08:45. When the morning scan leaves postings with no record, it writes a CV and a cover letter for up to two of them into `out/packages/<id>/`, checks them, and adds the record as `drafted`. It never opens an application form. Sending goes through the `apply` skill, which fills the form, runs `check`, shows you everything and waits for your yes.
+The Pentarch app adds a `taslak` job at 08:45 that runs `app/menajer.py`. When the morning scan leaves postings with no record, it builds a package for up to `menajer.max_per_day` of them at once (four by default) in `out/packages/<id>/`:
+
+- `posting.txt`, the text the scan saved
+- `cv.md` and `cover.md`, written only from your `applicant` block and measured facts about your public GitHub repos: your own commit count, whether other people contribute, and pull requests merged into other people's projects. A repo nobody else touches is never called open source.
+- `outreach.json` with a short e-mail, a LinkedIn note under 200 characters (the free-account limit) and the job titles worth contacting. The e-mail gets an address only when the posting text itself names one.
+- `review.json`: a second model scores the CV against the posting out of 100 (posting match 30, impact 20, projects 20, production 15, clarity 15) and can only take points off from a fixed list, invented facts costing the most. The code caps and adds the numbers, so the model can't inflate them. Below `menajer.min_cv_score` (75) or with a `cv.py` FAIL, the CV is revised once and scored again.
+
+The record lands as `drafted` with the score and the gaps in its status. Then you get Yes/No buttons: one to apply (the `apply` skill fills the form, runs `check` and asks you once more before it submits) and, when the posting gave an address and the e-mail gateway is on, one to send that e-mail (`menajer.py mail ID`, which sends once and adds a follow-up to the LinkedIn network log). Nothing goes out without a yes. Run it by hand with `python -I app/menajer.py run --max 2`; `python -I app/menajer.py github` shows the GitHub facts it uses (set `github_user`, or put your GitHub link in `applicant.links`).
 
 ## How the Pentarch agent uses it
 

@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pentarch</title>
+<meta name="description" content="A personal assistant that lives on your own computer, talks to you over Telegram, works through its own routines and asks before it does anything you can't take back.">
+<link rel="icon" href="pentarch.png">
+<style>
+  @font-face { font-family: "Big Shoulders Display"; font-weight: 100 900; font-display: swap; src: url(fonts/BigShouldersDisplay-latin.woff2) format("woff2"); }
+  @font-face { font-family: "IBM Plex Mono"; font-weight: 400; font-display: swap; src: url(fonts/IBMPlexMono-400-latin.woff2) format("woff2"); }
+  :root { --bg:#0a0708; --s1:#110c0d; --line:#2a1c1e; --red:#e5555f; --amber:#e6ad60; --ink:#f1e9ea; --dim:#a8999b; }
+  :root[data-theme="light"] { --bg:#faf6f6; --s1:#fff; --line:#e6d9da; --red:#c23440; --amber:#9a6416; --ink:#1d1416; --dim:#6b5a5d; }
+  @media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) { --bg:#faf6f6; --s1:#fff; --line:#e6d9da; --red:#c23440; --amber:#9a6416; --ink:#1d1416; --dim:#6b5a5d; } }
+  * { box-sizing: border-box; }
+  @media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+  body { margin:0; background:var(--bg); color:var(--ink); font:17px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main, header, footer { max-width: 980px; margin: 0 auto; padding: 0 16px; }
+  header { display:flex; align-items:center; justify-content:space-between; padding-top:20px; padding-bottom:20px; }
+  .logo { font: 600 26px "Big Shoulders Display", sans-serif; letter-spacing:.12em; color:var(--red); text-decoration:none; }
+  nav a { color:var(--dim); text-decoration:none; margin-left:20px; font-size:15px; }
+  nav a:hover { color:var(--ink); }
+  .lang { margin-left:20px; background:none; border:1px solid var(--line); color:var(--dim); border-radius:6px; padding:3px 8px; cursor:pointer; font:inherit; font-size:13px; }
+  h1 { font: 700 clamp(40px, 8vw, 72px)/1 "Big Shoulders Display", sans-serif; margin: 56px 0 16px; letter-spacing:.01em; }
+  h1 em { font-style:normal; color:var(--red); }
+  h2 { font: 700 30px "Big Shoulders Display", sans-serif; letter-spacing:.04em; text-transform:uppercase; margin: 0 0 12px; }
+  .lead { font-size:19px; color:var(--dim); max-width: 640px; margin:0 0 28px; }
+  .cta { display:flex; flex-wrap:wrap; gap:12px; margin-bottom:40px; }
+  .btn { display:inline-block; padding:12px 20px; border-radius:8px; text-decoration:none; font-weight:600; border:1px solid var(--line); color:var(--ink); }
+  .btn.main { background:#c23440; border-color:#c23440; color:#fff; }
+  .btn:hover { filter:brightness(1.1); }
+  pre, code { font-family:"IBM Plex Mono", ui-monospace, Consolas, monospace; }
+  pre { background:var(--s1); border:1px solid var(--line); border-radius:8px; padding:14px 16px; overflow-x:auto; margin:8px 0 4px; font-size:14px; }
+  .tabs { display:flex; gap:8px; margin-top:16px; }
+  .tabs button { background:none; border:1px solid var(--line); color:var(--dim); border-radius:6px; padding:6px 12px; cursor:pointer; font:inherit; font-size:14px; }
+  .tabs button[aria-pressed="true"] { color:var(--ink); border-color:var(--red); }
+  .shot { width:100%; border:1px solid var(--line); border-radius:10px; display:block; }
+  section { margin: 72px 0; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:16px; margin-top:20px; }
+  .card { background:var(--s1); border:1px solid var(--line); border-radius:10px; padding:18px; }
+  .card h3 { margin:0 0 6px; font-size:17px; }
+  .card p { margin:0; color:var(--dim); font-size:15px; }
+  .day { list-style:none; padding:0; margin:20px 0 0; border-left:2px solid var(--line); }
+  .day li { padding:0 0 18px 18px; position:relative; }
+  .day li::before { content:""; position:absolute; left:-6px; top:9px; width:10px; height:10px; border-radius:50%; background:var(--red); }
+  .day b { font-family:"IBM Plex Mono", monospace; color:var(--amber); font-weight:400; margin-right:8px; }
+  table { width:100%; border-collapse:collapse; font-size:15px; }
+  th, td { text-align:left; padding:10px 12px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--dim); font-weight:600; }
+  footer { padding-top:24px; padding-bottom:48px; color:var(--dim); font-size:14px; border-top:1px solid var(--line); margin-top:72px; }
+  footer a { color:var(--dim); }
+  a:focus-visible, button:focus-visible { outline:2px solid var(--amber); outline-offset:2px; }
+  @media (max-width: 560px) { nav a:not(.keep) { display:none; } }
+</style>
+</head>
+<body>
+<header>
+  <a class="logo" href="#">PENTARCH</a>
+  <nav><a href="#day" data-tr="Bir günü">A day with it</a><a href="#features" data-tr="Neler var">Features</a><a href="#safe" data-tr="Güvenlik">Safety</a><a class="keep" href="https://github.com/RizgarOzan/pentarch">GitHub</a><button type="button" class="keep lang" id="lang" aria-label="Türkçe / English">TR</button></nav>
+</header>
+<main>
+  <h1 data-tr="Bilgisayarında<br><em>yaşayan bir asistan.</em>">An assistant that<br><em>lives on your computer.</em></h1>
+  <p class="lead" data-tr="Seninle Telegram'dan konuşur, ücretsiz bir Google hesabıyla ya da zaten ödediğin Claude veya ChatGPT aboneliğiyle çalışır, hafızasını açıp okuyabildiğin düz dosyalarda tutar, gün boyu kendi rutinlerini yürütür ve geri alınamayacak bir şey yapmadan önce sorar.">It talks to you over Telegram, runs on a free Google account or the Claude or ChatGPT plan you already pay for, keeps its memory in plain files you can read, works through its own routines all day, and asks before it does anything you can't take back.</p>
+  <div class="cta">
+    <a class="btn main" href="#install" data-tr="Tek komutla kur">Install in one command</a>
+    <a class="btn" href="https://github.com/RizgarOzan/pentarch#readme" data-tr="Belgeleri oku">Read the docs</a>
+  </div>
+  <img class="shot" src="panel-desktop.png" alt="The Pentarch panel: chat on the left, approvals and countdowns on the right" width="2000" height="1250">
+
+  <section id="install">
+    <h2 data-tr="Kurulum">Install</h2>
+    <p data-tr="Gerekenler: Python 3.10+, git, Node.js, konuşmak için bir kanal (Telegram ya da Discord, Slack, e-posta) ve bir yapay zekâ hesabı; başlamak için ücretsiz bir Google girişi (Gemini CLI) yeter. Windows'ta eksik programları kurulum sorup kendisi kurar; Mac ve Linux'ta neyin eksik olduğunu ve nasıl kurulacağını söyler. Gerisinde Türkçe ya da İngilizce adım adım yol gösterir. Telegram için bir bot belirteci lazım: Telegram'da @BotFather'a /newbot yaz, verdiği uzun kodu kurulumda yapıştır. Toplam süre 10-20 dakika.">You need Python 3.10+, git, Node.js and a way to talk to it (Telegram, or Discord, Slack or e-mail), plus an AI account: a free Google login (Gemini CLI) is enough to start. Setup tells you if anything is missing and walks you through the rest in English or Turkish. For Telegram you need a bot token: message @BotFather, send /newbot, and paste the long code it gives you when setup asks. Allow 10 to 20 minutes.</p>
+    <div class="tabs" role="group" aria-label="Operating system">
+      <button type="button" aria-pressed="true" aria-controls="cmd-win" data-os="win">Windows</button>
+      <button type="button" aria-pressed="false" aria-controls="cmd-nix" data-os="nix">Linux / macOS</button>
+    </div>
+    <p id="how-win" style="color:var(--dim);font-size:15px" data-tr="Windows'ta: Başlat'a bas, <b>PowerShell</b> yaz, aç, aşağıdaki satırı yapıştırıp Enter'a bas. git, Node.js ya da Python kurulurken Windows &quot;Değişikliklere izin verilsin mi?&quot; diye sorabilir; Evet de.">On Windows: press Start, type <b>PowerShell</b>, open it, paste the line below and press Enter. Windows may ask "Allow changes?" while it installs git, Node.js or Python; click Yes.</p>
+    <p id="how-nix" hidden style="color:var(--dim);font-size:15px" data-tr="Mac'te: Cmd ile Boşluk'a bas, <b>Terminal</b> yaz, Enter'a bas, aşağıdaki satırı yapıştırıp Enter'a bas. Bir şey eksikse (Apple'ın komut satırı araçları, Python, Node.js) ne yapacağını söyler; onu kurup aynı satırı yeniden çalıştır. Linux'ta: bir terminal aç ve satırı yapıştır.">On a Mac: press Cmd+Space, type <b>Terminal</b>, press Enter, paste the line below and press Enter. If something is missing (Apple's command line tools, Python, Node.js) it tells you what to do; do that and run the same line again. On Linux: open a terminal and paste the line.</p>
+    <pre id="cmd-win">irm https://raw.githubusercontent.com/RizgarOzan/pentarch/main/install.ps1 | iex</pre>
+    <pre id="cmd-nix" hidden>curl -fsSL https://raw.githubusercontent.com/RizgarOzan/pentarch/main/install.sh | sh</pre>
+    <div class="tabs"><button type="button" id="copy" data-tr="Komutu kopyala">Copy command</button> <span id="copied" role="status" style="color:var(--dim);font-size:15px"></span></div>
+    <p style="color:var(--dim);font-size:15px" data-tr="Önce okumak mı istersin? İki betik de kısa: <a href=&quot;https://github.com/RizgarOzan/pentarch/blob/main/install.ps1&quot; style=&quot;color:var(--amber)&quot;>install.ps1</a>, <a href=&quot;https://github.com/RizgarOzan/pentarch/blob/main/install.sh&quot; style=&quot;color:var(--amber)&quot;>install.sh</a>. Depoyu klonlar, bir sanal ortam kurar ve <code>python setup.py</code> çalıştırır.">Prefer to read it first? Both scripts are short: <a href="https://github.com/RizgarOzan/pentarch/blob/main/install.ps1" style="color:var(--amber)">install.ps1</a>, <a href="https://github.com/RizgarOzan/pentarch/blob/main/install.sh" style="color:var(--amber)">install.sh</a>. They clone the repo, make a virtualenv and run <code>python setup.py</code>.</p>
+  </section>
+
+  <section id="day">
+    <h2 data-tr="Onunla bir gün">A day with it</h2>
+    <ul class="day">
+      <li data-tr="<b>09:00</b>Sabah özeti: vadesi gelenler, beklediğin cevaplar, gece gelen önemli mailler (Gmail ya da Yandex bağladıysan) ve önce yapılacak tek iş."><b>09:00</b>A morning brief: what's due, what you're waiting on, mail that matters (if you connected Gmail or Yandex), one thing to do first.</li>
+      <li data-tr="<b>12:10</b>Otobüsten sesli not atarsın. Kendi bilgisayarında yazıya dökülüp dosyalanır."><b>12:10</b>You send a voice note from the bus. It's transcribed on your machine and filed.</li>
+      <li data-tr="<b>15:00</b>Bir rutin profiline uyan bir iş ilanı bulur, takibe eklensin mi diye Evet/Hayır ile sorar."><b>15:00</b>A routine spots a job posting that fits your profile and asks Yes/No whether to add it to your tracker.</li>
+      <li data-tr="<b>23:00</b>Akşam özeti: ne ilerledi, ne yerinde saydı."><b>23:00</b>An evening summary of what moved and what didn't.</li>
+      <li data-tr="<b>03:00</b>Gece kendi hafızasını toparlar."><b>03:00</b>It tidies its own memory overnight.</li>
+    </ul>
+    <p style="color:var(--dim)" data-tr="Bunların hiçbiri senin yerine mesaj atmadı, kod göndermedi, dosya silmedi. Dışarıya dönük her iş senin evetini bekler.">None of that sent a message, pushed code or deleted a file for you. Outward actions wait for your yes.</p>
+  </section>
+
+  <section id="features">
+    <h2 data-tr="İçinde ne var">What's in it</h2>
+    <div class="grid">
+      <div class="card" data-tr="<h3>Telegram, panel, ses</h3><p>Yazı, fotoğraf ve sesli notla konuş. Yalnızca bu bilgisayarda açılan panel sağlık durumunu, harcamayı, hatırlatmaları ve onayları gösterir.</p>"><h3>Telegram, panel, voice</h3><p>Chat with text, photos and voice notes. A local panel on 127.0.0.1 shows health, spending, reminders and approvals.</p></div>
+      <div class="card" data-tr="<h3>Açıp okuyabildiğin hafıza</h3><p>Profilin, kuralların ve notların, istediğin an açıp düzeltebileceğin düz metin dosyalarıdır. Notlarında ve eski sohbetlerinde tam metin arar.</p>"><h3>Memory you can open</h3><p>Profile, rules and notes are markdown files. Full-text search over your notes and past chats.</p></div>
+      <div class="card" data-tr="<h3>Rutinler ve sorumluluklar</h3><p>Özetler, hatırlatmalar, günlük bütçeyle yürüyen görevler ve bitene kadar sahiplendiği kalıcı hedefler.</p>"><h3>Routines and responsibilities</h3><p>Briefs, reminders, tasks under a daily budget, and standing goals it owns until they're done.</p></div>
+      <div class="card" data-tr="<h3>Modellerden bir konsey</h3><p>Birkaç model cevap verir, birbirini okur ve oylar. Dört danışman ve bir hakem bir fikre YAP, ÖNCE DÜZELT ya da BIRAK der.</p>"><h3>A council of models</h3><p>Several models answer, read each other and vote. Four advisors and a judge give a BUILD, FIX FIRST or KILL verdict on an idea.</p></div>
+      <div class="card" data-tr="<h3>Kariyer takibi</h3><p>Hackathonları ve junior ilanlarını izler, on kaynaktan gelen ilanları puanlar. Her sabah en iyileri için CV, ön yazı ve iletişim paketlerini paralel hazırlar; her gönderimi sen onaylarsın.</p>"><h3>Career tracker</h3><p>Watches hackathons and junior jobs, scores postings from ten job sources. Each morning it builds scored CV, cover letter and outreach packages for the best ones in parallel; you approve every send.</p></div>
+      <div class="card" data-tr="<h3>Ajanı sen seçersin</h3><p>Claude Code, Gemini CLI, Codex ya da OpenCode. Zaten açık olan girişini kullanır.</p>"><h3>Your agent, your choice</h3><p>Claude Code, Gemini CLI, Codex or OpenCode. It uses the login you already have.</p></div>
+    </div>
+  </section>
+
+  <section id="safe">
+    <h2 data-tr="Güvenlik">Safety</h2>
+    <table>
+      <tr data-tr="<th>Kural</th><th>Anlamı</th>"><th>Rule</th><th>What it means</th></tr>
+      <tr data-tr="<td>Dışarıya dönük işten önce sorar</td><td>Mail atmak, paylaşmak, kod yayınlamak ve silmek Telegram'daki Evet düğmesini bekler.</td>"><td>Ask before outward actions</td><td>Sending, posting, pushing and deleting wait for a Yes button.</td></tr>
+      <tr data-tr="<td>Anahtarlar yerelde kalır</td><td>Gizli bilgiler <code>~/.pentarch/secrets</code> içinde durur. Yapay zekâya, kayıt dosyalarına ya da internete gitmez.</td>"><td>Keys stay local</td><td>Secrets live in <code>~/.pentarch/secrets</code>. They never go into prompts, logs or the repo.</td></tr>
+      <tr data-tr="<td>Tek sahip</td><td>Bot yalnızca kodla eşleşen sohbete cevap verir, başka herkesi yok sayar.</td>"><td>One owner</td><td>The bot answers the chat that paired with the code and ignores everyone else.</td></tr>
+      <tr data-tr="<td>Yerel panel</td><td>Yalnızca 127.0.0.1'i dinler; her istekte yalnızca senin makinende duran gizli bir anahtar ister.</td>"><td>Local panel</td><td>Listens on 127.0.0.1 only, and every request needs a secret key that lives only on your machine.</td></tr>
+      <tr data-tr="<td>Gizli bir şey yok</td><td>README bağlandığı her adresi listeler.</td>"><td>Nothing hidden</td><td>The README lists every address it connects to.</td></tr>
+    </table>
+  </section>
+
+  <section id="limits">
+    <h2 data-tr="Kimin için, neyi yapmaz">Who it's for, and what it won't do</h2>
+    <p data-tr="Tek kişilik bir kişisel asistan: serbest çalışan, küçük dükkân sahibi, öğrenci, iş arayan biri. Kurmadan önce şunları bil:">It's a personal assistant for one person: a freelancer, a small shop owner, a student, someone job hunting. Before you install, know that:</p>
+    <ul>
+      <li data-tr="Onunla yalnızca sen konuşursun. Müşteri sohbet botu değildir; müşterilerin ona yazamaz.">Only you talk to it. It isn't a customer chatbot; your customers can't message it.</li>
+      <li data-tr="WhatsApp yok. Telegram'dan, istersen Discord, Slack, Signal ya da e-postadan konuşur.">No WhatsApp. It talks over Telegram, and optionally Discord, Slack, Signal or email.</li>
+      <li data-tr="Kendi bilgisayarında çalışır. Bilgisayar kapalıysa ya da uykudaysa hatırlatamaz, cevap veremez.">It runs on your own computer. If the computer is off or asleep, it can't remind you or answer.</li>
+      <li data-tr="Senin yapay zekâ hesabınla düşünür; sınırları o hesabın sınırlarıdır.">It thinks with your AI account, so its limits are that account's limits.</li>
+    </ul>
+  </section>
+</main>
+<footer>
+  <span data-tr="MIT lisanslı">MIT licensed</span> · <a href="https://github.com/RizgarOzan/pentarch">github.com/RizgarOzan/pentarch</a>
+</footer>
+<script>
+  var tabs = document.querySelectorAll('.tabs button[data-os]');
+  tabs.forEach(function (b) {
+    b.addEventListener('click', function () {
+      tabs.forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+      document.getElementById('cmd-win').hidden = b.dataset.os !== 'win';
+      document.getElementById('cmd-nix').hidden = b.dataset.os !== 'nix';
+      document.getElementById('how-win').hidden = b.dataset.os !== 'win';
+      document.getElementById('how-nix').hidden = b.dataset.os !== 'nix';
+    });
+  });
+  document.getElementById('copy').addEventListener('click', function () {
+    var cmd = document.querySelector('pre[id^="cmd-"]:not([hidden])').textContent, out = document.getElementById('copied');
+    navigator.clipboard.writeText(cmd).then(function () { out.textContent = tr ? 'Kopyalandı' : 'Copied'; },
+      function () { out.textContent = tr ? 'Kopyalanamadı, satırı elle seç' : 'Could not copy, select the line by hand'; });
+  });
+  var tr = false, en = new Map(), btn = document.getElementById('lang');
+  function setLang(on) {
+    tr = on;
+    document.querySelectorAll('[data-tr]').forEach(function (el) {
+      if (!en.has(el)) en.set(el, el.innerHTML);
+      el.innerHTML = on ? el.dataset.tr : en.get(el);
+    });
+    document.documentElement.lang = on ? 'tr' : 'en';
+    btn.textContent = on ? 'EN' : 'TR';
+    try { localStorage.setItem('lang', on ? 'tr' : 'en'); } catch (e) {}
+  }
+  btn.addEventListener('click', function () { setLang(!tr); });
+  var saved = null; try { saved = localStorage.getItem('lang'); } catch (e) {}
+  if (/[?&]lang=tr/.test(location.search) || saved === 'tr' || (!saved && /^tr\b/i.test(navigator.language || ''))) setLang(true);
+  if (/Mac|Linux/.test(navigator.platform) && !/Win/.test(navigator.platform)) tabs[1].click();
+</script>
+</body>
+</html>

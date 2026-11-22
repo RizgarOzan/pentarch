@@ -7,6 +7,8 @@ import json
 import re
 import sys
 
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))  # python -I leaves the script's folder off the path
 from config import HOME, T
 
 OPEN_SECTION = ("Open tasks", "Açık işler")
@@ -36,7 +38,8 @@ def main():
     n = 0
     print(T("GÖREV KUYRUĞU", "TASK QUEUE"))
     for g in sorted(_load("gorevler.json"), key=lambda x: x.get("zaman", "")):
-        print(f"  {g.get('zaman', '?')}  {re.sub(r'\s+', ' ', g.get('is', ''))[:cut]}")
+        is_metni = re.sub(r"\s+", " ", g.get("is", ""))  # not inside the f-string: a backslash there is a SyntaxError before Python 3.12
+        print(f"  {g.get('zaman', '?')}  {is_metni[:cut]}")
         n += 1
     print(T("CEVAP BEKLEYEN", "WAITING FOR AN ANSWER"))
     for b in _load("bekleyen.json"):

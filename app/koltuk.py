@@ -49,13 +49,34 @@ def save_key(env, value):
     """Writes KEY=value into secrets/keys.env (0600 where the OS supports it) and into this process's environment."""
     keys = read_keys()
     keys[env] = value.strip()
-    SECRETS.mkdir(parents=True, exist_ok=True)
-    KEYS_FILE.write_text("".join(f"{k}={v}\n" for k, v in keys.items()), encoding="utf-8")
+    SECRETS.mkdir(mode=0o700, parents=True, exist_ok=True)
+    old = os.umask(0o077)  # the file is never readable by others, not even before the chmod
     try:
+        KEYS_FILE.write_text("".join(f"{k}={v}\n" for k, v in keys.items()), encoding="utf-8")
         os.chmod(KEYS_FILE, 0o600)
     except OSError:
         pass
+    finally:
+        os.umask(old)
     os.environ[env] = keys[env]
+
+
+def delete_key(env):
+    """Removes KEY from secrets/keys.env and from this process's environment. False when it wasn't there."""
+    keys = read_keys()
+    if env not in keys:
+        return False
+    del keys[env]
+    old = os.umask(0o077)
+    try:
+        KEYS_FILE.write_text("".join(f"{k}={v}\n" for k, v in keys.items()), encoding="utf-8")
+        os.chmod(KEYS_FILE, 0o600)
+    except OSError:
+        pass
+    finally:
+        os.umask(old)
+    os.environ.pop(env, None)
+    return True
 
 
 def ask_key(env, key_url="", preset=""):
@@ -126,6 +147,11 @@ def add(name, preset=None, model="", base_url="", key_env=None, role="", agent=F
                         f"  ! {seat['model']} is not listed by this endpoint; saved anyway."))
             if env:  # /models is public on some services (OpenRouter), so a wrong key passes this check
                 print(T(f"  anahtarı asıl sınayan: python app/koltuk.py test {name}", f"  the key itself is only verified by: python app/koltuk.py test {name}"))
+        if not seat["model"]:
+            raise SystemExit(T("model adı gerekli (Ollama'da önce: ollama pull <model>)", "a model name is needed (for Ollama first: ollama pull <model>)"))
+        # trust by preset, never by address: a localhost proxy such as freellmapi still forwards to the cloud
+        if preset in ("ollama", "lmstudio"):
+            seat["trusted"] = True
     if role:
         seat["role"] = role
     cfg = load_cfg()

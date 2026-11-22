@@ -2,4 +2,4 @@
 edge-tts>=6.1        # spoken replies (needs internet)
 faster-whisper>=1.0  # voice notes to text (local)
 # optional offline voice: pip install piper-tts, then put a <lang>_*.onnx model in <home>/piper
-# also needs ffmpeg on PATH for voice: winget install Gyan.FFmpeg
+# also needs ffmpeg on PATH for voice: winget install Gyan.FFmpeg / brew install ffmpeg / sudo apt install ffmpeg / pkg install ffmpeg

@@ -8,20 +8,39 @@ import json
 import os
 from pathlib import Path
 
+VERSION = "1.0.0"
 HOME = Path(os.environ.get("PENTARCH_HOME") or Path.home() / ".pentarch").expanduser()
 CONFIG_FILE = HOME / "pentarch.json"
 SECRETS = HOME / "secrets"
+
+
+def _extend_path():
+    """launchd/systemd keep the PATH setup saw. A CLI installed or moved later (brew, npm -g, pipx, bun) would then
+    vanish, so the usual user bin folders are appended when they exist. Runs before anything calls shutil.which."""
+    if os.name == "nt":
+        return
+    have = os.environ.get("PATH", "").split(os.pathsep)
+    h = Path.home()
+    extra = [str(p) for p in (h / ".local/bin", h / ".npm-global/bin", h / ".bun/bin", h / ".volta/bin",
+                              h / ".cargo/bin", Path("/opt/homebrew/bin"), Path("/usr/local/bin"))
+             if str(p) not in have and p.is_dir()]
+    if extra:
+        os.environ["PATH"] = os.pathsep.join([*have, *extra])
+
+
+_extend_path()
 
 DEFAULTS = {
     "owner": "Owner",              # what the assistant calls you
     "name": "Pentarch",            # the assistant's name
     "lang": "en",                  # en | tr: language of replies and of the messages the code itself sends
+    "reply_lang": "",              # any other language for the agent's replies ("Español"); code messages stay in `lang`
     "notes_dir": "~/notes",        # any folder of markdown notes (Obsidian vault, wiki...); the agent works here
     "extra_dirs": [],              # more folders the agent may read/write (your code folder, for example)
     "github_user": "",             # for PR tracking; empty turns it off
     "plan": "max",                 # pro | max | api: "pro" makes scheduled runs lean and sparse (README, Using with Pro)
     "agent": {
-        "cli": "claude",           # claude | gemini | codex | opencode (claude has every feature; see README)
+        "cli": "claude",           # claude | gemini | codex | opencode | api (no CLI: providers, see api_ajan.py; claude has every feature)
         "fast_model": "sonnet",    # everyday chat
         "deep_model": "opus",      # analysis/planning messages
         "light_model": "haiku",    # filters and short rewrites when no chat_api is set
@@ -36,6 +55,7 @@ DEFAULTS = {
         "allowed_tools": ["Read", "Grep", "Glob", "WebSearch", "WebFetch", "Bash(python *)", "Bash(gh pr view *)", "Bash(gh pr list *)", "Bash(gh pr diff *)",
                           "Bash(gh issue view *)", "Bash(gh issue list *)", "Bash(gh repo view *)"],
     },
+    "menajer": {"max_per_day": 4, "min_cv_score": 75},  # morning application packages (menajer.py); sends nothing by itself
     # optional OpenAI-compatible endpoint for cheap one-shot work (filters, shortening, council seats).
     # key_env names the environment variable that holds the key; nothing is stored here.
     "chat_api": {"base_url": "", "model": "", "key_env": "PENTARCH_CHAT_KEY"},
@@ -58,7 +78,7 @@ DEFAULTS = {
     "whisper": {"model": "small", "language": "", "groq_key_env": ""},
     "health_urls": [],             # extra sites to watch on the panel (internet and agent login are always checked)
     "net_quota_gb": 0,             # monthly data cap; 0 = no metered-connection mode
-    "jobs_off": ["insa", "posta"], # routines off at first start (JOBS in pentarch.py); panel Settings turns them on
+    "jobs_off": ["guncelle", "insa", "posta"], # routines off at first start (JOBS in pentarch.py); panel Settings turns them on
     # learning loop (ogren.py): after a chat turn a cheap model proposes notes/skill patches; the owner approves each
     "learning": {"enabled": False, "max_pending": 20},
     # tiered routing for ledger jobs (sirket.py): cheap -> mid -> top with a deep-model review; off = one run as before
@@ -67,15 +87,20 @@ DEFAULTS = {
     "self_improve": {"enabled": False},
     "memory": {"inject_max_chars": 8000},  # cap for the core memory a new session gets (profile + memory.md)
     # shell work backend (kum.py): local | docker. docker missing = command refused, never run on the host instead
-    "sandbox": {"backend": "local", "image": "python:3.12-slim", "network": False},
-    # MCP servers handed to Claude Code: name -> {"command", "args": [], "env": ["VAR_NAME"]}. env lists names only;
+    "sandbox": {"backend": "local", "image": "python:3.12-slim", "network": False},  # backend: local | docker | ssh (+ "host", "dir")
+    # MCP servers handed to the agent CLI (claude, gemini, codex, opencode): name ->{"command", "args": [], "env": ["VAR_NAME"]}. env lists names only;
     # the value stays in the environment (written as ${VAR_NAME}, Claude Code expands it)
     "mcp_servers": {},
     # extra gateways, off by default; same commands as Telegram. Passwords/tokens come from the named env variables
     "gateways": {
         "email": {"enabled": False, "imap_host": "", "smtp_host": "", "smtp_port": 465, "user": "",
-                  "password_env": "PENTARCH_MAIL_PASSWORD", "allowed_from": [], "every": 120},
+                  "password_env": "PENTARCH_MAIL_PASSWORD", "allowed_from": [], "auth_server": "", "every": 120},
         "discord": {"enabled": False, "token_env": "PENTARCH_DISCORD_TOKEN", "channel_id": "", "owner_id": "", "every": 15},
+        # Slack: bot token (xoxb-) with channels:history or im:history, and chat:write. New apps outside the Slack
+        # Marketplace may read history once a minute, hence every 60
+        "slack": {"enabled": False, "token_env": "PENTARCH_SLACK_TOKEN", "channel_id": "", "owner_id": "", "every": 60},
+        # Signal through signal-cli: account is the number registered to signal-cli, owner is your own number
+        "signal": {"enabled": False, "cli": "signal-cli", "account": "", "owner": "", "every": 15},
     },
     "panel_port": 47824,
     "chat_daily_usd": 0,           # daily cap for Telegram chat spend; once reached no AGIR hand-off. 0 = no cap
@@ -121,12 +146,24 @@ def load_keys():
                 os.environ.setdefault(k.strip(), v.strip().strip('"'))
 
 
+def agent_env(**extra):
+    """The environment for an agent CLI run, without Pentarch's own secrets (Telegram token, mail password, Discord
+    token): the agent never needs them, and under bypassPermissions a plain `env` would print them. Model and MCP keys
+    stay, since the CLI and its MCP servers read them."""
+    g = C.get("gateways", {})
+    own = {"PENTARCH_TELEGRAM_TOKEN", "PENTARCH_ICAL", g.get("email", {}).get("password_env"), g.get("discord", {}).get("token_env"),
+           g.get("slack", {}).get("token_env")}
+    return {**{k: v for k, v in os.environ.items() if k not in own}, **extra}
+
+
 C = load()
 load_keys()
 OWNER, NAME, LANG = C["owner"], C["name"], C["lang"]
-NOTES = Path(C["notes_dir"]).expanduser()
+NOTES = Path(os.environ.get("PENTARCH_NOTES_DIR") or C["notes_dir"]).expanduser()  # the env var lets a test or a second setup use another folder
 EXTRA_DIRS = [Path(d).expanduser() for d in C["extra_dirs"]]
-LANG_NAME = {"tr": "Turkish", "en": "English"}.get(LANG, "English")
+# reply_lang names a language in words ("Deutsch"); this is its two-letter code where a CV or a voice needs one
+LANG_CODES = {"deutsch": "de", "german": "de", "español": "es", "espanol": "es", "spanish": "es", "français": "fr", "francais": "fr", "french": "fr"}
+LANG_NAME = (C.get("reply_lang") or "").strip() or {"tr": "Turkish", "en": "English"}.get(LANG, "English")
 
 
 def allowed_tools(tools):
@@ -134,6 +171,16 @@ def allowed_tools(tools):
     app = Path(__file__).resolve().parent.as_posix()
     own = f'Bash(python -I "{app}/*)'
     return ",".join(own if t == "Bash(python *)" else "Bash(gh pr view *)" if t == "Bash(gh *)" else t for t in tools)
+
+
+def denied_tools():
+    """Keys and the pairing code live in SECRETS; a prompt-injected page must not be able to make the agent read them.
+    Read is a hard block; the Bash rule only catches commands that spell the folder out (a speed bump, not a wall).
+    Only Claude Code takes deny rules; the other CLIs have no equivalent (README, security)."""
+    p = SECRETS.resolve().as_posix()
+    home = Path.home().resolve().as_posix()
+    rule = f"~{p[len(home):]}" if p.startswith(home + "/") else f"/{p}"  # `//abs/path` form for paths outside ~
+    return f"Read({rule}/**),Read({rule}),Bash(*{SECRETS.parent.name}/{SECRETS.name}*),Bash(*keys.env*),Bash(*telegram.txt*)"
 
 
 def T(tr, en):

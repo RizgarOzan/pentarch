@@ -16,6 +16,8 @@ def ps(cmd):
 
 
 def main():
+    if sys.platform != "win32":
+        sys.exit(T("Ağ ölçümü şimdilik yalnızca Windows'ta çalışır.", "Network measurement works on Windows only for now."))
     sys.stdout.reconfigure(encoding="utf-8")
     if sys.argv[1:2] in (["-h"], ["--help"]):
         sys.exit(__doc__)

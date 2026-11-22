@@ -14,6 +14,8 @@ import re
 import sys
 from datetime import date, datetime, timedelta
 
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))  # python -I leaves the script's folder off the path
 from config import C, HOME, T
 
 RUN_LOG = HOME / "pentarch.log"

@@ -8,6 +8,8 @@ import json
 import sys
 from datetime import datetime, timedelta
 
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))  # python -I leaves the script's folder off the path
 from config import T
 
 
@@ -60,7 +62,7 @@ def main():
     print(T(f"DURAKLATILMIŞ, bitiş {dur}: görevler ve zamanlı işler çalışmaz", f"PAUSED until {dur}: tasks and jobs do not run")
           if dur else T("Duraklatma yok: işler vadesinde çalışır", "Not paused: jobs run when due"))
     print(T(f"Sessiz saat {bas}-{bit}: otomatik haberler sabaha birikir", f"Quiet hours {bas}-{bit}: automatic news waits for the morning"))
-    isler = gece_isleri(p.JOBS, set(p.ayar("kapali_isler")), t, son)
+    isler = gece_isleri(p.all_jobs(),set(p.ayar("kapali_isler")), t, son)
     print(T(f"{son:%d.%m %H:%M}'e kadar zamanlı iş: {len(isler)}", f"Scheduled jobs until {son:%d.%m %H:%M}: {len(isler)}"))
     for name, when in isler:
         print(f"  {when}  {name}")

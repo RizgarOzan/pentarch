@@ -130,6 +130,8 @@ def yonlendirme_fazla_dusunmez():
 
 def beyin_kill_cocuklari_da_oldurur():
     """claude.CMD -> cmd.exe -> node: eskiden yalnız cmd ölüyor, node yetim kalıyordu."""
+    if os.name != "nt":
+        return  # needs cmd.exe, PowerShell and tasklist; only Windows has the claude.CMD -> cmd -> node chain
     B = beyin.Beyin(log=lambda m: None)
     B.proc = subprocess.Popen(["cmd", "/c", "ping -n 60 127.0.0.1 >NUL"], creationflags=subprocess.CREATE_NO_WINDOW)
     time.sleep(1)
@@ -212,9 +214,15 @@ def panel_hizli_cevap_verir():
         s.bind(("127.0.0.1", 0))
         U.PANEL_PORT = s.getsockname()[1]
     threading.Thread(target=U.serve_panel, daemon=True).start()
-    time.sleep(0.5)
+    for _ in range(100):  # the server's bind can take seconds on a macOS runner (reverse lookup of the host name)
+        try:
+            socket.create_connection(("127.0.0.1", U.PANEL_PORT), timeout=1).close()
+            break
+        except OSError:
+            time.sleep(0.2)
     t0 = time.monotonic()
-    req = urllib.request.Request(f"http://127.0.0.1:{U.PANEL_PORT}/", headers={"Host": f"127.0.0.1:{U.PANEL_PORT}"})
+    req = urllib.request.Request(f"http://127.0.0.1:{U.PANEL_PORT}/", headers={"Host": f"127.0.0.1:{U.PANEL_PORT}",
+                                                                           "Cookie": f"pentarch={U.panel_token}"})
     with urllib.request.urlopen(req, timeout=5) as r:
         assert r.status == 200
     assert time.monotonic() - t0 < 2, f"panel yavaş: {time.monotonic() - t0:.1f} sn"

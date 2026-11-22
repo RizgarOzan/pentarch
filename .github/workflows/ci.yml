@@ -1,0 +1,42 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python: ["3.10", "3.13"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Unit tests
+        run: python -I -m unittest discover -s tests -p "test_*.py"
+      - name: Skill and tracker tests
+        run: |
+          python -I -m unittest discover -s skills/cv -p "test_*.py"
+          python -I -m unittest discover -s skills/linkedin -p "test_*.py"
+          python -I -m unittest discover -s tracker -p "test_*.py"
+      - name: End-to-end (fake Telegram, fake agent)
+        run: python -I tests/e2e.py
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+      - name: Build the image
+        run: docker build -t pentarch:ci .
+      - name: Smoke test (runs as the non-root user, Node 22 present)
+        run: |
+          docker run --rm --entrypoint sh pentarch:ci -c 'id -u | grep -vx 0 && node --version | grep -q "^v22" && python --version'

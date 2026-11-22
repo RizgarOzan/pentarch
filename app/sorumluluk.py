@@ -16,7 +16,9 @@ Data: <home>/sorumluluklar.json, notes in <home>/sorumluluklar/<name>.md. No mod
 """
 import hashlib
 import json
+import os
 import re
+import shlex
 import subprocess
 from datetime import datetime, timedelta
 
@@ -27,6 +29,41 @@ NOTLAR = HOME / "sorumluluklar"
 FMT = "%Y-%m-%d %H:%M"
 AD = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
 ALANLAR = ("hedef", "her", "yetki", "izin", "onay", "yasak", "olay")
+
+
+# The event command runs unattended and without a shell, so it is limited to read-only lookups. A responsibility can be
+# created by the agent itself; anything wider would let a prompt injection plant a permanent command.
+OLAY_OK = {"gh": {"pr", "issue", "run", "release"}, "git": {"status", "log", "diff", "ls-remote"}}
+OLAY_READ = {"view", "list", "checks", "status"}
+# Flags are an allowlist, not a denylist: git accepts unique abbreviations (--upl= for --upload-pack), so a blocked
+# name can always be spelled another way. Anything starting with "-" that isn't here is refused.
+OLAY_FLAGS = {"--porcelain", "--short", "-s", "-b", "--branch", "--oneline", "--stat", "--name-only", "--name-status",
+              "--heads", "--tags", "--state", "--limit", "-L", "--json", "--repo", "-R", "--label", "--author",
+              "--assignee", "--base", "--head", "--status", "--workflow", "--branch", "--event"}
+
+
+def olay_argv(cmd):
+    """The command as an argv list, or ValueError when it isn't a plain read-only gh/git lookup."""
+    try:
+        a = shlex.split(cmd)
+    except ValueError as e:
+        raise ValueError(f"olay: {e}")
+    git_dir = a[:1] == ["git"] and a[1:2] == ["-C"] and len(a) > 3
+    if git_dir:
+        sub, rest = a[3], a[4:]
+    else:
+        sub, rest = (a[1] if len(a) > 1 else ""), a[2:]
+    ok = OLAY_OK.get(a[0] if a else "")
+    if not ok or sub not in ok or (a[0] == "gh" and (not rest or rest[0] not in OLAY_READ)):
+        raise ValueError("olay: only read-only `gh pr|issue|run|release view|list|checks|status` and "
+                         "`git [-C dir] status|log|diff|ls-remote` are allowed (no shell, no pipes)")
+    for x in rest:
+        if x.startswith("-") and x.partition("=")[0] not in OLAY_FLAGS and not re.fullmatch(r"-\d+", x):
+            raise ValueError(f"olay: flag {x.split('=')[0]} is not on the read-only list")
+    if a[0] == "git" and sub == "diff":  # a repo's own config can name a program to run for diffs
+        i = a.index("diff") + 1
+        a[i:i] = ["--no-ext-diff", "--no-textconv"]
+    return a
 
 
 def oku():
@@ -43,7 +80,7 @@ def bul(ad):
 
 
 def ekle(ad, hedef, her=240, yetki="oku", izin="", onay="", yasak="", olay="", t=None):
-    """New responsibility. yetki: "oku" (read-only run) or "yaz" (may edit files). olay: a shell command; when its
+    """New responsibility. yetki: "oku" (read-only run) or "yaz" (may edit files). olay: a read-only gh/git command (see olay_argv); when its
     output changes the responsibility wakes (checked every `her` minutes, no model call while it stays the same)."""
     if not AD.match(ad):
         raise ValueError("name: lowercase letters, digits and '-', at most 40")
@@ -51,6 +88,8 @@ def ekle(ad, hedef, her=240, yetki="oku", izin="", onay="", yasak="", olay="", t
         raise ValueError(f"{ad} already exists")
     if yetki not in ("oku", "yaz"):
         raise ValueError("yetki: oku | yaz")
+    if olay:
+        olay_argv(olay)
     her = int(her)
     if not 30 <= her <= 1440:
         raise ValueError("her: 30..1440 minutes")
@@ -106,7 +145,9 @@ def vakti(s, t):
 def olay_degisti(s):
     """Runs the event command; True when its output differs from last time. The first reading only records."""
     try:
-        p = subprocess.run(s["olay"], shell=True, capture_output=True, encoding="utf-8", errors="replace", timeout=60)
+        # -C may point at any repo, and git would run that repo's fsmonitor hook; switch it off
+        env = {**os.environ, "GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "core.fsmonitor", "GIT_CONFIG_VALUE_0": "false"}
+        p = subprocess.run(olay_argv(s["olay"]), capture_output=True, encoding="utf-8", errors="replace", timeout=60, env=env)
         cikti = p.stdout + p.stderr
     except Exception as e:
         cikti = f"error: {e!r}"
@@ -184,6 +225,6 @@ def isle(ad, cevap, t):
 
 
 def ozet_satiri(s):
-    ne = {"aktif": "▶", "duraklat": "⏸", "bitti": "✓"}.get(s["durum"], "?")
+    ne = {"aktif": "active", "duraklat": "paused", "bitti": "done"}.get(s["durum"], "?")
     zaman = s.get("sonraki") or s.get("son") or s.get("kayit", "")
     return f"{ne} {s['ad']} ({s['yetki']}, {s['her']} min, {zaman}): {s['hedef'][:80]}"

@@ -1,0 +1,207 @@
+# Changelog
+
+## Unreleased (platform-polish)
+
+- Interview skill with a story bank (idea from career-ops): finds the themes you have no story for, matches stories to likely questions, flags a result with no number, "we" instead of "I" and answers that run past 90 seconds. It never writes a story for you.
+- `apply.py stats`: funnel counts (sent, answered), applications quiet for 14+ days and passed deadlines (idea from career-ops).
+- Expense ledger in plain words: `expense add flour 1200`, then `expenses` shows this month, last month and the biggest names. Also a `expenses` quick-answer reader.
+- After you ask about the same readers three times in free text, Pentarch suggests the matching `shortcut add` once. It keeps only counts, not your messages.
+- A recruiter reply in the mail check (rejection, interview, offer) now asks Yes/No to move the matching tracker row (idea from JobOps). Matched by code; nothing moves without a yes.
+- `nudges` reader: drafts a polite payment reminder per overdue receivable, to copy and send yourself (idea from Clawbolt).
+- Quick answers: `shortcut add <name> = receivables + shifts` makes one word that answers from your own files with no AI run (idea taken from Atticus' learned shortcuts, minus the learning).
+
+- Runs on Windows, Linux, macOS and Termux. `setup.py` can install a systemd user service or a launchd agent that restarts Pentarch, and the Termux boot loop does the same.
+- The installers (`install.ps1`, `setup.py`) stay open on errors, find the real Desktop folder under OneDrive, and install only what Termux can build.
+- A responsibility's event command is now a read-only `gh`/`git` lookup and runs without a shell.
+- `/pano` needs the cookie that the panel page sets. Bad or negative `Content-Length` is rejected with 400, oversized bodies with 413.
+- The panel secret is compared in constant time. SIGTERM shuts down cleanly.
+- README lists every outbound address, including the nightly `git pull` and the first-run Whisper download, and says plainly that the panel does not protect against other programs on the same account.
+- `install.sh` works under `curl | sh` (questions read from the terminal) and says to install `python3-venv` when Debian's Python lacks it.
+- Service files survive odd home paths: the systemd unit quotes paths and escapes `%`, the launchd plist escapes XML, and the Termux boot loop uses the venv's Python with shell quoting.
+- On Linux and macOS a timed-out agent is killed along with its child processes.
+- New tests for the panel on a real socket, the pairing code, autostart files and the secrets deny rule.
+- The job scan reads Workable, Recruitee and SmartRecruiters boards and the Remotive, Arbeitnow and RemoteOK feeds, and keeps the posting text.
+- `app/menajer.py` replaces the morning draft prompt: it builds application packages for several postings at once (CV, cover letter, outreach e-mail and LinkedIn note) from the profile and measured GitHub facts. A second model scores each CV against the posting with a fixed rubric, and a weak one is revised once. Applying and e-mailing come as Yes/No proposals; nothing is sent without a yes.
+- Every model run that reads a posting runs with no tools at all (claude `--tools ""` with no MCP; read-only modes for gemini and codex; opencode is skipped), so text hidden in a posting can only change the draft, never act.
+- The task that runs after a Yes carries ids and file paths only, never the posting text. `pentarch.py approve` is gone: only the panel and the Telegram button can approve a proposal.
+- The mail proposal shows the full mail. `menajer.py mail` sends only if that exact text (by hash) got a Yes, the address appears in the posting on the company's own domain, and no earlier send holds `sent.lock`.
+- The CV rubric follows the field (software, design, data, general). The reviewer sees skills and merged PRs, the better of the two rounds is kept, and every round's score is saved in `review.json`. Weak packages are flagged in the question.
+- The CV checker accepts Turkish and German headings and month names, `MM/YYYY` dates and portfolio links. The scan knows Werkstudent, Praktikant, Berufseinsteiger, yeni mezun and uzman yardımcısı.
+- When one model both wrote and scored a CV, the status line and `review.json` say so.
+- Posting keywords skip equal-opportunity, privacy and benefits boilerplate, so "Veteran" or "Religion" no longer show up as missing keywords.
+- The scan reads Personio boards (`<slug>.jobs.personio.de` or `.com`). A feed with a DOCTYPE is refused, so XML entity tricks never reach the parser.
+- Quick setup asks one yes/no on whether you're job hunting; a yes runs the career questions it used to skip.
+- Setup explains what entry, mid and any mean, asks outright whether you need a visa sponsor, strips the quotes Windows adds to a copied CV path, keeps Ashby boards, and starts the scan on the open Remotive and Arbeitnow feeds when no company board is set.
+- The example profile is a plain junior software engineer, not a filled-in person.
+- Outreach e-mails go only to the company's own domain: free-mail addresses and look-alike domains (`acme-careers.net`, `evil.co.uk` for `foo.co.uk`) are refused.
+- Posting text no longer reaches files or logs that a tool-enabled run reads: outreach keeps only the note and the contact, errors go to a file, the news line points at paths, and the chat log shows a pointer to the panel instead of the quoted proposal.
+- German postings: Personio is read in its own language (asking for English emptied 290 of 328 descriptions on one board), Werkstudierende and studentische Hilfskraft count as intern, "3 Jahre Berufserfahrung" counts as a years requirement, Informatik counts as a CS degree, a role word like "Software" finds "Softwareentwicklung", and "Headquarters" in the location field no longer drops a posting.
+- Arbeitnow's tag filter also looks in the title and text, since its tags are broad ("Engineering").
+- The CV checker takes `--lang de`: German section names, pronouns and stopwords, no capital-letter keywords (German capitalises every noun), and perks lines like JobRad or Urlaub are skipped. "Cut", "set" and "put" no longer count as a tense mix.
+- A plainly titled job ("UX Designer") is no longer dropped for missing "junior": it passes, a point lower, when the text names a level or a years figure. A "Designer" role also finds "Digital Design" and "Design Apprentice" titles.
+- "UK" in your locations finds "United Kingdom", "England" and "Scotland" (same for US, Germany, Türkiye, Netherlands), and "Remote - US only" is dropped unless the US is one of your places.
+- The CV checker takes UK headings (Employment History, Qualifications, Key Skills, Personal Statement, Case Studies), "September 2018 to Present" dates and any domain as a portfolio link. A project or case study without a number gets a warning instead of a fail, so drafts aren't pushed toward made-up metrics. "Head", "managers" and "engineers" are no longer posting keywords.
+- The application check reads "£32k" as 32,000 and accepts a salary range that contains your answer.
+- SC, DV and TS/SCI clearance count as clearance warnings, and the example profile lists them.
+- README: the outbound list names every job board and feed plus `api.github.com`, scores are 1-5, and the safety section says what the scheduled-run hook does and doesn't block.
+- When OpenCode is the only agent CLI, application packages are skipped with a clear log line instead of quietly calling Claude Code.
+- `install.ps1` offers to install missing git, Python and Node.js with winget, says to open a new window afterwards, and speaks Turkish too.
+- The panel opens only through its link (`/?k=…` sets the cookie and redirects); a plain `GET /` gets 403 instead of the secret. The secret is kept in `secrets/panel.token`, out of the agent's reach, and survives restarts, so an open tab keeps working.
+- `kum.py` refuses to run anything unless the Docker sandbox is on. Before, under `acceptEdits` it was a full shell on the host.
+- The e-mail door trusts only the topmost Authentication-Results header (optionally pinned with `gateways.email.auth_server`) and no longer marks the rest of your inbox as read.
+- Proposal buttons carry the proposal number, so a long proposal split over several Telegram messages can still be approved. A double tap no longer starts the job twice, and `onaylar.json` is written in one swap.
+- Quiet hours that cross midnight (23:00-07:00) now work.
+- The morning brief only mentions the job scan when a profile exists and PRs when `gh` is installed. Mail checks talk about bills, replies and deadlines, not just applications.
+- Setup asks before quitting on Ctrl+C, has no made-up default role, skips the board-slug questions in quick mode and says to come back after the login window.
+- Setup shows the default next to numbered choices, no longer asks for the agent twice, labels Claude and ChatGPT as paid, and in quick mode skips the free keys unless you say yes. It says what it installs before it does, points to web.telegram.org for copying the bot token, says the computer has to stay on, and prints a start command with the venv's full Python path (`npm.cmd` on Windows, since PowerShell often blocks `npm.ps1`).
+- The Turkish README starts the install section with the one-line installer and no longer promises mail sending without the e-mail gateway.
+- `install.ps1` also offers ffmpeg (for voice replies) and says why it wants Node.js.
+- The panel's routine list has a short line under each routine saying what it does, in Turkish and English.
+- Setup has an `intern` level (internships only, stajyer and working student titles), asks for Workable boards, and when you live or look for work in Turkey it offers eight Turkish companies with open boards (Trendyol, Insider, Dream Games, iyzico, Picus, Codeway, Good Job Games, Ace Games). It also says that Youthall, Kariyer.net and LinkedIn have no open feed. "Türkiye" in your places adds "Turkey", which is what postings write.
+- The mail check routine can read your inbox itself over IMAP, so it works with any agent, not only one with a mail tool. It opens the inbox read-only, fetches only sender, subject and date, marks nothing as read, and skips the model run when nothing new came in. Setup asks for it in both modes and walks you through a Gmail app password; Outlook and Hotmail are turned away, since they no longer allow password sign-in.
+- Your own routines: `routine add <name> <08:30 | mon,fri@08:30 | 90m> "what to do"`, or just ask in chat. They run read-only on the fast model, changes come back as proposals, and the panel lists them next to the responsibilities.
+- The agent CLI no longer inherits Pentarch's Telegram, mail and Discord secrets through its environment.
+- A scheduled run that answers `OPUS:` no longer starts deep-model work on its own; the work becomes a Yes/No proposal.
+- Files holding secrets are created owner-only from the first byte. On Linux setup says whether the service will start at boot before you log in, and gives the one `loginctl` command if not. The systemd unit sets `NoNewPrivileges`.
+- CV and job fixes from a round with UK testers: curriculum, L&D and business development titles no longer count as software jobs, "Teaching Experience"-style headings pass the CV check, setup asks for past jobs as well as projects, a project can carry evidence instead of a link, and career switchers are told to pick mid rather than entry.
+- Spanish job hunts: setup asks the CV language (en, tr, de, es), the CV checker reads Spanish headings, month names ("ene. 2025 - actualidad"), weak openers and pronouns, and flags a birth date or marital status line. The scan counts becario, prácticas and recién graduado as entry roles, "3 años de experiencia" as a years requirement and teletrabajo as remote, and matches "Analista de datos" on its first word. Data roles in Spanish get the data rubric.
+- "Remote (United States)", "Remote - Americas" and "Remote, US" are dropped unless your locations cover them; Americas and LATAM are matched by country.
+- Panel: form controls have borders you can see against the background, and the landing page tabs are proper toggle buttons.
+- macOS and Linux services carry `PENTARCH_HOME`, so a custom home survives a reboot. The launchd agent is loaded with `launchctl bootstrap` (the old `load` fails quietly on current macOS) and waits 60 s between restarts; the systemd unit waits 30 s.
+- `setup.py --help` prints usage instead of starting setup. `install.sh` runs setup with the venv's Python and suggests `brew install python@3.12` on a Mac.
+- `routine` commands exit with code 1 when they fail, and a routine can run in its own window: `90m@07:00-01:00`.
+- The secrets read-deny rule is now passed to Claude in every permission mode. Under `bypassPermissions` it had been left out since the first version.
+- The Docker sandbox is real now: with `sandbox.backend = docker` the agent is told to run outside code only through `app/kum.py`. README says plainly that this is a fence only under `acceptEdits`; under `bypassPermissions` it is a rule the agent follows.
+- On Linux and macOS a service started with a bare PATH still finds CLIs in `~/.local/bin`, `~/.npm-global/bin`, `~/.bun/bin`, Homebrew and the like.
+- CV checks after a recruiter review: a bullet without a number is a warning that says never to invent one, a leftover `[number?]` or `TODO` fails, stock AI wording ("spearheaded", "leveraged", "passionate") and em dashes warn, a profile line of up to two lines is fine, and posting keywords weigh requirements over preferred ones. The package reviewer takes 6 points for a leftover placeholder and 3 for AI wording.
+- Application packages are written in one language (the CV language), put work authorization and start date on the CV and in the letter, and keep the LinkedIn note under 200 characters, the free-account limit.
+- Setup: a failed mail sign-in offers to retype the password and otherwise leaves the mail check off; a bare `/start` during pairing gets a reply saying the code is missing; a startup shortcut that can't be made no longer stops setup. README runs setup with the venv's Python by path instead of `activate`, which PowerShell often blocks.
+- `pentarch.py import` also reads Hermes (`~/.hermes`: SOUL.md, MEMORY.md and USER.md, nested skills) and OpenClaw (`~/.openclaw/workspace`: AGENTS.md, SOUL.md, IDENTITY.md, USER.md, MEMORY.md, skills). Hermes scheduled jobs are turned into `routine add` commands you run yourself; a schedule it can't convert is left as a comment. `.env` and `auth.json` are never opened.
+- Slack and Signal gateways (off by default). Slack polls one channel with a bot token and answers only `owner_id`; Signal goes through signal-cli and answers only your own number. The Slack token is kept out of the agent's environment like the other gateway secrets. WhatsApp is left out on purpose: its official API needs a public webhook.
+- Fixes from a round with a Hermes user and a Slack/Signal user. Hermes import: duplicate job names get `-2`, paused jobs say so, quotes and newlines in a prompt no longer break the printed command, folded skill descriptions are read whole, and `every 30 minutes`, `*/15 * * * *` and `0 */6 * * *` convert. Slack: a user token (`xoxp-`) is refused, `<@U…>` and `<url|text>` come through as plain text, errors carry a hint for the fix, and a backlog of more than 15 messages gets a note instead of being dropped silently. Signal: numbers with spaces match, group messages are skipped, signal-cli linked to your own number works through Note to Self, and a missing signal-cli says so. README explains how to turn each door on.
+- A gateway reply that fails to send is kept and sent before anything new is read, so a message is never answered twice and the agent never runs twice for it. Full setup now asks about Slack, Discord and Signal one by one and turns a door on only when everything it needs is there.
+- `mcp_servers` now reach Gemini CLI, Codex and OpenCode too (Gemini through a settings file, Codex through `-c` overrides with `env_vars`, OpenCode through `OPENCODE_CONFIG`), not just Claude Code. Runs that read outside text still get none.
+- Fixes from a round with a first-time student on the free Gemini path. Gemini, Codex and OpenCode chats now get `sistem.md` at the start of each session; before, they never learned the assistant's name, memory or commands. When those CLIs can't run the reminder command, a `HATIRLAT:`/`REMIND:` line in the reply sets the reminder, so "I'll remind you" is no longer an empty promise. Gemini can read files sent over Telegram. A file over Telegram's 20 MB bot limit gets an explanation, and a message that fails to download gets a reply instead of silence. `install.ps1` errors and the landing page's requirements are clearer.
+- `pentarch.log` rolls over to `pentarch.log.1` at 5 MB, and the panel and the chat read only the end of a log instead of the whole file.
+- Slack and Signal gateways keep files people send (saved to `~/.pentarch/gelen`), and Slack replies stay in the thread they came from.
+- The sandbox has an `ssh` backend: `sandbox.backend = ssh` with `sandbox.host` runs `kum.py` commands on another machine in its own folder (`sandbox.dir`). A host starting with `-` is refused, so it can't smuggle in ssh options.
+- The e-mail door now wants DMARC or DKIM to pass for the sender's own domain; SPF alone is no longer enough. Gmail and Yandex servers are known, and any other provider needs `auth_server` set, otherwise no mail counts as yours.
+- A gateway reply that keeps failing is dropped after 30 tries with a line in the log, instead of blocking that door forever.
+- A reminder set through a `REMIND:` line is echoed back in full, and only the first one in a reply is saved, so a reply can't quietly plant several.
+- Runs that read outside text get no MCP servers on Gemini and Codex either.
+- The secrets deny rule also blocks shell commands that name the secrets folder. It's a speed bump, not a wall, and only Claude has it; README says so.
+- A message that arrives while the assistant is busy is queued before the "still working" note goes out, so a failed note no longer loses the message.
+- Pairing and `/help` (or `yardım`) show a handful of example messages to get started.
+- Setup asks what you do in one sentence and puts it in the profile, gives plainer Gemini login steps, calls the free keys optional extras, and warns that Windows will ask to allow changes while installing git, Node.js or Python. The landing page says who it's for and what it won't do.
+- A task that took Pentarch down is retried with a note that it was cut off (so it checks before sending anything twice), and dropped with a message after two more crashes instead of looping forever.
+- The nightly update tests the new version (installs changed packages, compiles, imports) in a throwaway home before keeping it; if it fails, it goes back to the old version and says why.
+- `pentarch.py backup [file.zip]` zips notes, memory, routines and config; the secrets folder stays out.
+- When the nightly update can't run at all (local changes in the repo, no network), the owner hears it once a week per reason instead of never.
+- The panel also answers on `localhost:47824`, and `pentarch.py panel` prints the link plus the `ssh -L` line for opening it from another computer.
+- macOS install: `install.sh` asks for Apple's command line tools before it touches git, points to the python.org installer (and its Install Certificates step) when there's no Homebrew, setup says when `npm i -g` failed and how to fix a permission error, and the agent login opens in a new Terminal window.
+- Gemini, Codex and OpenCode can set a routine you asked for in chat with a `ROUTINE:`/`RUTIN:` line, echoed back like reminders. Only chat replies count, never a job that read mail or a page.
+- A routine whose time passed while the computer slept runs when it wakes, up to 24 hours late, unless its next run is less than 3 hours away.
+- README says what the non-Claude CLIs can't do and that there is no general mail-sending action.
+- On Windows a long prompt for Gemini, Codex or OpenCode is no longer cut off: it goes in on stdin instead of the command line, which the `.cmd` shims truncate.
+- A "Software Engineer" role also finds Developer and Entwickler titles.
+- Dates like 26.12.2026, 26/12 and "26.12." count as deadlines; times (10.30), versions (3.12, 1.2.3), scores (3/45) and IP addresses don't.
+- Monthly routines: `1,15@09:00` runs on the 1st and 15th, and 31 means the last day of a shorter month.
+- Application packages come with a one-column `cv.pdf`, printed by a headless Edge or Chrome already on the machine. Without a browser the apply task says to ask you before uploading anything, instead of telling the agent to make a PDF.
+- The apply proposal shows the LinkedIn note, ready to copy.
+- README and the landing page give the morning brief's real time, 09:00.
+- The mail check reads the first 300 characters of each new mail, not just sender and subject. That text only goes to a model run with no tools. Gemini and Codex keep read tools in their safe modes, so they get sender and subject only; OpenCode has no tool-free mode and skips mail.
+- The morning brief carries the mail since the last check, so the 09:00 mail message no longer comes separately.
+- Nightly auto-update (guncelle) now starts off on new installs; setup asks whether to turn it on. Installs that already have it on keep it.
+- The landing page has a TR/EN switch; it opens in Turkish for Turkish browsers or with ?lang=tr.
+- The application form check reads German forms: ja/nein answers, "Haben Sie" work-permit questions and Gehalt/Vergütung salary fields.
+- The mail verdict is added to the morning brief by code after the model has answered, so mail text never sits in that prompt. Runs with no tools can't open proposals or start deep-model work. Sender names and subjects are flattened to one line, one broken mail no longer stops the check, IMAP gives up after 60 s, and HTML bodies are cut at 64 KB before decoding.
+- `install.sh` only runs once it has fully downloaded, and `install.ps1` stops when `git pull` fails instead of carrying on with old files.
+- The job scan lists a role posted on two boards once ("Junior Dev (m/w/d)" at "Acme GmbH" and "Junior Dev" at "Acme"), and the apply list drafts it once. A new role at a company you already applied to is still shown, with a note saying so.
+- Skills match their short names (JS, TS, k8s, Postgres, Golang, C#), and only as whole words: "Java" no longer matches "JavaScript", and "Go" no longer matches "good".
+- A routine asked for in chat is now a Yes/No proposal and is saved only after a yes, so a reply can't add one on its own.
+- The e-mail door marks a mail as read only once it has passed the sender check; a stranger's mail or a forged one stays unread in your inbox.
+- Job links on the tracker page must start with http or https, so a `javascript:` link in a posting can't run on the page.
+- README and the landing page say what the read-only rule for routines really is (a hook under Claude Code, an instruction on the other CLIs) and that the panel key lives on your machine.
+- German job hunts: "Berlin, Germany" in your places also finds postings that say just "Berlin", and "Remote (Germany)" or Homeoffice postings when you live there. "Seit 15 Jahren" about the company isn't read as a years requirement, Vollzeit isn't read as a place, team lead titles are skipped, and "Entwickler:in" and "Entwickler*in" count as the same job. When your profile lists languages, a posting that asks for more German than you have is a point lower and says so ("asks German C1, you have B1"); "von Vorteil" asks for nothing. A short skill like Go counts only when written as a name, not in "go-live" or "let's go".
+- The CV checker reads German headings (Beruflicher Werdegang, Bildungsweg, Technische Kenntnisse and the like) and dates such as "seit 03/2024" and "10.2023 – aktuell", and finds "Kubernetes" in "Kubernetes-Infrastruktur". The application check reads Mobilnummer, Abschlussjahr, Aktueller Arbeitgeber and XING fields, and compares names without accents.
+- Cover letters for German postings use the German letter form. Scheduled runs on Gemini and Codex are read-only too.
+- Routines can run every few months (`20@09:00 jan,jul`), and dates in other languages are understood. A sent application gets a reply follow-up after 10 days, and a morning brief missed while the machine was off runs when it comes back.
+- Calendar on any agent CLI: put a private iCal link in `secrets/keys.env` as `PENTARCH_ICAL=` and the morning and evening briefs list today's and tomorrow's events (`app/takvim.py`, standard library only). The link never reaches the agent.
+- Replies follow the language the owner writes in. Setup gives the macOS sleep setting and the npm PATH line when a global install fails with EACCES.
+- The small model runs with no tools on Gemini and Codex and refuses on opencode, which has no tool-free mode. Notes and logs mask `key=`, `token:` and similar values. Codex's temp answer file lives in Pentarch's home, not the shared temp folder.
+- The systemd unit waits for the network, sets `UMask=0077` and `PrivateTmp`, and stops restarting when Telegram rejects the token (exit 78). Headless Linux setups no longer try to open a browser. Unsent messages replayed at startup are dropped after two failed tries, with a note to the owner.
+- `doktor.py` checks every model endpoint in `chat_api` and `providers` and says to start Ollama or LM Studio when a local one is down.
+- Plain "test" is a normal message now; `/test` runs the self-test. Stop words work in Spanish, German and French too, and the busy notice says "min" in English.
+- Long jobs started from e-mail, Discord, Slack or Signal send their result back to that same place instead of only Telegram. Mail with only an HTML body is read (quoted parts dropped); a mail that can't be read stays unread.
+- Interval routines brought over from Hermes keep running overnight, as they did there.
+- Setup has a third language choice: setup runs in English and the assistant answers in the language you name (Español, Deutsch, Português...), kept in `reply_lang`.
+- An Outlook or Hotmail address no longer looks like a dead end: setup says the inbox can't be read yet, everything else works, and forwarding to Gmail gets the mail summary. The Windows sleep tip also covers closing a laptop lid.
+- Telegram is optional. With no bot token, messages, questions and Yes/No proposals go to the first other gateway that knows you (e-mail, Discord, Slack, Signal), buttons become "(Yes / No)" text, and you answer with "yes 3" or "no 3". Scheduled jobs now run in this mode too; before, they waited forever for a Telegram chat id.
+- Approvals work from any gateway, not just Telegram and the panel.
+- `routine remind <name> 09:00,21:00 "take your pills"` sends the text itself at each time with no model run. A repeat is never dropped as a duplicate, a missed one still goes out within two hours and says how late it is, and anything older is skipped so a dose isn't doubled. Ordinary routines accept several times too.
+- Hermes import copies each skill folder (a folder over 5 MB gets a pointer instead), skips skills and memory lines that carry injection text, and queues memory entries one by one.
+- The Docker sandbox drops all capabilities, sets no-new-privileges, caps processes and memory, runs as your own user, and refuses to mount your home folder, the Pentarch folder or a drive root.
+- The landing page's Linux / macOS tab now shows Mac steps (Cmd+Space, Terminal) instead of the Windows ones, and the Turkish text no longer claims setup installs missing programs on every system; that only happens on Windows.
+- `install.sh` on a Mac without Node.js says where to get it (nodejs.org or `brew install node`).
+- Without ffmpeg a voice reply goes out as an audio file instead of silently not going out at all.
+- On a Mac, setup warns that macOS will show a "Background Items Added" notice naming Python, and that switching it off in Login Items stops Pentarch.
+- Helpers added with the Ollama or LM Studio preset count as trusted; nothing gets trusted just because its address is localhost, since proxies like freellmapi on 127.0.0.1 forward to the cloud. Adding a helper with an empty model name is refused.
+- With Telegram off, the health check no longer pings api.telegram.org. Memory embeddings follow `OLLAMA_HOST` when it is set.
+- Telegram is optional in the README and in setup: quick setup offers the other doors when there's no bot token, and the "set up Telegram" to-do only shows when no door is on.
+- A plain repeating reminder can be proposed in chat as a `TEKRAR:`/`REPEAT:` line and goes out with no model run. Routine names in Turkish ("Yüzme", "İlaç") are turned into plain ascii names instead of being refused.
+- Asking for a list (debts, orders, shopping) gets one line per item, and the agent keeps `debts.md`/`orders.md` (`borclar.md`/`siparisler.md`) in the notes instead of making numbers up.
+- The same reminder text on a different day is no longer dropped as a duplicate. A missed weekly or monthly reminder still goes out within a day; a daily one only within two hours, so a pill reminder doesn't fire twice.
+- When voice transcription fails, the reply says to rerun setup or type instead of telling a non-developer to run pip.
+- The web panel works with a screen reader: typing no longer announces every keystroke, old messages aren't read out again when new ones arrive, Yes/No buttons say which proposal they answer and the result is announced, and choice buttons are announced when they appear. A long message now folds and unfolds in place.
+- The landing page has a "Copy command" button, and says Telegram is one of several ways to talk to it. The Windows and Unix installers are quieter (no winget prompts, quiet git clone).
+- Turkish templates bend suffixes to the owner's name: Ayşe'nin, Zeynep'ten, Ülkü'nün instead of Ayşe'ın.
+- The job scan reads Turkish internship titles (stajyer, staj, stajı).
+- On a phone (Termux), the first start already holds the wake lock and restarts itself like a boot does, and rerunning setup doesn't start a second copy. The setup note gives the adb steps for Android 12-13 and says the battery drains a bit faster. If you have a Groq key, setup offers to transcribe voice on Groq, which is the only way voice works on a phone.
+- Each job proposal now comes with its CV as a Telegram file, so you can read it (or upload it by hand from a phone) before saying yes.
+- Setup calls NVIDIA's keys trial credits that run out instead of free.
+- The web panel follows a light system theme and has a "skip to the message box" link for keyboard users.
+- When one of the assistant's own runs tries `routine add` or `responsibility add` from the command line, it now becomes a Yes/No question for you instead of being set up straight away. A page the run read could otherwise have planted a standing job.
+- Mail setup says that the inbox lines it reads go to the AI service you picked. The README no longer claims postings are read with all tools off under Gemini and Codex; that holds only for Claude Code.
+- Quick setup's first screen drops the jargon (MCP, council, agent).
+- Fixed a bug on this branch where the panel's script declared the same name twice, which stopped the whole panel from running. A test now runs `node --check` on the panel script, so a syntax error like that fails the suite.
+- No agent CLI needed: pick `api` as the brain in setup and Pentarch talks to your own model (Ollama, LM Studio, vLLM or any OpenAI-compatible service) and runs the tools itself: reading your notes, writing in the notes folder, reminders, tasks, routines, search and shifts. Scheduled runs only read, and runs that carry outside text get no tools. `doctor` says when no service is set.
+- Local reasoning models' `<think>` blocks no longer show up in answers.
+- Gemini, Codex and OpenCode runs are now marked as the assistant's own runs too, so a `routine add` from them becomes a Yes/No question like it does under Claude Code.
+- A shift list: write shifts in `shifts.md` as `date | person | start-end`, and `pentarch.py shifts` counts each person's hours for the week, lists days nobody covers and catches overlapping shifts. The assistant keeps business facts (address, hours, prices) in `business.md` for drafting customer replies.
+- Fixed: the landing page's copy button hid the install command it was meant to copy. The calendar showed a moved meeting at its old time and ignored monthly rules like "second Tuesday" or "last Friday".
+- Tightened the API brain after a security pass. It can now only write `.md` and `.txt` files in the notes folder, never inside dot folders like `.git` or `.obsidian`, so a planted note can't plant a git hook or plugin. If a service fails after a tool already ran, it stops instead of running the same tool again on the next service. Scheduled reading runs can no longer queue tasks. An assistant run that tries to resume or remove a routine or responsibility now asks you first.
+- Docker: a `Dockerfile` and `compose.yaml` run Pentarch in a container that restarts on its own. Pick the agent CLI baked in (`PENTARCH_AGENT_CLI`) or none for the API brain, and drop voice to keep the image small. The panel is only published on the host's 127.0.0.1. I haven't run a real `docker build` yet.
+- Job hunt fixes from a tester pass: a failed re-check now takes back an earlier approval, so a bad form can't be sent on the old yes. `add` can't move a sent application back to watching. "Remote - US" is no longer dropped for someone living in the US. "We are unable to offer visa sponsorship" and "no security clearance required" aren't read as the opposite any more. "Three years of experience" counts like "3 years". LinkedIn links with tracking text pass the form check, and `*italic*` lines in the CV PDF stop showing literal stars.
+- Docker: Node 22 instead of Debian's v18, runs under the container's restart policy (no self-restart loop), tracker board and records kept on the `home` volume, healthcheck, log rotation, `TZ` and `.env.example`, and a bad Telegram token now waits instead of restart-looping.
+- Job scan: "fresh" no longer adds a point, so scores spread instead of piling up at 5. CI/CD is read as one keyword in CVs.
+- Money owed: write lines in `receivables.md` (or `alacaklar.md`) as `date | who | amount | note`, `owe date | who | amount` for a bill you must pay, and start a line with `- [x]` once paid. `pentarch.py receivables` lists what is overdue or due this week and the total still owed; on Mondays and Thursdays at 09:00 the same list is sent, and only when there is something to say.
+- Panel behind Tailscale or a reverse proxy: `PENTARCH_PANEL_HOSTS=box.tailnet.ts.net:47824` adds exact Host values. The panel secret is still required.
+- The mail gateway now checks the mail server's certificate (it did not before).
+- Other languages: the CV defaults to German or Spanish when you chose it as your language, voice replies pick a matching voice, `hilfe`/`ayuda`/`aide` open the help. `CONTRIBUTING.md` added.
+- Discord now waits and retries once when it is rate-limited instead of dropping the message, and the re-install report is translated.
+- Setup has an optional shop/freelancer step: it saves your calendar link to `secrets/keys.env` itself and creates starter `shifts.md` and `receivables.md` files (never overwriting yours), then prints the notes folder.
+- Hidden prompts (keys, tokens, passwords) now confirm with how many characters arrived.
+- GitHub: CI now builds the Docker image and smoke-tests it; pushing a `v*` tag publishes it to ghcr.io with build provenance attached. Both are untested until they run on GitHub.
+- The job helper can now make the CV PDF with no Edge or Chrome installed (plain built-in writer, `app/pdfmin.py`). Turkish and other non-Western letters become their closest ASCII twin in that fallback, so install a browser if you want exact spelling.
+- Fixed the Docker build: a stray `\n` in the Dockerfile where a line continuation was meant would have broken `docker build`. A test now guards against it.
+- New "Uninstall" section in the README, a shared-computer warning in Quick start, a live-region on the panel's approval box so screen readers hear a new Yes/No, and setup examples that no longer assume a bakery.
+- Study tracking for students: write `date | course | what` lines in `study.md` (or `dersler.md`), `- [x]` when done. `pentarch.py study` lists what is overdue, due this week and exams in the next 30 days with a day countdown; at 08:00 the same list is sent, only when there is something. Setup offers the starter file.
+- Calendar writes with no OAuth: `pentarch.py event 2026-12-05 14:30 "Dentist" [minutes]` (no time = all-day) builds an `.ics` file and sends it to your Telegram; tap it to add the event to Google, Apple or Outlook. Available to the local API brain too.
+- `receivables`: amounts like `$500` or `2.000 EUR` are now read, and a line that starts with a date but cannot be read is listed as a warning instead of silently missing from the total. `event` ignores line-break lookalike characters and non-ASCII digits in its arguments; CI runs with read-only token permissions; README Windows steps are more explicit.
+- Receivables can now be changed by command, not only by hand: `alacak ekle [borc] DATE NAME AMOUNT [note]` adds a line, `alacak odendi NAME` ticks the one open line with that name (asks for a clearer name when several match). Read-only scheduled runs cannot use them.
+- Discord: files you attach to a message in the channel are now saved to `gelen/` and handed to the agent, like Slack and Telegram files (20 MB cap, Discord CDN hosts only). A message with only a file is answered too.
+- CI and release workflows now pin every action to a commit (tag kept in a comment), and a Dependabot file keeps those commits and the Docker base images current weekly.
+- Docker: the agent CLIs are installed at pinned versions (build args `CLAUDE_VER`, `GEMINI_VER`, `CODEX_VER`, `OPENCODE_VER`) so an image can be rebuilt the same way; pass a newer value to move up. Not built here.
+- Docker/release fixes from a sysadmin review: the image name is lowercased before the GHCR push (capitals made the release fail), the container now passes SIGTERM to Pentarch so it stops cleanly, logs are unbuffered, the unused Debian nodejs install is gone, `.dockerignore` matches nested logs/db files, and `.gitattributes` keeps LF line endings.
+- Receivables are safer with messy files: a BOM or UTF-16 notes file is read (a BOM used to drop the first line), an unreadable file gives a clear message instead of a crash, the exact name wins when one name is a prefix of another, Turkish i/İ match, odd amounts (`1,5,5`, `.`, 400 digits) and newlines in a name are refused, writes go through a temp file and keep CRLF, and `alacak` warns about lines it could not read.
+- Discord attachments: a file bigger than the limit is now reported as not downloaded instead of being saved cut off, and names ending in a dot no longer collide on Windows.
+- The shell tools in the README (`kisi.py`, `yasak.py`, `denetim.py`, and five more helpers) crashed with `ModuleNotFoundError` under `python -I`; fixed. A bad date in `remind`/`task` now gives one clear line instead of a traceback, and the tracker's `scan.py`/`build.py` say so when the config file is missing.
+- `PENTARCH_NOTES_DIR` overrides `notes_dir` for one run, so trying commands out with a throwaway `PENTARCH_HOME` can no longer touch your real notes.
+- Termux: updates install only `edge-tts` (faster-whisper has no wheels there), `install.sh` prints the `pkg` hint instead of an apt one, README lists `procps`.
+- Turkish mode: amounts print as 1.250,5, `search` handles İ/I/ı, and short commands (remind, doctor...) print UTF-8 through a pipe.
+- `remind`, `task`, `wait`, `search` with missing arguments print one usage line; `shifts` with a bad date exits 1; the routine usage line is Turkish in Turkish mode.
+- Date arguments written 20.11.2026 are accepted by the CLI; money prints 1.250,50 for Turkish/German/Spanish/French reply languages; offline voice model follows reply_lang; one clock-dependent test fixed.
+- `install.ps1` no longer dies on the Microsoft Store `python.exe` stub in Windows PowerShell 5.1, and puts `$ErrorActionPreference` back when it finishes.
+- Shifts, study and receivables files with a BOM (Notepad) are read; cp1254 files give a "save as UTF-8" message; `receivables paid` keeps CRLF line endings and a symlinked notes file stays a symlink.
+- Setup: the "Step N/6" counter is right with the API brain, quick setup says when it copies skills into `~/.claude`, and the first Telegram hello warns when the agent CLI isn't ready. `doctor` ends with what to do next. README quick-setup list now matches what it asks.
+- `receivables` now warns about lines dated 20.11.2026 instead of skipping them silently.
