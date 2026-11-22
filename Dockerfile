@@ -3,7 +3,7 @@
 # VOICE=false skips faster-whisper and edge-tts, which make the image a few hundred MB bigger.
 # Node 22 comes from the official image: Debian's own nodejs is v18, too old for the agent CLIs.
 FROM node:22-slim AS node
-FROM python:3.12-slim
+FROM python:3.15-slim
 
 ARG AGENT_CLI=claude
 # Pinned so a build is repeatable; override with --build-arg CLAUDE_VER=... to move up.
