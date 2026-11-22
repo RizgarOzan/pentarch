@@ -1,0 +1,11 @@
+{
+  "label": "Rızgar Ozan",
+  "owner": "Rızgar",
+  "lang": "tr",
+  "name": "Pentarch",
+  "plan": "max",
+  "quick": false,
+  "claude_code": true,
+  "notes_dir": "~/OneDrive/Belgeler/my-wiki",
+  "jobs_off": ["insa", "posta"]
+}

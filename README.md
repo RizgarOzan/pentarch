@@ -288,6 +288,12 @@ python -I app/denetim.py 7            # what the reply check flagged in the last
 
 ## Configure
 
+**Claude Code.** If you use Claude, setup also asks whether Claude Code should know your wiki. Yes adds one marked block to `~/.claude/CLAUDE.md` and your notes folder to `permissions.additionalDirectories` in `~/.claude/settings.json`. Everything else in both files stays as it is, a copy of `settings.json` is kept as `settings.json.pentarch-yedek`, and a `settings.json` that doesn't parse is left alone. Re-running setup rewrites only that block.
+
+**Keys.** `python -I setup.py --keys` lists every key in `secrets/keys.env` (only the last four characters show), and lets you add, replace, test and delete them. Adding a key for OpenRouter, Groq, NVIDIA or Anthropic walks you to the sign-up page and checks the key with a free call before saving it.
+
+**Ready profiles.** `profiles/<name>.json` holds ready answers for the setup questions; `python setup.py --profile rizgar` starts from them (a first run offers the list). Anything you already configured wins over the profile, and you can still change every answer. Add your own file with the same keys as `pentarch.json`, plus `label`, `quick` and `claude_code`.
+
 `~/.pentarch/pentarch.json` holds the settings. Anything you leave out falls back to the defaults in [`app/config.py`](app/config.py), and the panel's Settings page edits the same file. Running `python setup.py` again is safe and keeps your memory files. The keys you'll most likely touch:
 
 | Key | What it does |

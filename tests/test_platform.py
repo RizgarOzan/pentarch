@@ -810,5 +810,72 @@ class DiscordFiles(unittest.TestCase):
         self.assertEqual(len(list(d.iterdir())), 1)
 
 
+class ClaudeCodeSetup(unittest.TestCase):
+    """setup.py's Claude Code step, the key menu and the ready profiles."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="pentarch-cc-"))
+        self.notes = self.tmp / "notes"
+        (self.notes / "wiki").mkdir(parents=True)
+        p = mock.patch.object(Path, "home", return_value=self.tmp)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def test_block_is_written_once_and_the_rest_of_the_file_stays(self):
+        md = self.tmp / ".claude" / "CLAUDE.md"
+        md.parent.mkdir()
+        md.write_text("# mine\nkeep this\n", encoding="utf-8")
+        self.assertIn("CLAUDE.md", pentarch_setup.claude_code_setup(self.notes, "en"))
+        first = md.read_text(encoding="utf-8")
+        self.assertTrue(first.startswith("# mine\nkeep this\n"))
+        self.assertEqual(first.count(pentarch_setup.CLAUDE_BEGIN), 1)
+        self.assertIn((self.notes / "wiki").as_posix(), first)
+        self.assertEqual(pentarch_setup.claude_code_setup(self.notes, "en"), [])  # second run changes nothing
+        self.assertEqual(md.read_text(encoding="utf-8"), first)
+        pentarch_setup.claude_code_setup(self.notes, "tr")  # a new language rewrites the block in place
+        self.assertEqual(md.read_text(encoding="utf-8").count(pentarch_setup.CLAUDE_BEGIN), 1)
+        self.assertIn("Sahibin", md.read_text(encoding="utf-8"))
+
+    def test_settings_keep_other_keys_and_get_a_backup(self):
+        sj = self.tmp / ".claude" / "settings.json"
+        sj.parent.mkdir()
+        sj.write_text(json.dumps({"model": "opus", "permissions": {"allow": ["Bash(ls)"], "additionalDirectories": ["/x"]}}), encoding="utf-8")
+        pentarch_setup.claude_code_setup(self.notes, "en")
+        data = json.loads(sj.read_text(encoding="utf-8"))
+        self.assertEqual(data["model"], "opus")
+        self.assertEqual(data["permissions"]["allow"], ["Bash(ls)"])
+        self.assertEqual(data["permissions"]["additionalDirectories"], ["/x", str(self.notes)])
+        self.assertTrue(sj.with_name("settings.json.pentarch-yedek").exists())
+        pentarch_setup.claude_code_setup(self.notes, "en")
+        self.assertEqual(json.loads(sj.read_text(encoding="utf-8"))["permissions"]["additionalDirectories"].count(str(self.notes)), 1)
+
+    def test_broken_settings_are_left_alone(self):
+        sj = self.tmp / ".claude" / "settings.json"
+        sj.parent.mkdir()
+        sj.write_text("{ not json", encoding="utf-8")
+        pentarch_setup.claude_code_setup(self.notes, "en")
+        self.assertEqual(sj.read_text(encoding="utf-8"), "{ not json")
+
+    def test_key_delete_and_menu(self):
+        koltuk = pentarch_setup.koltuk
+        koltuk.save_key("GROQ_API_KEY", "gsk_" + "a" * 20)
+        koltuk.save_key("OTHER_KEY", "zzzz")
+        self.assertTrue(koltuk.delete_key("GROQ_API_KEY"))
+        self.assertFalse(koltuk.delete_key("GROQ_API_KEY"))
+        self.assertEqual(koltuk.read_keys(), {"OTHER_KEY": "zzzz"})
+        self.assertNotIn("GROQ_API_KEY", os.environ)
+        # menu: delete entry 1 (OTHER_KEY comes first, it's the only stored one), confirm, then quit
+        answers = iter(["s1", ""])
+        with mock.patch.object(pentarch_setup, "_input", side_effect=lambda q: next(answers)), \
+                mock.patch.object(pentarch_setup, "yes", return_value=True), mock.patch("builtins.print"):
+            pentarch_setup.keys_menu()
+        self.assertEqual(koltuk.read_keys(), {})
+
+    def test_profile_loads_and_unknown_is_empty(self):
+        p = pentarch_setup.profile_load("rizgar")
+        self.assertEqual((p["owner"], p["lang"], p["quick"]), ("Rızgar", "tr", False))
+        self.assertEqual(pentarch_setup.profile_load("../../etc/passwd"), {})
+
+
 if __name__ == "__main__":
     unittest.main()

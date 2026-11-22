@@ -840,6 +840,99 @@ def skills_setup(cli, notes="~/notes", ask_first=True):
                 f"  Skills live in {REPO / 'skills'}; copy them into {cli}'s own skills folder if it has one."))
 
 
+CLAUDE_BEGIN, CLAUDE_END = "<!-- pentarch:start -->", "<!-- pentarch:end -->"
+
+
+def claude_code_setup(notes, lang):
+    """Makes Claude Code itself know the wiki: a marked block in ~/.claude/CLAUDE.md (rewritten on every run, the rest of
+    the file is never touched) and the notes folder in settings.json permissions.additionalDirectories so any project can
+    read it. A settings.json that doesn't parse is left alone. Returns what it changed, as a list of file names."""
+    root = Path(notes).expanduser()
+    wiki = root / "wiki" if (root / "wiki").is_dir() else root
+    block = CLAUDE_BEGIN + "\n" + (
+        f"## Pentarch wiki\nSahibin bilgi tabanı: {wiki.as_posix()}\nSahibin kendisine ya da projelerine dokunan işe başlarken önce "
+        "overview.md'yi, sonra index.md'yi oku; sonra yalnız işin gerektirdiği sayfaları. Emek harcayarak öğrendiğin şeyi (bir karar ve "
+        "nedeni, bir tuzak, varsayımı çürüten bir ölçüm) aynı oturumda wiki'ye geri yaz.\n" if lang == "tr" else
+        f"## Pentarch wiki\nThe owner's knowledge base: {wiki.as_posix()}\nWhen work touches the owner or their projects, read "
+        "overview.md first, then index.md, then only the pages the task needs. What took real effort to learn (a decision and "
+        "its why, a trap, a measurement that contradicted an assumption) goes back into the wiki in the same session.\n") + CLAUDE_END + "\n"
+    home = Path.home() / ".claude"
+    home.mkdir(parents=True, exist_ok=True)
+    changed = []
+    md = home / "CLAUDE.md"
+    cur = md.read_text(encoding="utf-8") if md.exists() else ""
+    a, b = cur.find(CLAUDE_BEGIN), cur.find(CLAUDE_END)
+    new = (cur[:a] + block + cur[b + len(CLAUDE_END):].lstrip("\n") if 0 <= a < b
+           else cur + ("\n" if cur and not cur.endswith("\n\n") else "") + block)
+    if new != cur:
+        md.write_text(new, encoding="utf-8")
+        changed.append("CLAUDE.md")
+    sj = home / "settings.json"
+    try:
+        data = json.loads(sj.read_text(encoding="utf-8")) if sj.exists() else {}
+        if not isinstance(data, dict) or not isinstance(data.get("permissions", {}), dict):
+            raise ValueError
+        perms = data.setdefault("permissions", {})
+        dirs = perms.setdefault("additionalDirectories", [])
+        if not isinstance(dirs, list):
+            raise ValueError
+    except (ValueError, OSError):
+        print(t("  settings.json okunamadı ya da beklenmedik biçimde; dokunmadım.", "  settings.json is unreadable or oddly shaped; left alone."))
+        return changed
+    want = str(root)
+    if want not in dirs and root.as_posix() not in dirs:
+        if sj.exists():
+            bak = sj.with_name("settings.json.pentarch-yedek")
+            if not bak.exists():
+                shutil.copy2(sj, bak)
+        dirs.append(want)
+        sj.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        changed.append("settings.json")
+    return changed
+
+
+def keys_menu():
+    """python setup.py --keys: see (masked), add, replace, test and delete the API keys in secrets/keys.env."""
+    guide = {v[1]: k for k, v in PRESETS.items() if v[1] and k in anahtar.GUIDES}
+    guide.setdefault("ANTHROPIC_API_KEY", "anthropic")
+    while True:
+        keys = koltuk.read_keys()
+        envs = list(dict.fromkeys([*keys, *guide]))
+        print(t("\nAnahtarlar (secrets/keys.env):", "\nKeys (secrets/keys.env):"))
+        for i, env in enumerate(envs, 1):
+            v = keys.get(env, "")
+            state = (f"...{v[-4:]}" if len(v) >= 12 else t("kayıtlı", "set")) if v else t("yok", "missing")
+            print(f"  {i:>2}. {env:<24} {state}")
+        pick = ask(t("Numara = ekle/değiştir, t3 = dene, s3 = sil, Enter = çık", "Number = add/replace, t3 = test, s3 = delete, Enter = quit"), "").lower()
+        if not pick:
+            return
+        verb, num = (pick[0], pick[1:]) if pick[0] in "ts" else ("a", pick)
+        if not num.isdigit() or not 1 <= int(num) <= len(envs):
+            print(t("  Geçersiz numara.", "  Not a number on the list."))
+            continue
+        env = envs[int(num) - 1]
+        if verb == "s":
+            if yes(t(f"  {env} silinsin mi?", f"  Delete {env}?"), False):
+                koltuk.delete_key(env)
+        elif verb == "t":
+            key = keys.get(env, "")
+            ok = anahtar.check(guide[env], key) if key and env in guide else None
+            print(t("  Çalışıyor.", "  Works.") if ok else t("  Servis reddetti.", "  The service refused it.") if ok is False
+                  else t("  Denenemedi (anahtar yok, test yok ya da internet yok).", "  Couldn't test (no key, no free test, or offline)."))
+        else:
+            key = (anahtar.ask(guide[env], t, yes, secret, env) if env in guide
+                   else secret(t(f"  {env} (gizli; boş = atla): ", f"  {env} (hidden; empty = skip): ")).strip())
+            if key:
+                koltuk.save_key(env, key)
+                print(t("  Kaydedildi.", "  Saved."))
+
+
+def profile_load(name):
+    """profiles/<name>.json: ready answers for the questions below. {} when there is no such profile."""
+    f = REPO / "profiles" / f"{re.sub(r'[^a-z0-9_-]', '', name.lower())}.json"
+    return json.loads(f.read_text(encoding="utf-8")) if f.is_file() else {}
+
+
 def mcp_setup(old):
     """MCP servers handed to Claude Code (config mcp_servers). Env variables are asked by name only, never by value."""
     servers = dict(old.get("mcp_servers") or {})
@@ -1108,11 +1201,27 @@ def main():
     if {"-h", "--help"} & set(sys.argv[1:]):
         print("python setup.py            guided setup (asks before it changes anything)\n"
               "python setup.py --upgrade  pull new rules and files into an existing install\n"
+              "python setup.py --keys     see, add, test and delete API keys\n"
+              "python setup.py --profile NAME  start from a ready profile in profiles/ (e.g. rizgar)\n"
               f"Runtime home: {HOME} (set PENTARCH_HOME to move it)")
         return
     if "--upgrade" in sys.argv:
         return upgrade()
+    if "--keys" in sys.argv:
+        TR = (json.loads(CONFIG.read_text(encoding="utf-8")) if CONFIG.exists() else {}).get("lang") == "tr"
+        return keys_menu()
     old = json.loads(CONFIG.read_text(encoding="utf-8")) if CONFIG.exists() else {}
+    prof = {}
+    if "--profile" in sys.argv[1:-1]:
+        prof = profile_load(sys.argv[sys.argv.index("--profile") + 1])
+    elif not old and (REPO / "profiles").is_dir():
+        names = sorted(f.stem for f in (REPO / "profiles").glob("*.json"))
+        if names:
+            pick = ask("Profile / Profil: ready answers (standard = ask me everything)", "standard", ("standard", *names))
+            prof = profile_load(pick) if pick != "standard" else {}
+    if prof:
+        print(f"Profile: {prof.get('label', '')}")
+        old = {**{k: v for k, v in prof.items() if k not in ("label", "quick", "claude_code")}, **old}
     agent = old.get("agent", {})
     print(f"Pentarch setup. Home folder: {HOME}")
     print("Enter = the default in [brackets] / Enter = [köşeli parantezdeki] varsayılan\n")
@@ -1130,7 +1239,7 @@ def main():
             "gerisi hazır ayarla gelir. Emin değilsen Enter'a bas. Ayrıntılı kurulum ince ayarları da sorar; sonra istediğin an yeniden çalıştırabilirsin.",
             "Quick setup asks only what's needed (names, what you do, which AI account it uses, Telegram, whether you're job hunting);\n"
             "the rest takes defaults. Not sure? Press Enter. Detailed setup also asks the fine-tuning questions; you can re-run it any time."))
-    QUICK = yes(t("Hızlı kurulum?", "Quick setup?"), True)
+    QUICK = yes(t("Hızlı kurulum?", "Quick setup?"), prof.get("quick", True))
     STEP[1] = 6 if QUICK else 8
     step("Temel bilgiler", "The basics")
     preflight()
@@ -1322,6 +1431,11 @@ def main():
         print(t("Beceriler ve alt ajanlar ~/.claude klasörüne kopyalanıyor (kendi düzenlediklerine dokunulmaz).",
                 "Copying the skills and sub-agents into ~/.claude (anything you edited yourself is left alone)."))
     skills_setup(cli, cfg["notes_dir"], not QUICK)
+    if cli == "claude" and opt(t("Claude Code wiki'ni bilsin mi? (~/.claude/CLAUDE.md'ye işaretli bir blok, settings.json'a not klasörü; gerisine dokunulmaz)",
+                                 "Make Claude Code aware of your wiki? (a marked block in ~/.claude/CLAUDE.md and the notes folder in settings.json; nothing else touched)"),
+                               prof.get("claude_code", True)):
+        done = claude_code_setup(cfg["notes_dir"], lang)
+        print(t(f"  Claude Code ayarı: {', '.join(done) or 'zaten güncel'}", f"  Claude Code setup: {', '.join(done) or 'already up to date'}"))
 
     # asked even in quick setup: 300 MB on a metered or slow line is not something to do unasked.
     # faster-whisper needs wheels Termux doesn't have; only the small spoken-reply package goes there

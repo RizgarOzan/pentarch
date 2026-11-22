@@ -61,6 +61,24 @@ def save_key(env, value):
     os.environ[env] = keys[env]
 
 
+def delete_key(env):
+    """Removes KEY from secrets/keys.env and from this process's environment. False when it wasn't there."""
+    keys = read_keys()
+    if env not in keys:
+        return False
+    del keys[env]
+    old = os.umask(0o077)
+    try:
+        KEYS_FILE.write_text("".join(f"{k}={v}\n" for k, v in keys.items()), encoding="utf-8")
+        os.chmod(KEYS_FILE, 0o600)
+    except OSError:
+        pass
+    finally:
+        os.umask(old)
+    os.environ.pop(env, None)
+    return True
+
+
 def ask_key(env, key_url="", preset=""):
     if preset in anahtar.GUIDES and sys.stdin.isatty():  # someone at the keyboard: walk them through it
         return anahtar.ask(preset, T, _yes, getpass.getpass, env)
