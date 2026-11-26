@@ -2,6 +2,7 @@
 
 ## Unreleased (platform-polish)
 
+- Docker image moves from Node 22 to Node 26 (the current LTS line).
 - Interview skill with a story bank (idea from career-ops): finds the themes you have no story for, matches stories to likely questions, flags a result with no number, "we" instead of "I" and answers that run past 90 seconds. It never writes a story for you.
 - `apply.py stats`: funnel counts (sent, answered), applications quiet for 14+ days and passed deadlines (idea from career-ops).
 - Expense ledger in plain words: `expense add flour 1200`, then `expenses` shows this month, last month and the biggest names. Also a `expenses` quick-answer reader.

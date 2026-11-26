@@ -1,8 +1,8 @@
 # Pentarch in a container: docker compose run --rm pentarch python setup.py, then docker compose up -d.
 # AGENT_CLI picks the brain baked in: claude | gemini | codex | opencode | none (none = agent.cli "api", your own model).
 # VOICE=false skips faster-whisper and edge-tts, which make the image a few hundred MB bigger.
-# Node 22 comes from the official image: Debian's own nodejs is v18, too old for the agent CLIs.
-FROM node:22-slim AS node
+# Node 26 comes from the official image: Debian's own nodejs is v18, too old for the agent CLIs.
+FROM node:26-slim AS node
 FROM python:3.12-slim
 
 ARG AGENT_CLI=claude

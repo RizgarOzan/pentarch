@@ -395,7 +395,7 @@ class Docker(unittest.TestCase):
         self.assertIn(f"EXPOSE {port}", df)
         self.assertNotIn(chr(92) + "n &&", df)  # a literal backslash-n where a line continuation was meant breaks the build
         self.assertIn("PENTARCH_SUPERVISED=1", df)  # the restart policy is the supervisor, not watch_self
-        self.assertIn("node:22", df)
+        self.assertIn("node:26", df)
         for name in ("data", "out", "profile.json", "config.json"):  # tracker state must land on the volume
             self.assertIn(f"tracker/{name}", df)
         self.assertIn("PENTARCH_PANEL_BIND=0.0.0.0", df)

@@ -37,6 +37,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       - name: Build the image
         run: docker build -t pentarch:ci .
-      - name: Smoke test (runs as the non-root user, Node 22 present)
+      - name: Smoke test (runs as the non-root user, Node 26 present)
         run: |
-          docker run --rm --entrypoint sh pentarch:ci -c 'id -u | grep -vx 0 && node --version | grep -q "^v22" && python --version'
+          docker run --rm --entrypoint sh pentarch:ci -c 'id -u | grep -vx 0 && node --version | grep -q "^v26" && python --version'
